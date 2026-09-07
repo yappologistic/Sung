@@ -1,5 +1,11 @@
 <div align="center">
 
+<img src="assets/readme-banner.png" alt="Sung showing music collections and synchronized lyrics" width="100%">
+
+<a href="https://buymeacoffee.com/e_gurl">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Support Sung on Buy Me a Coffee" width="217" height="60">
+</a>
+
 # Sung
 
 **YouTube Music and your own music. Native on Linux.**
@@ -116,11 +122,3 @@ Reports and screenshots are written to the ignored `verification/` directory. Do
 ## License
 
 [MIT](LICENSE). Material Symbols are licensed under Apache-2.0; see [NOTICE](NOTICE) for third-party acknowledgments. Sung is an independent project and is not affiliated with Google or YouTube.
-
----
-
-<div align="center">
-  <a href="https://buymeacoffee.com/E_Gurl">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Support Sung on Buy Me a Coffee" width="217" height="60">
-  </a>
-</div>

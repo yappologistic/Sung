@@ -28,6 +28,7 @@
 !/tests/*.h
 !/tests/*.py
 /assets/*
+!/assets/readme-banner.png
 !/assets/sung.svg
 !/assets/sung.desktop
 !/assets/icons/
