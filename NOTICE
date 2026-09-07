@@ -1,0 +1,16 @@
+Sung uses Google Material Symbols, licensed under Apache-2.0.
+The license is provided in licenses/MaterialSymbols-LICENSE.txt.
+Icons originate from https://github.com/google/material-design-icons.
+Icons use the official Material Symbols Rounded, FILL=1, 24px SVG assets.
+Spun application code is not incorporated into Sung.
+
+Visual references: Google Material Design 3 and Spun.
+Architecture reference: https://github.com/amiralibg/unstream.
+No Unstream source code is incorporated.
+
+Runtime dependencies carry their own licenses. Qt is dynamically linked;
+Qt licensing: https://www.qt.io/licensing/open-source-lgpl-obligations
+The installed Qt Multimedia and FFmpeg packages determine the media backend.
+Catalog requests use ytmusicapi (MIT); audio resolution uses yt-dlp (Unlicense).
+No fonts are bundled. Sung uses an installed Google Sans Flex or Noto Sans font.
+Sung is independent of Google and YouTube.
