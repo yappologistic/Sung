@@ -2,6 +2,7 @@
 #include "uitest.h"
 #include "backend.h"
 #include "rowselection.h"
+#include "roundedart.h"
 #include <QDir>
 #include <QDataStream>
 #include <qpa/qwindowsysteminterface.h>
@@ -458,7 +459,12 @@ void runFeatureTests(Backend *b,QQuickWindow *w) {
   auto until=[](std::function<bool()> predicate,int timeout=45000){QElapsedTimer t;t.start();while(!predicate()&&t.elapsed()<timeout)QTest::qWait(50);return predicate();};
   const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);w->resize(1180,800);
   auto shot=[&](QQuickWindow *window,const QString &name){QTest::qWait(300);check(window->grabWindow().save(dir+"/"+name+".png"),qPrintable("capture "+name));};
-  auto click=[&](QQuickWindow *window,const QString &name){auto item=findItem(window->contentItem(),name);if(!item){check(false,qPrintable("find "+name));return;}QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,item->mapToScene(QPointF(item->width()/2,item->height()/2)).toPoint());QTest::qWait(100);};
+  auto click=[&](QQuickWindow *window,const QString &name){auto item=findItem(window->contentItem(),name);if(!item){check(false,qPrintable("find "+name));return;}
+    for(auto parent=item->parentItem();parent;parent=parent->parentItem())if(parent->property("contentY").isValid()){
+      const auto point=item->mapToItem(parent,QPointF(0,0));
+      if(point.y()<0||point.y()+item->height()>parent->height())parent->setProperty("contentY",qBound(0.0,parent->property("contentY").toDouble()+point.y()-parent->height()/2,qMax(0.0,parent->property("contentHeight").toDouble()-parent->height())));
+    }
+    QTest::qWait(50);QTest::mouseClick(window,Qt::LeftButton,Qt::NoModifier,item->mapToScene(QPointF(item->width()/2,item->height()/2)).toPoint());QTest::qWait(100);};
   b->setTheme("system");b->setMotion(true);b->setVolume(0);b->setAutoplay(false);
   b->playItem({{"id","fdz_cabS9BU"},{"videoId","fdz_cabS9BU"},{"kind","song"},{"title","Thinking out Loud"},{"artist","Ed Sheeran"},{"art","https://i.ytimg.com/vi/fdz_cabS9BU/hqdefault.jpg"}});b->fetchLyrics();
   check(until([&]{return b->playing()&&b->position()>1000;},85000),"feature test uses real buffered audio");
@@ -767,7 +773,7 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
   click("rescanFoldersButton");check(until([&]{return !b->importingLocal();},5000)&&b->results()->count()==2,"Rescan skips unchanged files without duplicate entries");
   b->forgetMusicFolder(musicDir);check(b->results()->count()==2&&QFile::exists(musicDir+"/Album/Folder song.wav"),"forgetting folder keeps music and original files");
   b->removeLocalFile(local.value("id").toString());check(QFile::exists(audioPath),"removing local library entry preserves original audio");b->resetLyrics();
-  b->openPlaylist(id);w->setProperty("side","");w->setProperty("collectionTools",true);b->collection()->setQuery("");b->collection()->setSortKey("original");
+  b->openPlaylist(id);QTest::qWait(100);w->setProperty("side","");w->setProperty("collectionTools",true);b->collection()->setQuery("");b->collection()->setSortKey("original");
   w->resize(780,580);QTest::qWait(300);click("collectionSortButton");
   auto sortItem=findItem(w->contentItem(),"sort_original");
   if(sortItem){
@@ -907,7 +913,7 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
   if(auto nav=findItem(w->contentItem(),"nav_library"))QMetaObject::invokeMethod(nav,"clicked");
   QTest::qWait(250);
   auto liked=findItem(w->contentItem(),"likedTab");auto playlists=findItem(w->contentItem(),"playlistsTab");
-  auto history=findItem(w->contentItem(),"historyTab");auto tabs=findItem(w->contentItem(),"libraryTabs");
+  auto history=findItem(w->contentItem(),"serverTab");auto tabs=findItem(w->contentItem(),"libraryTabs");
   check(liked&&playlists&&history&&tabs,"library navigation tabs exist");
   if(liked&&playlists&&history&&tabs){
     liked->forceActiveFocus(Qt::TabFocusReason);QTest::keyClick(w,Qt::Key_Right);QTest::qWait(50);
@@ -924,7 +930,7 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
     auto rect=history->mapRectToItem(tabs,history->boundingRect());
     check(history->hasActiveFocus()&&tabs->property("contentX").toDouble()>0&&rect.left()>=-1&&rect.right()<=tabs->width()+1,"focused last tab scrolls into compact tab viewport");
     QTest::keyClick(w,Qt::Key_Return);QTest::qWait(100);
-    check(w->property("libraryTab").toString()=="history","last library tab remains actionable when scrolled");
+    check(w->property("libraryTab").toString()=="server","last library tab remains actionable when scrolled");
     shot("09-library-tabs");
     QQmlProperty(tabs,"Layout.maximumWidth",qmlContext(w)).write(1000);w->grabWindow();QTest::qWait(100);
     check(tabs->property("contentX").toDouble()==0,"expanding the tab strip restores the left edge without blank space");
@@ -951,5 +957,281 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
     slider->setProperty("value",0.0);QTest::qWait(50);check(active&&active->width()==0,"slider minimum has no negative track width");
     slider->setProperty("value",1.0);QTest::qWait(50);check(inactive&&inactive->width()==0,"slider maximum has no negative track width");
   }
+
+  if(slider)slider->setVisible(false);
+  b->dismissError();w->setProperty("toastPending",false);w->setProperty("side","");
+  QMetaObject::invokeMethod(w,"openServerConnection");QTest::qWait(450);
+  auto address=findItem(w->contentItem(),"serverAddress"),username=findItem(w->contentItem(),"serverUsername"),password=findItem(w->contentItem(),"serverPassword");
+  check(address&&username&&password,"connection form exposes all inputs");
+  if(address&&username&&password){
+    check(address->hasActiveFocus(),"connection dialog initially focuses its first empty field");
+    address->setProperty("text","https://music.example.test");username->setProperty("text","listener");password->setProperty("text","fixture-only");QTest::qWait(250);
+    bool labels=true;
+    for(auto field:{address,username,password}){
+      auto label=findItem(field,"fieldLabel");
+      labels=labels&&label&&label->isVisible()&&!label->property("text").toString().isEmpty()&&field->property("floatingLabel").toBool();
+    }
+    check(labels,"populated fields retain visible floating labels");
+    auto fields=findItem(w->contentItem(),"connectionFields");
+    auto addressLabel=findItem(address,"fieldLabel");
+    check(fields&&addressLabel&&addressLabel->mapRectToItem(fields,addressLabel->boundingRect()).top()>=0,"first floating label stays inside the scroll content");
+    check(password->property("displayText").toString()!=password->property("text").toString(),"password remains masked");
+    address->forceActiveFocus();QTest::keyClick(w,Qt::Key_Return);check(username->hasActiveFocus(),"Return advances from address to username");
+    QTest::keyClick(w,Qt::Key_Return);check(password->hasActiveFocus(),"Return advances from username to password");
+    shot("13-labeled-connection");
+    QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+    check(password->property("text").toString().isEmpty(),"dismissed connection form clears its password");
+  }
+  w->setProperty("menuItem",QVariantMap{{"rating",3}});
+  auto rating=w->findChild<QObject*>("serverRatingDialog");
+  check(rating,"rating dialog exists");
+  if(rating){
+    QMetaObject::invokeMethod(rating,"open");QTest::qWait(450);
+    auto content=qobject_cast<QQuickItem*>(rating->property("contentItem").value<QObject*>());
+    bool fits=content!=nullptr;
+    for(int i=1;i<=5;++i){
+      auto button=findItem(w->contentItem(),"rating_"+QString::number(i));
+      if(!button||!content){fits=false;continue;}
+      auto bounds=button->mapRectToItem(content,button->boundingRect());
+      fits=fits&&button->width()>=48&&button->height()>=48&&bounds.left()>=0&&bounds.right()<=content->width();
+    }
+    check(fits,"all five rating targets fit the dialog at compact width");shot("14-rating-dialog");
+    QMetaObject::invokeMethod(rating,"close");QTest::qWait(200);
+  }
+  QQmlComponent menuComponent(qmlEngine(w));
+  menuComponent.setData(R"(import QtQuick
+import QtQuick.Controls
+import "qrc:/qml"
+MMenu { Repeater { model: 30; MMenuItem { required property int index; objectName: "longMenu_"+index; text: "Menu choice "+index } } })",QUrl("qrc:/qml/AuditMenu.qml"));
+  QScopedPointer<QObject> longMenu(menuComponent.create(qmlContext(w)));
+  check(!longMenu.isNull(),"long menu fixture creates");
+  if(longMenu){
+    longMenu->setProperty("parent",QVariant::fromValue(w->contentItem()));longMenu->setProperty("x",400);longMenu->setProperty("y",24);
+    QMetaObject::invokeMethod(longMenu.data(),"open");QTest::qWait(350);
+    auto scroll=findItem(w->contentItem(),"menuScrollBar");
+    check(scroll&&scroll->isVisible()&&scroll->height()>0,"overflow menu exposes a persistent scroll thumb");
+    // Menu keyboard navigation must still scroll its selected item into view.
+    for(int i=0;i<30;++i)QTest::keyClick(w,Qt::Key_Down);
+    QTest::qWait(100);
+    auto content=qobject_cast<QQuickItem*>(longMenu->property("contentItem").value<QObject*>());
+    check(content&&content->property("contentY").toReal()>0,"keyboard can reach offscreen menu choices");shot("15-scrollable-menu");
+    QMetaObject::invokeMethod(longMenu.data(),"close");QTest::qWait(200);
+  }
+  b->clearQueue();w->setProperty("toastPending",false);
+  b->enqueue({{"id","audit000001"},{"videoId","audit000001"},{"title","Audit song"},{"kind","song"}});
+  b->clearQueue();QTest::qWait(6300);
+  toast=findItem(w->contentItem(),"toastBar");
+  check(toast&&toast->isVisible()&&w->property("toastHasUndo").toBool(),"Undo stays available beyond the old six-second timeout");shot("16-persistent-undo");
+  b->browseServer();check(until([&]{return !b->busy();}),"disconnected server state settles");QTest::qWait(180);
+  auto error=findItem(w->contentItem(),"errorBar");
+  check(error&&error->isVisible()&&toast&&!toast->isVisible(),"error and status snackbars never overlap");
+  auto connect=findItem(w->contentItem(),"serverEmptyConnect");
+  check(connect&&connect->isVisible(),"disconnected server page exposes direct connection action");
+  b->dismissError();QTest::qWait(180);
+  check(toast&&toast->isVisible(),"pending Undo returns after an error is dismissed");
+  auto undo=findItem(w->contentItem(),"toastUndo");
+  if(undo)QMetaObject::invokeMethod(undo,"clicked");
+  check(b->queue()->count()==1,"persistent Undo restores removed songs");
+  w->setProperty("toastPending",false);shot("17-server-empty");
   b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?2:0);
+}
+
+void runServerTests(Backend *b,QQuickWindow *w) {
+  int failures=0;const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto check=[&](bool ok,const char *label){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",label);fflush(stdout);if(!ok)++failures;};
+  auto until=[](std::function<bool()> predicate){QElapsedTimer time;time.start();while(!predicate()&&time.elapsed()<12000)QTest::qWait(25);return predicate();};
+  auto click=[&](const char *name){auto item=findItem(w->contentItem(),name);check(item,qPrintable(QString("find ")+name));if(item){QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,item->mapToScene(QPointF(item->width()/2,item->height()/2)).toPoint());QTest::qWait(200);}};
+  auto shot=[&](const char *name){QTest::qWait(400);check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setTheme("dark");b->setVolume(0);b->setMotion(true);b->setAutoplay(false);
+  QMetaObject::invokeMethod(w,"openServerConnection");QTest::qWait(500);
+  auto address=findItem(w->contentItem(),"serverAddress"),user=findItem(w->contentItem(),"serverUsername"),password=findItem(w->contentItem(),"serverPassword");
+  check(address&&user&&password,"server connection fields render");
+  if(address&&user&&password){address->setProperty("text",qEnvironmentVariable("SUNG_TEST_SERVER"));user->setProperty("text",qEnvironmentVariable("SUNG_TEST_USER"));password->setProperty("text",qEnvironmentVariable("SUNG_TEST_PASSWORD"));}
+  // Tests never write a real keyring entry.
+  if(auto remember=findItem(w->contentItem(),"rememberServer"))remember->setProperty("checked",false);
+  shot("connection");w->resize(780,580);QTest::qWait(450);
+  auto connectButton=findItem(w->contentItem(),"connectServerButton");
+  check(connectButton&&connectButton->isVisible()&&connectButton->mapRectToScene(connectButton->boundingRect()).bottom()<w->height()-16,"Connect action stays visible in compact dialog footer");
+  shot("compact-login");click("connectServerButton");check(until([&]{return b->server()->connected();}),"connect through visible UI");
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(450);check(password&&password->property("text").toString().isEmpty(),"password field cleared on close");
+  w->resize(1180,800);
+  b->browseServer("albums");check(until([&]{return !b->busy();}),"server albums load");shot("albums-dark");
+  check(w->property("destination")=="library"&&w->property("libraryTab")=="server","server navigation stays selected");
+  auto search=findItem(w->contentItem(),"searchField");check(search&&search->isVisible(),"server search field visible");
+  if(search){search->setProperty("text","Fixture");search->forceActiveFocus();QTest::keyClick(w,Qt::Key_Return);}
+  check(until([&]{return !b->busy()&&b->results()->count()==100;}),"server search through keyboard");shot("songs-dark");
+  click("trackRow_0");check(until([&]{return b->playing();}),"server song plays from rendered row");
+  check(until([&]{auto row=findItem(w->contentItem(),"trackRow_0");if(!row)return false;auto art=row->findChild<RoundedArt*>();return art&&art->ready();}),"authenticated cover art renders");
+  b->fetchLyrics();check(until([&]{return !b->lyricsBusy();})&&!b->lyricLines().isEmpty(),"server live lyrics load");
+  QMetaObject::invokeMethod(w,"activateSide",Q_ARG(QVariant,QVariant("lyrics")));QTest::qWait(500);shot("lyrics-dark");
+  auto row=findItem(w->contentItem(),"trackRow_0");check(row&&row->property("selectable").toBool(),"server rows support selection");
+  if(row){row->forceActiveFocus();QTest::keyClick(w,Qt::Key_Menu);QTest::qWait(300);shot("song-menu");QTest::keyClick(w,Qt::Key_Escape);}
+  b->setTheme("light");w->resize(780,580);QTest::qWait(500);shot("compact-light");QMetaObject::invokeMethod(w,"activateSide",Q_ARG(QVariant,QVariant("lyrics")));QTest::qWait(400);shot("compact-library-light");check(findItem(w->contentItem(),"tracksView")->height()>=64,"compact server view keeps songs visible");check(validIconSizes(w->contentItem()),"server controls preserve icon geometry");
+  QMetaObject::invokeMethod(w,"openServerConnection");QTest::qWait(400);shot("compact-connection");
+  if(auto dialog=w->findChild<QObject*>("serverConnectionDialog"))check(dialog->property("height").toReal()<=w->height()-48,"connection dialog fits compact window");
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(350);
+  b->pause();b->server()->disconnectServer();b->browseServer();check(until([&]{return !b->busy();})&&!b->error().isEmpty(),"disconnected view reports actionable error");
+  shot("disconnected");fprintf(stdout,"RESULT %d failures\n",failures);QCoreApplication::exit(failures?1:0);
+}
+
+void runRemoteServerTest(Backend *b,QQuickWindow *) {
+  auto until=[](std::function<bool()> predicate,int ms){QElapsedTimer timer;timer.start();while(!predicate()&&timer.elapsed()<ms)QTest::qWait(50);return predicate();};
+  int failures=0;auto check=[&](bool ok,const char *name){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",name);fflush(stdout);if(!ok)++failures;};
+  b->setVolume(0);b->setAutoplay(false);b->server()->setScrobbling(false);
+  b->server()->connectServer("https://demo.navidrome.org","demo","demo",false);
+  check(until([&]{return !b->server()->connecting();},30000)&&b->server()->connected(),"public Navidrome demo connects over HTTPS");
+  if(b->server()->connected()){
+    b->browseServer("random");check(until([&]{return !b->busy();},30000)&&b->results()->count()>0,"remote HTTPS catalog returns music");
+    if(b->results()->count()>0){b->playResults(0);check(until([&]{return b->playing()&&b->position()>1000;},180000),"remote HTTPS audio buffers and plays");b->stop();}
+  }
+  b->server()->disconnectServer();fprintf(stdout,"RESULT %d failures\n",failures);QCoreApplication::exit(failures?1:0);
+}
+
+void runQolTests(Backend *b,QQuickWindow *w) {
+  int failures=0;const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto check=[&](bool ok,const char *name){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",name);fflush(stdout);if(!ok)++failures;};
+  auto until=[](std::function<bool()> p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<10000)QTest::qWait(25);return p();};
+  auto shot=[&](const char *name){QTest::qWait(400);check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setMotion(true);b->setTheme("dark");b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);
+  b->search("QOL","songs");check(until([&]{return !b->busy();}),"search loads");QTest::qWait(200);
+  auto tracks=findItem(w->contentItem(),"tracksView");check(tracks,"song list exists");
+  b->collection()->setSortKey("title");b->collection()->setQuery("Track");QTest::qWait(100);
+  if(tracks){tracks->setProperty("contentY",700.0);}
+  QTest::qWait(100);const auto saved=tracks?tracks->property("contentY").toDouble():0;
+  b->library("favorites");QTest::qWait(100);b->search("QOL","songs");check(until([&]{return !b->busy();}),"revisited search loads");QTest::qWait(250);
+  check(b->collection()->query()=="Track"&&b->collection()->sortKey()=="title","revisited search restores filter and sort");
+  check(tracks&&qAbs(tracks->property("contentY").toDouble()-saved)<5&&saved>300,"revisited search restores scroll position");shot("01-restored-view");
+  QMetaObject::invokeMethod(w,"focusSearch");QTest::keyClick(w,Qt::Key_Question);QTest::qWait(80);
+  auto help=w->findChild<QObject*>("shortcutHelp");check(help&&!help->property("visible").toBool(),"question mark in search does not open help");
+  if(tracks){tracks->forceActiveFocus();}
+  QTest::keyClick(w,Qt::Key_F1);QTest::qWait(400);
+  check(help&&help->property("visible").toBool(),"F1 opens shortcut reference");shot("02-shortcuts");
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(250);check(help&&!help->property("visible").toBool(),"Escape closes shortcut reference");
+  if(tracks){tracks->forceActiveFocus();}
+  QTest::keyClick(w,Qt::Key_Question);QTest::qWait(300);check(help&&help->property("visible").toBool(),"question mark opens help outside text fields");
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  const QVariantMap one{{"id","qol00000001"},{"videoId","qol00000001"},{"title","First song"},{"kind","song"}};
+  const QVariantMap two{{"id","qol00000002"},{"videoId","qol00000002"},{"title","Second song"},{"kind","song"}};
+  const auto id=b->createPlaylist("QOL playlist");b->addToPlaylist(id,one);
+  w->setProperty("batchItems",QVariantList{one,two});QMetaObject::invokeMethod(w,"addPlaylistSelection",Q_ARG(QVariant,id));QTest::qWait(350);
+  auto duplicate=w->findChild<QObject*>("duplicateDialog");check(duplicate&&duplicate->property("visible").toBool(),"mixed additions offer Skip duplicates");shot("03-duplicates");
+  if(duplicate){QMetaObject::invokeMethod(duplicate,"reject");}
+  QTest::qWait(200);b->openPlaylist(id);check(b->results()->count()==1,"cancel does not add songs");
+  w->setProperty("batchItems",QVariantList{one,two});QMetaObject::invokeMethod(w,"addPlaylistSelection",Q_ARG(QVariant,id));QTest::qWait(200);if(duplicate)QMetaObject::invokeMethod(duplicate,"accept");QTest::qWait(250);
+  check(b->results()->count()==2&&b->undoMessage().contains("skipped 1"),"Skip duplicates adds only new songs and reports count");b->undo();check(b->results()->count()==1,"playlist addition remains undoable");
+  qputenv("SUNG_BUFFER_FIXTURE","1");b->clearQueue();QVariantList queue;for(int i=0;i<40;++i)queue.append(one);b->enqueueItems(queue,false,-1);b->playAt(32);
+  check(until([&]{return b->playing();}),"fixture playback starts");
+  QTest::keyClick(w,Qt::Key_J,Qt::ControlModifier);QTest::qWait(500);
+  auto q=findItem(w->contentItem(),"queueView");check(q&&q->property("currentIndex").toInt()==32&&q->hasActiveFocus(),"Ctrl+J focuses exact playing queue occurrence");
+  auto row=findItem(w->contentItem(),"queueRow_32");check(row&&q&&row->mapToItem(q,QPointF()).y()>=0&&row->mapToItem(q,QPointF()).y()+row->height()<=q->height()+1,"playing queue occurrence is visible");shot("04-playing-song");
+  w->resize(780,580);QTest::qWait(300);QMetaObject::invokeMethod(w,"revealPlaying");QTest::qWait(250);shot("05-compact-queue");
+  QTest::keyClick(w,Qt::Key_F1);QTest::qWait(300);shot("06-compact-shortcuts");
+  b->stop();b->deletePlaylist(id);b->clearQueue();qunsetenv("SUNG_BUFFER_FIXTURE");
+  fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
+void runLibraryQolTests(Backend *b,QQuickWindow *w) {
+  int failures=0;
+  auto check=[&](bool ok,const char *label){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",label);if(!ok)++failures;};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto shot=[&](const char *name){QTest::qWait(400);check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);b->setTheme("dark");
+  auto settings=w->findChild<QObject*>("settingsDialog");check(settings,"settings dialog exists");
+  if(settings){QMetaObject::invokeMethod(settings,"open");}QTest::qWait(350);
+  auto search=findItem(w->contentItem(),"settingsSearch");check(search,"settings search exists");
+  if(search){search->forceActiveFocus();QTest::keyClick(w,Qt::Key_V);QTest::keyClick(w,Qt::Key_O);QTest::keyClick(w,Qt::Key_L);}
+  QTest::qWait(120);check(settings&&settings->property("searchQuery").toString()=="vol","settings search accepts typing");
+  auto volume=findItem(w->contentItem(),"volumeStepButton");auto notification=findItem(w->contentItem(),"trackNotificationsSwitch");
+  check(volume&&volume->isVisible()&&notification&&!notification->isVisible(),"settings filters unrelated controls");shot("01-settings-search");
+  if(settings){settings->setProperty("searchQuery","no-such-setting");}QTest::qWait(100);auto empty=findItem(w->contentItem(),"settingsNoResults");check(empty&&empty->isVisible(),"settings no matches state");
+  if(settings){QMetaObject::invokeMethod(settings,"close");}QTest::qWait(250);
+  auto smart=w->findChild<QObject*>("smartPlaylistDialog");check(smart,"smart playlist dialog exists");
+  if(smart){QMetaObject::invokeMethod(smart,"edit",Q_ARG(QVariant,QString()));}QTest::qWait(300);
+  auto name=findItem(w->contentItem(),"smartName"),artist=findItem(w->contentItem(),"smartArtist");
+  if(name){name->setProperty("text","My artist mix");}if(artist){artist->setProperty("text","Example");}shot("02-smart-playlist");
+  w->resize(780,580);QTest::qWait(250);shot("03-compact-smart-playlist");
+  auto scroll=w->findChild<QObject*>("smartScroll");auto flick=scroll?qvariant_cast<QObject*>(scroll->property("contentItem")):nullptr;
+  if(flick){flick->setProperty("contentY",qMax(0.0,flick->property("contentHeight").toDouble()-flick->property("height").toDouble()));}
+  QTest::qWait(200);shot("03b-compact-smart-rules");
+  if(smart){QMetaObject::invokeMethod(smart,"accept");}QTest::qWait(250);const auto id=b->libraryId();check(!b->smartPlaylist(id).isEmpty(),"smart playlist saves through dialog");
+  const QVariantMap online{{"id","qol00000001"},{"videoId","qol00000001"},{"title","A song"},{"artist","Example Artist"},{"seconds",120},{"kind","song"}};
+  auto local=online;local.remove("videoId");local["id"]="local_test";local["localPath"]="/tmp/example/Album/An example track.flac";
+  const auto saved=b->createPlaylist("Source fixture");b->addItemsToPlaylist(saved,{online,local});b->openPlaylist(id);check(b->results()->count()==2,"saved music updates smart results");
+  auto details=w->findChild<QObject*>("trackDetailsDialog");if(details){QMetaObject::invokeMethod(details,"inspect",Q_ARG(QVariant,local));}QTest::qWait(300);check(details&&details->property("visible").toBool(),"track details open");shot("04-track-details");
+  if(details){QMetaObject::invokeMethod(details,"close");}QTest::qWait(200);
+  w->resize(1180,800);b->clearQueue();b->enqueueItems({online,local,online},false,-1);w->setProperty("side","queue");QTest::qWait(350);
+  auto queue=findItem(w->contentItem(),"queueView");check(queue&&queue->property("count").toInt()==3,"queue grouping preserves row count");shot("05-source-grouping");
+  if(queue){auto second=findItem(w->contentItem(),"queueRow_1");if(second){QVariant insertion;const auto y=second->mapToItem(queue,QPointF()).y()-10;QMetaObject::invokeMethod(queue,"insertion",Q_RETURN_ARG(QVariant,insertion),Q_ARG(QVariant,y));check(insertion.toInt()==1,"dropping on section heading selects next song");}}
+  b->moveQueueRows({1},0);check(b->queue()->get(0).value("id")=="local_test","grouped queue reorders actual songs");b->undo();check(b->queue()->get(1).value("id")=="local_test","grouped queue reorder undo");
+  b->deletePlaylist(id);b->deletePlaylist(saved);b->clearQueue();
+  fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
+void runVisualDelightTests(Backend *b,QQuickWindow *w) {
+  int failures=0;auto check=[&](bool ok,const char *s){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",s);fflush(stdout);if(!ok)++failures;};
+  auto until=[](const std::function<bool()> &p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<8000)QTest::qWait(25);return p();};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);b->setLyricsFallback(false);b->setTheme("dark");b->setMotion(true);qputenv("SUNG_BUFFER_FIXTURE","1");
+  QVariantList songs;for(int i=0;i<4;++i){QImage art(240,240,QImage::Format_RGB32);art.fill(QColor::fromHsv(i*75,130,200));const auto path=dir+QString("/cover-%1.png").arg(i);art.save(path);songs.append(QVariantMap{{"id",QString("delight000%1").arg(i)},{"videoId",QString("delight000%1").arg(i)},{"title",QString("Song %1").arg(i+1)},{"artist","Example artist"},{"kind","song"},{"seconds",60},{"art",QUrl::fromLocalFile(path).toString()}});}
+  const auto id=b->createPlaylist("Evening collection");b->addItemsToPlaylist(id,songs);b->library("playlists");QTest::qWait(400);shot("01-playlist-mosaic");
+  b->clearQueue();b->enqueueItems(songs,false,-1);b->playAt(0);check(until([&]{return b->playing();}),"fixture playing");
+  QFile lrc(dir+"/preview.lrc");check(lrc.open(QIODevice::WriteOnly),"lyric fixture opens");lrc.write("[00:01] First example line\n[00:20] Another example line\n[00:40] Final example line");lrc.close();b->importLyrics(QUrl::fromLocalFile(lrc.fileName()),songs.first().toMap().value("id").toString());
+  check(until([&]{return b->lyricLines().size()==3;}),"timed lyrics available for preview");b->openPlaylist(id);QTest::qWait(300);
+  auto seek=findItem(w->contentItem(),"seekBar");if(seek){const auto point=seek->mapToScene(QPointF(seek->width()/2,seek->height()/2));QTest::mouseMove(w,point.toPoint());}QTest::qWait(300);
+  auto preview=w->findChild<QObject*>("seekPreview");check(preview&&preview->property("visible").toBool(),"seek preview appears on hover");check(seek&&!seek->property("previewLine").toString().isEmpty(),"seek preview contains timed lyric");shot("02-seek-preview");
+  QTest::mouseMove(w,QPoint(10,10));QTest::qWait(80);
+  auto playing=findItem(w->contentItem(),"playingIndicator");check(playing&&playing->property("animating").toBool(),"playing bars animate");b->toggle();QTest::qWait(80);check(playing&&!playing->property("animating").toBool(),"playing bars stop when paused");
+  w->setProperty("side","queue");QTest::qWait(300);b->moveQueueRows({2},0);QTest::qWait(80);shot("03-queue-moving");QTest::qWait(250);check(b->queue()->get(0).value("id")==songs[2].toMap().value("id"),"animated reorder preserves queue order");b->undo();QTest::qWait(280);check(b->queue()->get(0)==songs[0].toMap(),"animated reorder undo preserves queue order");
+  b->removeQueueRows({3});QTest::qWait(250);check(b->queue()->count()==3,"animated removal completes");b->undo();QTest::qWait(250);check(b->queue()->count()==4,"animated removal undo completes");
+  b->playAt(1);QTest::qWait(110);shot("04-track-transition");check(until([&]{return b->playing();}),"playback survives metadata animation");QTest::qWait(350);
+  QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(110);check(w->property("coverFlying").toBool(),"artwork expansion starts");shot("05-artwork-expanding");QTest::qWait(450);check(!w->property("coverFlying").toBool()&&w->property("immersive").toBool(),"artwork expansion completes");shot("06-immersive");
+  QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(110);shot("07-artwork-returning");QTest::qWait(450);auto flight=findItem(w->contentItem(),"flyingArtwork");check(flight&&!flight->isVisible()&&flight->property("url").toString().isEmpty(),"transition artwork released after closing");
+  b->setMotion(false);QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(100);check(!w->property("coverFlying").toBool(),"reduced motion skips expansion");QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(150);
+  QQmlComponent c(qmlEngine(w),QUrl("qrc:/qml/CatalogSkeleton.qml"));auto skeleton=qobject_cast<QQuickItem*>(c.create());check(skeleton,"skeleton component loads");if(skeleton){skeleton->setParentItem(w->contentItem());skeleton->setWidth(640);skeleton->setHeight(350);skeleton->setX(130);skeleton->setY(180);skeleton->setProperty("loading",true);QTest::qWait(200);check(skeleton->isVisible()&&!skeleton->property("animating").toBool(),"loading placeholders respect reduced motion");skeleton->setProperty("cards",true);shot("08-loading-placeholders");b->setMotion(true);QTest::qWait(50);check(skeleton->property("animating").toBool(),"visible placeholders pulse with motion enabled");skeleton->setProperty("loading",false);check(!skeleton->isVisible()&&!skeleton->property("animating").toBool(),"loading animation stops after loading");delete skeleton;}
+  QQmlComponent buttonComponent(qmlEngine(w),QUrl("qrc:/qml/MButton.qml"));auto button=qobject_cast<QQuickItem*>(buttonComponent.create());if(button){button->setParentItem(w->contentItem());QMetaObject::invokeMethod(button,"confirm");check(button->property("confirmed").toBool(),"inline confirmation appears");QTest::qWait(1200);check(!button->property("confirmed").toBool(),"inline confirmation clears");delete button;}else check(false,"confirmation component loads");
+  QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(80);QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(450);check(!w->property("coverFlying").toBool()&&!w->property("immersive").toBool(),"rapid immersive toggle settles");
+  QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(80);b->setMotion(false);QTest::qWait(50);check(!w->property("coverFlying").toBool(),"disabling motion cancels active expansion");QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(200);
+  b->setMotion(true);w->hide();QTest::qWait(80);b->playAt(0);QTest::qWait(200);check(!w->isVisible(),"hidden player stays hidden during a track change");w->show();QTest::qWait(300);
+  b->stop();b->clearQueue();b->deletePlaylist(id);qunsetenv("SUNG_BUFFER_FIXTURE");fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
+void runAudioIndicatorTests(Backend *b,QQuickWindow *w) {
+  int failures=0;auto check=[&](bool ok,const char *s){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",s);fflush(stdout);if(!ok)++failures;};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto until=[](const std::function<bool()> &p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<5000)QTest::qWait(20);return p();};
+  const auto path=dir+"/tone.wav";QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","sine=frequency=350:sample_rate=48000:duration=12","-c:a","pcm_s16le",path});check(encode.waitForFinished(10000)&&encode.exitCode()==0,"test tone generated");
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setMotion(true);b->setUiActive(true);b->setAutoplay(false);b->setPrepareNext(false);b->clearQueue();
+  b->playItem({{"id","local_meter"},{"localPath",path},{"kind","song"},{"title","Audio-reactive bars"},{"artist","350 Hz fixture"}});w->setProperty("side","queue");
+  check(until([&]{return b->playing()&&b->audioLevels()[1].toDouble()>.2;}),"audio buffers drive frequency levels");QTest::qWait(150);
+  auto indicator=findItem(w->contentItem(),"playingIndicator");check(indicator,"playing indicator exists");
+  for(int i=0;i<5;++i)check(indicator&&findItem(indicator,QString("audioBar_%1").arg(i)),qPrintable(QString("bar %1 exists").arg(i+1)));
+  check(b->audioLevels()[1].toDouble()>b->audioLevels()[4].toDouble(),"bass-mid tone is stronger than treble");check(w->grabWindow().save(dir+"/01-playing.png"),"playing screenshot");
+  b->pause();QTest::qWait(100);check(b->audioLevels()==QVariantList({0.,0.,0.,0.,0.}),"pause clears measured levels");check(w->grabWindow().save(dir+"/02-paused.png"),"paused screenshot");
+  b->toggle();check(until([&]{return b->audioLevels()[1].toDouble()>.2;}),"resume restores audio response");b->setMotion(false);QTest::qWait(100);check(b->audioLevels()==QVariantList({0.,0.,0.,0.,0.})&&indicator&&!indicator->property("animating").toBool(),"reduced motion disables analyzer and bars");b->setMotion(true);
+  b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
+void runInteractionTests(Backend *b,QQuickWindow *w) {
+  int failures=0;auto check=[&](bool ok,const char *s){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",s);fflush(stdout);if(!ok)++failures;};
+  auto until=[](const std::function<bool()> &p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<8000)QTest::qWait(25);return p();};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);b->setLyricsFallback(false);b->setMotion(true);b->setTheme("dark");qputenv("SUNG_BUFFER_FIXTURE","1");
+  QVariantList songs;for(int i=0;i<30;++i)songs.append(QVariantMap{{"id",QString("polish%1").arg(i,5,10,QChar('0'))},{"videoId",QString("polish%1").arg(i,5,10,QChar('0'))},{"title",QString("Aurora & <night> %1 — A very long recording title that should remain readable on deliberate hover or keyboard focus").arg(i)},{"artist","Example artist"},{"kind","song"},{"seconds",60}});
+  for(int i=0;i<3;++i){QImage cover(120,120,QImage::Format_RGB32);cover.fill(QColor::fromHsv(i*95,140,200));const auto path=dir+QString("/cover-%1.png").arg(i);cover.save(path);auto item=songs[i].toMap();item["art"]=QUrl::fromLocalFile(path).toString();songs[i]=item;}
+  const auto id=b->createPlaylist("Evening collection");b->addItemsToPlaylist(id,songs);b->openPlaylist(id);QTest::qWait(300);
+  auto list=findItem(w->contentItem(),"tracksView");auto title=findItem(w->contentItem(),"collectionHeaderTitle");check(list&&title,"collection and header exist");
+  if(list&&title){check(until([&]{return title->property("font").value<QFont>().pixelSize()==28;}),"expanded header settles");const auto size=title->property("font").value<QFont>().pixelSize();list->setProperty("contentY",220);QTest::qWait(450);check(title->property("font").value<QFont>().pixelSize()<size,"header shrinks while scrolling");shot("01-compact-header");list->setProperty("contentY",0);QTest::qWait(450);check(until([&]{return title->property("font").value<QFont>().pixelSize()==size;}),"header expands at top");}
+  b->collection()->setQuery("Aurora night");QTest::qWait(250);auto row=findItem(w->contentItem(),"trackRow_0");auto label=row?findItem(row,"trackTitle"):nullptr;
+  check(label&&label->property("text").toString().contains("<b>Aurora")&&label->property("text").toString().contains("&lt;"),"matches highlighted while metadata markup is escaped");shot("02-search-matches");
+  if(label){QTest::mouseMove(w,label->mapToScene(QPointF(40,label->height()/2)).toPoint());QTest::qWait(750);auto tip=label->findChild<QObject*>("fullTitleTip");check(tip&&tip->property("visible").toBool(),"truncated title reveals on hover");shot("03-full-title");}
+  b->collection()->setQuery("not present");QTest::qWait(250);auto action=findItem(w->contentItem(),"emptyStateAction");check(action&&action->isVisible(),"empty filtered view offers an action");if(action)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,action->mapToScene(action->boundingRect().center()).toPoint());QTest::qWait(200);check(b->collection()->count()==30,"clear filters restores songs");
+  QQmlComponent cardComponent(qmlEngine(w),QUrl("qrc:/qml/ArtCard.qml"));auto card=qobject_cast<QQuickItem*>(cardComponent.create());check(card,"cover component loads");if(card){card->setParentItem(w->contentItem());card->setX(350);card->setY(240);card->setZ(100);card->setProperty("track",QVariantMap{{"kind","local"},{"id",id},{"title","Evening collection"}});QTest::mouseMove(w,QPoint(400,300));QTest::qWait(250);auto play=findItem(card,"cardAction");check(play&&play->property("symbol")=="play"&&play->isVisible(),"collection hover exposes play action");shot("04-cover-play");if(play)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,play->mapToScene(play->boundingRect().center()).toPoint());check(b->buffering() || b->playing(),"play request exposes loading or ready state");check(until([&]{return b->playing();}),"cover action begins playback");check(until([&]{return !b->buffering();}),"loading feedback clears when audio is ready");check(b->queue()->count()==30&&b->page()=="local"&&b->libraryId()==id,"cover playback preserves page and plays whole local playlist");delete card;}
+  b->playCover({{"kind","album"},{"id","fixture-album"}});check(!b->coverPlayId().isEmpty(),"remote cover request exposes loading state");check(until([&]{return b->coverPlayId().isEmpty()&&b->queue()->count()==2;}),"remote cover plays collection without navigation");check(b->libraryId()==id,"remote cover preserves collection page");
+  b->playCover({{"kind","album"},{"id","cancel-album"}});b->stop();QTest::qWait(400);check(b->coverPlayId().isEmpty()&&!b->playing(),"stop cancels pending cover playback");
+  if(list){list->setProperty("contentY",0);if(auto selection=qobject_cast<RowSelection*>(list->property("selection").value<QObject*>())){selection->select(0,0);selection->select(1,Qt::ControlModifier);selection->select(2,Qt::ControlModifier);}QTest::qWait(250);row=findItem(w->contentItem(),"trackRow_0");auto destination=findItem(w->contentItem(),"trackRow_3");if(row&&destination){auto a=row->mapToScene(QPointF(140,36)).toPoint(),z=destination->mapToScene(QPointF(140,60)).toPoint();QTest::mousePress(w,Qt::LeftButton,Qt::NoModifier,a);QTest::mouseMove(w,a+QPoint(0,30),40);QTest::mouseMove(w,z,40);QTest::qWait(200);auto preview=findItem(w->contentItem(),"trackDragPreview");check(preview&&preview->isVisible(),"artwork stack appears during drag");check(list->property("dropIndex").toInt()>=0,"destination opens insertion gap");shot("05-drag-preview");QTest::keyClick(w,Qt::Key_Escape);QTest::mouseRelease(w,Qt::LeftButton,Qt::NoModifier,z);QTest::qWait(250);check(b->results()->rows==songs,"cancel drag preserves order");check(list->property("dropIndex").toInt()==-1,"cancel closes drop gap");}}
+  b->setMotion(false);if(list){if(auto selection=qobject_cast<RowSelection*>(list->property("selection").value<QObject*>()))selection->clear();list->setProperty("contentY",220);}QTest::qWait(50);
+  bool offscreenTip=false;for(auto tip:w->findChildren<QObject*>("fullTitleTip"))if(tip->property("visible").toBool())offscreenTip=true;check(!offscreenTip,"scrolling hides offscreen title tooltips");shot("06-reduced-motion");w->resize(900,650);QTest::qWait(300);shot("07-narrow-layout");
+  b->stop();b->clearQueue();b->deletePlaylist(id);qunsetenv("SUNG_BUFFER_FIXTURE");fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }

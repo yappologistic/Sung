@@ -79,11 +79,11 @@ int main(int argc, char **argv) {
   app.setApplicationName("sung");
   app.setApplicationDisplayName("Sung");
   app.setOrganizationName("Sung");
-  app.setApplicationVersion("0.11.0");
+  app.setApplicationVersion("0.12.0");
   app.setDesktopFileName("sung");
   const auto args = app.arguments();
   if (args.contains("--version")) {
-    fprintf(stdout, "Sung 0.11.0\n");
+    fprintf(stdout, "Sung 0.12.0\n");
     return 0;
   }
   QLocalSocket peer;
@@ -109,6 +109,8 @@ int main(int argc, char **argv) {
   qmlRegisterType<RowSelection>("Sung.Native", 1, 0, "RowSelection");
   qmlRegisterType<RoundedArt>("Sung.Native", 1, 0, "RoundedArt");
   Backend backend;
+  RoundedArt::resolveServerArt=[&backend](const QUrl &url){return backend.server()->artworkUrl(url);};
+  QObject::connect(backend.server(),&Subsonic::accountChanged,&app,[]{RoundedArt::clearCaches();});
   DesktopTheme desktopTheme;
   QObject::connect(&backend,&Backend::artworkCacheCleared,&app,[]{RoundedArt::clearCaches();});
   bool exposeMpris = !args.contains("--isolated");
@@ -153,6 +155,13 @@ int main(int argc, char **argv) {
     QTimer::singleShot(0, &app, [&] { runBenchmark(&backend, window); });
     return app.exec();
   }
+  if(args.contains("--server-remote-test")){QTimer::singleShot(0,&app,[&]{runRemoteServerTest(&backend,window);});return app.exec();}
+  if(args.contains("--server-test")){QTimer::singleShot(0,&app,[&]{runServerTests(&backend,window);});return app.exec();}
+  if(args.contains("--interaction-test")){QTimer::singleShot(0,&app,[&]{runInteractionTests(&backend,window);});return app.exec();}
+  if(args.contains("--audio-indicator-test")){QTimer::singleShot(0,&app,[&]{runAudioIndicatorTests(&backend,window);});return app.exec();}
+  if(args.contains("--visual-delight-test")){QTimer::singleShot(0,&app,[&]{runVisualDelightTests(&backend,window);});return app.exec();}
+  if(args.contains("--library-qol-test")){QTimer::singleShot(0,&app,[&]{runLibraryQolTests(&backend,window);});return app.exec();}
+  if(args.contains("--qol-test")){QTimer::singleShot(0,&app,[&]{runQolTests(&backend,window);});return app.exec();}
   if(args.contains("--visual-polish-test")){QTimer::singleShot(0,&app,[&]{runVisualPolishTests(&backend,window);});return app.exec();}
   if(args.contains("--search-selection-test")){QTimer::singleShot(0,&app,[&]{runSearchSelectionTests(&backend,window);});return app.exec();}
   if (args.contains("--features-test")) {

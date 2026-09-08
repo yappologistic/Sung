@@ -10,15 +10,20 @@ ItemDelegate {
     property var listOwner: null
     property var dragHub: null
     property bool selected: selection ? (selection.revision,selection.contains(selectionIndex)) : false
-    property bool selectable: selection && !!(track.videoId || track.localPath) && track.available!==false
+    property bool selectable: selection && !!(track.videoId || track.localPath || track.serverSong) && track.available!==false
     property bool keyboardCurrent: activeFocus || (listOwner && listOwner.activeFocus && listOwner.currentIndex===selectionIndex)
     property bool selectionVisible: selectable && (hovered || pointer.containsMouse || keyboardCurrent || selection.count>0)
+    property bool motionRaised: false
+    z: motionRaised && app.motion ? 2 : 0
+    property string matchQuery: ""
+    readonly property bool titleRevealAllowed: !dragging && (!dragHub || !dragHub.owner) && (!listOwner || (!listOwner.moving && y>=listOwner.contentY && y+height<=listOwner.contentY+listOwner.height))
     property bool dragging: false
     property point pressPoint
     property int pressModifiers: 0
     property bool queueMode: false
     property bool active: queueMode ? rowIndex===app.currentIndex : app.current.id !== undefined && app.current.id === track.id
     signal menuRequested(var item, int index, var anchor)
+    ListView.onReused: {motionRaised=false;opacity=Qt.binding(()=>enabled?1:0.45);}
     implicitHeight: 72
     width: ListView.view ? ListView.view.width : 500
     hoverEnabled: true
@@ -28,7 +33,7 @@ ItemDelegate {
     Accessible.name: (track.title || "") + ", " + (track.artist || "")
     Accessible.selected: selected
     background: Rectangle {
-        radius: 16; color: row.selected ? Theme.primaryContainer : row.active ? Theme.high : row.hovered ? Theme.container : "transparent"
+        radius: 16; color: row.selected ? Theme.primaryContainer : row.motionRaised ? Theme.container : row.active ? Theme.high : row.hovered ? Theme.container : "transparent"
         border.width: row.keyboardCurrent ? 2 : 0; border.color: Theme.primary
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
     }
@@ -65,11 +70,11 @@ ItemDelegate {
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 3
-            SungText { objectName: "trackTitle"; text: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; font.weight: row.active ? Font.DemiBold : Font.Medium; color: row.selected ? Theme.containerText : row.active ? Theme.primary : Theme.text }
-            SungText { visible: row.track.kind!=="smart"; text: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.selected ? Theme.containerText : Theme.muted; font.pixelSize: Theme.bodyMedium }
+            MatchText { objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; font.weight: row.active ? Font.DemiBold : Font.Medium; color: row.selected ? Theme.containerText : row.active ? Theme.primary : Theme.text }
+            MatchText { visible: row.track.kind!=="smart"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.selected ? Theme.containerText : Theme.muted; font.pixelSize: Theme.bodyMedium }
         }
-        Icon { name: "volume"; size: 20; ink: row.selected ? Theme.containerText : Theme.primary; visible: row.active && app.playing }
-        SungText { visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: 12; color: row.selected ? Theme.containerText : Theme.muted; Layout.rightMargin: 2 }
+        PlayingIndicator { ink: row.selected ? Theme.containerText : Theme.primary; visible: row.active }
+        SungText { font.features: {"tnum": 1}; visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: 12; color: row.selected ? Theme.containerText : Theme.muted; Layout.rightMargin: 2 }
         MButton { visible: row.track.kind!=="smart"; symbol: "more"; tip: "Track actions"; Accessible.name: "Actions for "+(row.track.title||"track"); ink: row.selected ? Theme.containerText : Theme.text; onClicked: row.menuRequested(row.track,row.rowIndex,this) }
     }
 }

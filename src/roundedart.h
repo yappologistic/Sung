@@ -3,6 +3,7 @@
 #include <QNetworkReply>
 #include <QPointer>
 #include <QQuickPaintedItem>
+#include <functional>
 
 class RoundedArt : public QQuickPaintedItem {
   Q_OBJECT
@@ -36,6 +37,7 @@ public:
   bool ready() const { return !m_image.isNull(); }
   void paint(QPainter *) override;
   static void clearCaches();
+  static std::function<QUrl(const QUrl &)> resolveServerArt;
 signals:
   void sourceChanged();
   void radiusChanged();

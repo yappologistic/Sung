@@ -21,7 +21,7 @@ ApplicationWindow {
     property bool collectionTools: false
     property var miniPlayer: null
     readonly property bool uiActive: (visible && visibility!==Window.Minimized) || (miniPlayer!==null && miniPlayer.visible && miniPlayer.visibility!==Window.Minimized)
-    onUiActiveChanged: app.setUiActive(uiActive)
+    onUiActiveChanged: {app.setUiActive(uiActive);if(!uiActive)cancelCoverFlight();}
     property var fileDialogs: null
     function openFileDialog(kind) {
         if(!fileDialogs) {
@@ -36,7 +36,7 @@ ApplicationWindow {
     property bool wasMaximized: false
     property bool geometryReady: false
     property var homeSections: app.page==="home" && app.pins.length ? [{title:"Pinned",items:app.pins}].concat(app.sections) : app.sections
-    property bool hasSongCollection: app.sections.length===0 && app.results.count>0 && !!!!(app.results.get(0).videoId || app.results.get(0).localPath)
+    property bool hasSongCollection: app.sections.length===0 && app.results.count>0 && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong)
     property var bulkView: null
     property var batchItems: []
     property var menuItem: ({})
@@ -45,11 +45,45 @@ ApplicationWindow {
     property string playlistAction: "create"
     property string editPlaylistId: ""
     property string toastText: ""
-    property bool searchFocused: searchField.activeFocus || (window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField")
-    property bool modalOpen: musicFoldersDialog.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
+    property bool toastPending: false
+    readonly property bool toastHasUndo: !!app.undoMessage && toastText === app.undoMessage
+    readonly property bool serverDisconnected: app.page === "server" && !app.server.connected && !app.server.connecting
+    property bool searchFocused: (window.activeFocusItem && window.activeFocusItem.handlesTextInput===true) || searchField.activeFocus || (window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField")
+    readonly property bool editableLocal: {app.playlists;return !!localPlaylist && !app.smartPlaylist(localPlaylist).id;}
+    property bool modalOpen: smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
     property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.handlesArrowKeys === true
     function selectedView() {var item=window.activeFocusItem;while(item){if(item.sourceRows!==undefined)return item;item=item.parent;}return tracks;}
     function addBatch(view) {batchItems=view.selection.items();addPlaylistDialog.open();}
+    property var viewPositions: ({})
+    property var viewPositionOrder: []
+    property bool restoreViewPending: false
+    function rememberView() {
+        viewPositions[app.viewKey]={tracks:tracks.contentY-tracks.originY,shelves:shelves.contentY-shelves.originY,playlists:localPlaylists.contentY-localPlaylists.originY,tools:collectionTools};
+        viewPositionOrder=viewPositionOrder.filter(k=>k!==app.viewKey).concat([app.viewKey]);
+        while(viewPositionOrder.length>32)delete viewPositions[viewPositionOrder.shift()];
+        restoreViewPending=true;
+    }
+    function restoreView() {
+        if(!restoreViewPending || app.busy)return;
+        restoreViewPending=false;
+        const saved=viewPositions[app.viewKey] || {};
+        function place(view,y) {view.forceLayout();view.contentY=view.originY+Math.max(0,Math.min(y || 0,Math.max(0,view.contentHeight-view.height)));}
+        place(tracks,saved.tracks);place(shelves,saved.shelves);place(localPlaylists,saved.playlists);
+        collectionTools=!!saved.tools || !!app.collection.query || app.collection.sortKey!=="original";
+    }
+    property bool revealPending: false
+    function revealPlaying() {
+        if(app.currentIndex<0)return;
+        if(immersive)toggleImmersive();
+        revealPending=true;side="queue";
+        Qt.callLater(()=>{if(sideLoader.item && sideLoader.item.revealCurrent)sideLoader.item.revealCurrent();});
+    }
+    function addPlaylistSelection(id) {
+        const items=batchItems.length?batchItems.slice():[menuItem];
+        const info=app.playlistAdditionInfo(id,items);
+        if(info.duplicates>0 && info.added>0){duplicateDialog.playlistId=id;duplicateDialog.items=items;duplicateDialog.duplicates=info.duplicates;duplicateDialog.open();}
+        else app.addItemsToPlaylist(id,items);
+    }
     QtObject {
         id: trackDrag
         property bool dropping: false
@@ -63,25 +97,72 @@ ApplicationWindow {
     }
     Rectangle {
         id: dragGhost; parent: window.contentItem; z: 1000
-        width: 130; height: 40; radius: 16; color: Theme.primary
+        objectName: "trackDragPreview"
+        width: 180; height: 68; radius: 20; color: Theme.high; border.color: Theme.outline
+        Repeater { model: dragGhost.visible?Math.min(3,trackDrag.items.length):0
+            Artwork { required property int index; x: 12+(2-index)*6; y: 10+(2-index)*3; width: 42; height: 42; radius: 8; pixels: 96; rotation: (2-index)*5; url: trackDrag.items[index].art || "" }
+        }
         visible: Drag.active
         Drag.source: trackDrag; Drag.keys: ["sung-tracks"]; Drag.hotSpot.x: 0; Drag.hotSpot.y: 0
-        SungText { anchors.centerIn: parent; text: trackDrag.items.length+" selected"; color: Theme.primaryText; font.pixelSize: 13 }
+        SungText { x: 80; width: 90; anchors.verticalCenter: parent.verticalCenter; text: window.countText(trackDrag.items.length); color: Theme.text; font.pixelSize: 13 }
     }
     function countText(n) { return n + (n === 1 ? " track" : " tracks"); }
+    TrackPresentation { id: nowPresentation; visible: !window.immersive && !window.compactMode }
     property real previousVolume: 0.65
     function toggleMute() { if(app.volume>0){previousVolume=app.volume;app.volume=0;}else app.volume=previousVolume; }
     Settings { id: geometry; category: "Window"; property int width: 1180; property int height: 800 }
     Component.onCompleted: { windowResources.manage(window);width=geometry.width;height=geometry.height;geometryReady=true;app.setUiActive(uiActive); }
     onWidthChanged: {if(geometryReady && !immersive && visibility===Window.Windowed)geometry.width=width;}
     onHeightChanged: {if(geometryReady && !immersive && visibility===Window.Windowed)geometry.height=height;}
+    property bool coverFlying: false
+    property real coverDetailsOpacity: coverFlying?0:1
+    Behavior on coverDetailsOpacity { NumberAnimation { duration: app.motion?120:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    property point flightGlobal: Qt.point(0,0)
+    function cancelCoverFlight() {coverFlightAnimation.stop();flightSettle.stop();coverFlying=false;flyingCover.url="";}
+    function prepareCoverFlight(source) {
+        cancelCoverFlight();
+        if(!app.motion || !source || !app.current.art || !window.visible || window.visibility===Window.Minimized)return;
+        flightGlobal=source.mapToGlobal(0,0);
+        const at=source.mapToItem(window.contentItem,0,0);
+        flyingCover.x=at.x;flyingCover.y=at.y;flyingCover.width=source.width;flyingCover.height=source.height;flyingCover.radius=source.radius || 12;
+        flyingCover.url=app.current.art;coverFlying=true;
+    }
+    Timer {
+        id: flightSettle; interval: 48
+        onTriggered: {
+            if(!window.coverFlying)return;
+            const target=window.immersive && immersiveLoader.item?immersiveLoader.item.artwork:nowArtwork;
+            if(!target || target.width<=0){window.cancelCoverFlight();return;}
+            const start=window.contentItem.mapFromGlobal(window.flightGlobal.x,window.flightGlobal.y);
+            const end=target.mapToItem(window.contentItem,0,0);
+            flyingCover.x=start.x;flyingCover.y=start.y;
+            flyingCover.endX=end.x;flyingCover.endY=end.y;flyingCover.endWidth=target.width;flyingCover.endHeight=target.height;flyingCover.endRadius=target.radius;
+            coverFlightAnimation.start();
+        }
+    }
+    Artwork {
+        id: flyingCover; objectName: "flyingArtwork"; z: 80; visible: window.coverFlying; pixels: 800
+        property real endX: 0; property real endY: 0; property real endWidth: 0; property real endHeight: 0; property real endRadius: 0
+    }
+    ParallelAnimation {
+        id: coverFlightAnimation
+        NumberAnimation { target: flyingCover; property: "x"; to: flyingCover.endX; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        NumberAnimation { target: flyingCover; property: "y"; to: flyingCover.endY; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        NumberAnimation { target: flyingCover; property: "width"; to: flyingCover.endWidth; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        NumberAnimation { target: flyingCover; property: "height"; to: flyingCover.endHeight; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        NumberAnimation { target: flyingCover; property: "radius"; to: flyingCover.endRadius; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        onFinished: {window.coverFlying=false;flyingCover.url="";}
+    }
+    Connections { target: app; function onSettingsChanged(){if(!app.motion)window.cancelCoverFlight();} }
     function toggleImmersive() {
         if(immersive){
+            prepareCoverFlight(immersiveLoader.item?immersiveLoader.item.artwork:null);
             if(wasMaximized)showMaximized();else {showNormal();width=geometry.width;height=geometry.height;}
             immersive=false;content.forceActiveFocus();
         }else if(app.currentIndex>=0){
-            wasMaximized=visibility===Window.Maximized;immersive=true;showFullScreen();app.fetchLyrics();
+            prepareCoverFlight(nowArtwork);wasMaximized=visibility===Window.Maximized;immersive=true;showFullScreen();app.fetchLyrics();
         }
+        if(coverFlying)flightSettle.restart();
     }
 
     function trackMenu(item,index,anchor,queueMode) {
@@ -105,10 +186,16 @@ ApplicationWindow {
         compactMode=false;if(immersive)window.showFullScreen();else window.showNormal();window.raise();window.requestActivate();
         if(miniPlayer)miniPlayer.hide();
     }
-    function focusSearch() { if(immersive)toggleImmersive();side="";app.startSearch();destination="search";searchField.forceActiveFocus();searchField.selectAll(); }
+    function relatedItem(item,kind) {
+        return {kind:kind,title:kind==="artist"?item.artist:item.album,browseId:item[kind+"Id"],remoteId:item[kind+"Id"],source:item.source || "",server:item.server || ""}
+    }
+    function openServerConnection() {serverConnection.open()}
+    function focusSearch() { if(app.page==="server"){searchField.forceActiveFocus();searchField.selectAll();return;}if(immersive)toggleImmersive();side="";app.startSearch();destination="search";searchField.forceActiveFocus();searchField.selectAll(); }
     function chooseLibrary(kind) { destination="library";libraryTab=kind;localPlaylist="";side="";app.library(kind); }
     function activateSide(which) { side=side===which?"":which;if(side==="lyrics")app.fetchLyrics(); }
 
+    Shortcut { sequence: "Ctrl+J"; enabled: !window.modalOpen; onActivated: window.revealPlaying() }
+    Shortcut { sequences: ["?", "F1"]; enabled: !window.modalOpen && !window.searchFocused; onActivated: shortcutHelp.open() }
     Shortcut { sequence: "Ctrl+M"; enabled: !window.modalOpen; onActivated: window.openMiniPlayer() }
     Shortcut { sequence: "Ctrl+K"; enabled: !window.modalOpen; onActivated: window.focusSearch() }
     Shortcut { sequence: "Ctrl+F"; enabled: !window.modalOpen; onActivated: window.focusSearch() }
@@ -124,7 +211,7 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+Q"; onActivated: window.close() }
 
     Shortcut { sequence: "F11"; enabled: !window.modalOpen; onActivated: window.toggleImmersive() }
-    Loader { anchors.fill: parent; active: window.immersive; sourceComponent: Component { ImmersivePlayer { onExitRequested: window.toggleImmersive(); onSpeedRequested: rateDialog.open(); onTimingRequested: lyricTimingDialog.open() } } }
+    Loader { id: immersiveLoader; anchors.fill: parent; active: window.immersive; sourceComponent: Component { ImmersivePlayer { coverHidden: window.coverFlying; onExitRequested: window.toggleImmersive(); onSpeedRequested: rateDialog.open(); onTimingRequested: lyricTimingDialog.open() } } }
     RowLayout {
         visible: !window.compactMode && !window.immersive
         anchors.fill: parent; spacing: 0
@@ -139,7 +226,7 @@ ApplicationWindow {
                         id: navButton; objectName: "nav_"+modelData.key
                         anchors.horizontalCenter: parent.horizontalCenter; width: 64; height: 40
                         symbol: modelData.icon; tip: modelData.label; selected: window.destination===modelData.key
-                        onClicked: {window.destination=modelData.key;if(modelData.key==="home")app.home();else if(modelData.key==="search")window.focusSearch();else window.chooseLibrary("favorites");}
+                        onClicked: {window.destination=modelData.key;if(modelData.key==="home")app.home();else if(modelData.key==="search"){app.startSearch();window.focusSearch();}else window.chooseLibrary("favorites");}
                     }
                     SungText { anchors.top: navButton.bottom; anchors.topMargin: 2; anchors.horizontalCenter: parent.horizontalCenter; text: modelData.label; font.pixelSize: 12; font.weight: window.destination===modelData.key?Font.DemiBold:Font.Medium; color: window.destination===modelData.key?Theme.primary:Theme.muted }
                 }
@@ -164,18 +251,19 @@ ApplicationWindow {
                         Icon { name: "search"; ink: Theme.muted }
                         TextField {
                             font.family: Theme.fontFamily; id: searchField; objectName: "searchField"; Layout.fillWidth: true; Layout.fillHeight: true
-                            placeholderText: "Search music"; placeholderTextColor: Theme.muted
+                            placeholderText: app.page==="server"?"Search server":"Search music"; placeholderTextColor: Theme.muted
                             color: Theme.text; selectionColor: Theme.primaryContainer; selectedTextColor: Theme.text
                             font.pixelSize: 16; background: null; selectByMouse: true
-                            Accessible.name: "Search songs, albums, artists, playlists, or paste a YouTube link"
+                            Accessible.name: app.page==="server"?"Search music server":"Search songs, albums, artists, playlists, or paste a YouTube link"
                             property var suggestions: []
                             property int highlighted: -1
                             property bool dismissed: false
                             function updateSuggestions() {
                                 highlighted=-1;
+                                if(app.page==="server"){suggestions=[];return;}
                                 suggestions=text.trim()?app.localMatches(text):app.recentSearches.map(q=>({title:q,recent:true}));
                             }
-                            function submit() {dismissed=true;window.destination="search";window.localPlaylist="";app.search(text,window.filter);content.forceActiveFocus();}
+                            function submit() {if(app.page==="server"){dismissed=true;app.browseServer("search",text,serverToolbar.searchFilter);content.forceActiveFocus();return;}dismissed=true;window.destination="search";window.localPlaylist="";app.search(text,window.filter);content.forceActiveFocus();}
                             function choose(index) {
                                 if(index<0 || index>=suggestions.length){submit();return;}
                                 const item=suggestions[index];dismissed=true;
@@ -251,22 +339,32 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
                 Rectangle {
                     id: content
+                    property bool compactHeader: false
+                    property real headerExtent: compactHeader?40:76
+                    Behavior on headerExtent { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } }
+                    Connections { target: tracks; function onContentYChanged() {
+                        const distance=tracks.contentY-tracks.originY;
+                        if(distance>96)content.compactHeader=true;else if(distance<12)content.compactHeader=false;
+                    } }
+                    Connections { target: app; function onCatalogChanged() {if(!window.hasSongCollection)content.compactHeader=false;} }
                     visible: !(window.width < 1000 && window.side)
                     Layout.fillWidth: true; Layout.fillHeight: true
                     radius: 28; color: Theme.surface; clip: true
                     ColumnLayout {
-                        anchors.fill: parent; anchors.margins: 28; spacing: 18
+                        anchors.fill: parent; anchors.margins: 28; spacing: app.page==="server"?8:18
                         RowLayout {
                             Layout.fillWidth: true
-                            Artwork { visible: !!app.cover; url: app.cover; Layout.preferredWidth: 76; Layout.preferredHeight: 76; radius: app.page==="artist" ? 38 : 18; pixels: 180 }
-                            SungText { text: window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium; font.weight: Font.Medium; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                            Artwork { visible: !!app.cover; url: app.cover; Layout.preferredWidth: content.headerExtent; Layout.preferredHeight: content.headerExtent; radius: app.page==="artist" ? width/2 : 12; pixels: 180 }
+                            SungText { text: window.serverDisconnected ? "Music server" : window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; objectName: "collectionHeaderTitle"; font.pixelSize: app.page==="home"?Theme.displaySmall:content.compactHeader?Theme.titleLarge:Theme.headlineMedium; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } font.weight: Font.Medium; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                             MButton { objectName: "pinCollectionButton"; symbol: "pin"; visible: !!app.collectionItem.id; selected: {app.pins;return app.isPinned(app.collectionItem);} tip: selected?"Unpin from Home":"Pin to Home"; onClicked: app.togglePin(app.collectionItem) }
                             MButton { symbol: "refresh"; busy: app.busy && (app.results.count>0 || window.homeSections.length>0); tip: "Refresh"; visible: app.page!=="library"&&app.page!=="local"; enabled: !app.busy; onClicked: app.refresh() }
                             MButton { objectName: "musicFoldersButton"; text: "Folders"; tip: "Manage music folders"; visible: window.destination==="library" && window.libraryTab==="files"; onClicked: musicFoldersDialog.open() }
                             MButton { objectName: "rescanFoldersButton"; symbol: "refresh"; tip: "Rescan music folders"; visible: window.destination==="library" && window.libraryTab==="files" && app.musicFolders.length>0; enabled: !app.importingLocal; onClicked: app.rescanMusicFolders() }
-                            MButton { objectName: "playlistCleanupButton"; text: "Clean up"; visible: !!window.localPlaylist; onClicked: window.openCleanup(window.localPlaylist) }
+                            MButton { objectName: "playlistCleanupButton"; text: "Clean up"; visible: window.editableLocal; onClicked: window.openCleanup(window.localPlaylist) }
                             MButton { objectName: "addLocalFilesButton"; symbol: "plus"; tip: "Add local audio files"; visible: window.destination==="library" && window.libraryTab==="files"; enabled: !app.importingLocal; tonal: true; onClicked: window.openFileDialog("audio") }
                             MButton { objectName: "newPlaylistButton"; symbol: "plus"; tip: "New playlist"; visible: window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist; tonal: true; onClicked: {window.playlistAction="create";playlistName.clear();playlistDialog.open();} }
+                            MButton { objectName: "newSmartPlaylistButton"; text: "Smart playlist"; visible: window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist; onClicked: smartDialog.edit("") }
+                            MButton { objectName: "editSmartPlaylistButton"; text: "Edit rules"; visible: !!window.localPlaylist && !window.editableLocal; onClicked: smartDialog.edit(window.localPlaylist) }
                         }
                         Flow {
                             objectName: "searchFilters"
@@ -288,6 +386,7 @@ ApplicationWindow {
                             currentKey: window.libraryTab
                             onChosen: key => window.chooseLibrary(key)
                         }
+                        ServerToolbar { id: serverToolbar; Layout.fillWidth: true; visible: app.page==="server" && !window.serverDisconnected; onConnectRequested: serverConnection.open() }
                         Flow {
                             visible: app.page==="home" && window.destination!=="library"; Layout.fillWidth: true; spacing: 8
                             Repeater {
@@ -296,10 +395,10 @@ ApplicationWindow {
                             }
                         }
                         RowLayout {
-                            visible: tracks.selection.count===0 && app.results.count>0 && app.sections.length===0 && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath)
+                            visible: tracks.selection.count===0 && app.results.count>0 && app.sections.length===0 && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong)
                             Layout.fillWidth: true; spacing: 10
                             MButton { text: "Play"; symbol: "play"; filled: true; enabled: app.collection.count>0; onClicked: app.playCollection(0) }
-                            MButton { symbol: "queue"; tip: "Add displayed songs to queue"; tonal: true; enabled: app.collection.count>0; onClicked: app.enqueueCollection() }
+                            MButton { symbol: "queue"; tip: "Add displayed songs to queue"; tonal: true; enabled: app.collection.count>0; onClicked: {const before=app.queue.count;app.enqueueCollection();if(app.queue.count>before)confirm();} }
                             Item { Layout.fillWidth: true }
                             MButton { objectName: "collectionToolsButton"; symbol: "filter"; tip: "Find and sort songs"; selected: window.collectionTools || !!app.collection.query || app.collection.sortKey!=="original"; onClicked: {window.collectionTools=!window.collectionTools;if(window.collectionTools)Qt.callLater(()=>collectionSearch.forceActiveFocus());} }
                             SungText { text: app.collection.query ? app.collection.count+" / "+app.results.count : window.countText(app.results.count); color: Theme.muted; font.pixelSize: 12 }
@@ -322,10 +421,16 @@ ApplicationWindow {
                             MButton { symbol: "close"; tip: "Clear list filter"; visible: !!app.collection.query; onClicked: app.collection.query="" }
                             MButton { objectName: "collectionSortButton"; symbol: "sort"; tip: "Sort songs"; text: app.collection.sortKey==="original"?"Order":app.collection.sortKey==="title"?"Title":app.collection.sortKey==="artist"?"Artist":"Duration"; tonal: true; onClicked: collectionSortMenu.popup(this,width-collectionSortMenu.width,height+4) }
                         }
-                        SelectionBar { Layout.fillWidth: true; view: tracks; canRemove: !!window.localPlaylist }
+                        SelectionBar { Layout.fillWidth: true; view: tracks; canRemove: window.editableLocal || app.serverPlaylistEditable }
                         Item {
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            MBusyIndicator { objectName: "catalogSpinner"; anchors.centerIn: parent; running: app.busy && app.results.count===0 && window.homeSections.length===0; label: "Loading music" }
+                            Column {
+                                objectName: "serverEmptyState"; anchors.centerIn: parent; spacing: 16
+                                visible: window.serverDisconnected
+                                SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "Connect your music library"; font.pixelSize: Theme.titleLarge }
+                                MButton { objectName: "serverEmptyConnect"; anchors.horizontalCenter: parent.horizontalCenter; text: "Connect server"; filled: true; onClicked: serverConnection.open() }
+                            }
+                            CatalogSkeleton { anchors.fill: parent; loading: app.busy && app.results.count===0 && window.homeSections.length===0; cards: app.page==="home" || app.page==="artist" }
                             ListView {
                                 id: shelves; anchors.fill: parent
                                 visible: window.homeSections.length>0 && !(window.destination==="library"&&window.libraryTab==="playlists")
@@ -356,17 +461,28 @@ ApplicationWindow {
                                 id: tracks; objectName: "tracksView"; anchors.fill: parent; clip: true; spacing: 4
                                 visible: app.sections.length===0 && !(window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist)
                                 model: app.collection; reuseItems: true; cacheBuffer: 100; boundsBehavior: Flickable.StopAtBounds
-                                queueMode: false; reorderEnabled: app.page==="local" && app.collection.sortKey==="original" && !app.collection.query
+                                queueMode: false; reorderEnabled: (window.editableLocal || app.serverPlaylistEditable) && app.collection.sortKey==="original" && !app.collection.query
                                 playlistId: window.localPlaylist; dragHub: trackDrag
-                                onActivate: (row,item)=>{if(item.videoId || item.localPath)app.playCollection(row);else app.open(item);}
+                                matchQuery: app.collection.query || (app.page==="search"?app.query:app.page==="server"?(app.serverRequest.query || ""):"")
+                                onActivate: (row,item)=>{if(item.videoId || item.localPath || item.serverSong)app.playCollection(row);else app.open(item);}
                                 onMenuRequested: (item,index,anchor)=>window.trackMenu(item,index,anchor,false)
-                                onRemoveSelected: {if(window.localPlaylist)app.removePlaylistRows(window.localPlaylist,sourceRows());}
+                                onRemoveSelected: {if(app.serverPlaylistEditable)app.removeServerRows(sourceRows());else if(window.localPlaylist)app.removePlaylistRows(window.localPlaylist,sourceRows());}
                                 onAddSelected: window.addBatch(tracks)
                                 footer: Item {
                                     width: tracks.width; height: app.canMore?64:0
                                     MButton { anchors.centerIn: parent; text: app.busy ? "Loading…" : "Load more"; busy: app.busy; enabled: !app.busy; tonal: true; visible: app.canMore; onClicked: app.more() }
                                 }
-                                SungText { anchors.centerIn: parent; visible: app.collection.count===0 && !app.busy; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"Add your music with +":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "No songs yet" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: 18 }
+                                Column {
+                                    objectName: "collectionEmptyState"; anchors.centerIn: parent; width: Math.min(parent.width,320); spacing: 14
+                                    visible: app.collection.count===0 && !app.busy && !window.serverDisconnected
+                                    Icon { anchors.horizontalCenter: parent.horizontalCenter; name: app.error?"refresh":app.collection.query || app.page==="search"?"search":"library"; size: 36; ink: Theme.muted }
+                                    SungText { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"No local music yet":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "No songs yet" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: 18 }
+                                    MButton {
+                                        objectName: "emptyStateAction"; anchors.horizontalCenter: parent.horizontalCenter; tonal: true
+                                        text: app.collection.query?"Clear filters":app.error && app.canRetry?"Retry":window.libraryTab==="files" && app.page==="library"?"Add music":"Search music"
+                                        onClicked: {if(app.collection.query)app.collection.query="";else if(app.error && app.canRetry)app.retry();else if(window.libraryTab==="files" && app.page==="library")window.openFileDialog("audio");else window.focusSearch();}
+                                    }
+                                }
                             }
                             ListView {
                                 id: localPlaylists; anchors.fill: parent; clip: true; spacing: 8
@@ -376,13 +492,14 @@ ApplicationWindow {
                                     required property var modelData; width: localPlaylists.width; height: 76; radius: 18; color: Theme.container
                                     RowLayout {
                                         anchors.fill: parent; anchors.margins: 12; spacing: 12
-                                        MButton { symbol: "queue"; tonal: true; tip: "Open playlist"; onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} }
-                                        AbstractButton { Layout.fillWidth: true; Layout.fillHeight: true; focusPolicy: Qt.StrongFocus; Accessible.name: modelData.title; background: Rectangle { color: "transparent"; radius: 8; border.width: parent.activeFocus?2:0; border.color: Theme.primary } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} contentItem: Column { spacing: 4; SungText { text: modelData.title; font.pixelSize: 16; width: parent.width } SungText { text: window.countText(modelData.count); color: Theme.muted; font.pixelSize: 12 } } }
+                                        AbstractButton { Layout.preferredWidth: 48; Layout.preferredHeight: 48; focusPolicy: Qt.StrongFocus; Accessible.name: "Open "+modelData.title; contentItem: PlaylistCover { artworks: modelData.artworks || [] } background: Rectangle { color: "transparent"; radius: 14; border.width: parent.activeFocus?2:0; border.color: Theme.primary } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} }
+                                        AbstractButton { Layout.fillWidth: true; Layout.fillHeight: true; focusPolicy: Qt.StrongFocus; Accessible.name: modelData.title; background: Rectangle { color: "transparent"; radius: 8; border.width: parent.activeFocus?2:0; border.color: Theme.primary } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} contentItem: Column { spacing: 4; SungText { text: modelData.title; font.pixelSize: 16; width: parent.width } SungText { text: modelData.smart?"Smart playlist":window.countText(modelData.count); color: Theme.muted; font.pixelSize: 12 } } }
                                         MButton { symbol: "more"; tip: "Playlist actions"; onClicked: {window.editPlaylistId=modelData.id;playlistName.text=modelData.title;playlistActions.popup(this,width-playlistActions.width,height+4);} }
                                     }
                                 }
                                 Column {
                                     anchors.centerIn: parent; spacing: 18; visible: app.playlists.length===0
+                                    Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "library"; size: 36; ink: Theme.muted }
                                     SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "No playlists yet"; color: Theme.muted; font.pixelSize: 18 }
                                     MButton { anchors.horizontalCenter: parent.horizontalCenter; text: "New playlist"; symbol: "plus"; filled: true; onClicked: {window.playlistAction="create";playlistName.clear();playlistDialog.open();} }
                                 }
@@ -405,6 +522,7 @@ ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true
                             SungText { text: window.side==="queue"?"Up next":window.side==="lyrics"?"Lyrics":"Now playing"; font.pixelSize: 20; font.weight: Font.Medium; Layout.fillWidth: true }
+                            MButton { objectName: "revealPlayingButton"; text: "Playing"; tip: "Show playing song · Ctrl+J"; visible: window.side==="queue"; enabled: app.currentIndex>=0; onClicked: window.revealPlaying() }
                             MButton { objectName: "lyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; visible: window.side==="lyrics"; enabled: !!app.lyrics; onClicked: {if(sideLoader.item)sideLoader.item.openSearch();} }
                             MButton { objectName: "lyricTimingButton"; symbol: "settings"; tip: "Lyric timing · saved for this song"; visible: window.side==="lyrics" && !!app.current.id; onClicked: lyricTimingDialog.open() }
                             MButton { objectName: "immersiveButton"; symbol: "expand"; tip: "Immersive player · F11"; visible: window.side!=="queue"; enabled: app.currentIndex>=0; onClicked: window.toggleImmersive() }
@@ -412,6 +530,7 @@ ApplicationWindow {
                         }
                         Loader {
                             id: sideLoader
+                            onLoaded: if(window.revealPending && item.revealCurrent)Qt.callLater(()=>{if(item && item.revealCurrent)item.revealCurrent();})
                             Layout.fillWidth: true; Layout.fillHeight: true
                             active: sidePanel.visible && !!window.side
                             sourceComponent: window.side==="queue"?queuePanel:window.side==="lyrics"?lyricsPanel:nowPanel
@@ -423,14 +542,14 @@ ApplicationWindow {
                 Layout.fillWidth: true; Layout.preferredHeight: 112; color: Theme.container; radius: 28
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 16
-                    AbstractButton { objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
-                        contentItem: Artwork { url: app.current.art || ""; radius: 12; pixels: 150 }
+                    AbstractButton { id: nowButton; objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
+                        contentItem: Artwork { id: nowArtwork; url: nowPresentation.shown.art || ""; radius: 12; pixels: 150; opacity: window.coverFlying?0:nowPresentation.fade }
                         background: Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; radius: 15; border.width: parent.activeFocus?2:0; border.color: Theme.primary }
                     }
                     ColumnLayout {
-                        Layout.preferredWidth: Math.max(100,Math.min(220,window.width*0.17)); spacing: 6
-                        AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: SungText { text: app.current.title || "Nothing playing"; font.pixelSize: 15; font.weight: Font.DemiBold } background: Rectangle { color: "transparent"; radius: 4; border.width: parent.activeFocus?1:0; border.color: Theme.primary } }
-                        AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open({kind:"artist",browseId:app.current.artistId,title:app.current.artist}); contentItem: SungText { text: app.current.artist || ""; color: Theme.muted; font.pixelSize: 13 } background: Rectangle { color: "transparent"; radius: 4; border.width: parent.activeFocus?1:0; border.color: Theme.primary } }
+                        Layout.preferredWidth: Math.max(100,Math.min(220,window.width*0.17)); spacing: 6; opacity: nowPresentation.fade*window.coverDetailsOpacity; transform: Translate { y: nowPresentation.offset }
+                        AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.title || "Nothing playing"; font.pixelSize: 15; font.weight: Font.DemiBold } background: Rectangle { color: "transparent"; radius: 4; border.width: parent.activeFocus?1:0; border.color: Theme.primary } }
+                        AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open(window.relatedItem(app.current,"artist")); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.artist || ""; color: Theme.muted; font.pixelSize: 13 } background: Rectangle { color: "transparent"; radius: 4; border.width: parent.activeFocus?1:0; border.color: Theme.primary } }
                     }
                     MButton { symbol: "heart"; tip: app.liked?"Unlike":"Like"; selected: app.liked; enabled: app.currentIndex>=0; visible: window.width>=1050; onClicked: app.toggleLike(app.current) }
                     ColumnLayout {
@@ -439,15 +558,15 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter; spacing: 6
                             MButton { symbol: "shuffle"; tip: "Shuffle"; selected: app.shuffle; onClicked: app.shuffle=!app.shuffle; visible: window.width>=980 }
                             MButton { symbol: "previous"; tip: "Previous · Ctrl+←"; enabled: app.queue.count>0; onClicked: app.previous() }
-                            MButton { objectName: "playButton"; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"; filled: true; implicitWidth: 64; implicitHeight: 48; enabled: app.queue.count>0; onClicked: app.toggle(); busy: app.resolving }
+                            MButton { objectName: "playButton"; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"; filled: true; implicitWidth: 64; implicitHeight: 48; enabled: app.queue.count>0; onClicked: app.toggle(); busy: app.buffering }
                             MButton { symbol: "next"; tip: "Next · Ctrl+→"; enabled: app.queue.count>0; onClicked: app.next() }
                             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; selected: app.repeat>0; onClicked: app.repeat=(app.repeat+1)%3; visible: window.width>=980 }
                         }
                         RowLayout {
                             Layout.fillWidth: true; spacing: 10
-                            SungText { text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34 }
+                            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34 }
                             SeekBar { Layout.fillWidth: true; objectName: "seekBar" }
-                            SungText { text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
+                            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
                         }
                     }
                     Item { Layout.fillWidth: true; visible: window.width>=1320 }
@@ -461,6 +580,24 @@ ApplicationWindow {
     Component {
         id: queuePanel
         ColumnLayout {
+            function revealCurrent() {
+                window.revealPending=false;
+                queueList.currentIndex=app.currentIndex;
+                queueList.forceActiveFocus(Qt.ShortcutFocusReason);
+                queueList.forceLayout();queueList.positionViewAtIndex(app.currentIndex,ListView.Center);
+                revealSettle.targetIndex=app.currentIndex;revealSettle.restart();
+            }
+            Timer {
+                id: revealSettle; interval: 32
+                property int targetIndex: -1
+                onTriggered: {
+                    if(targetIndex!==app.currentIndex || window.side!=="queue")return;
+                    // Center using actual row geometry once section headers have been laid out.
+                    queueList.forceLayout();queueList.positionViewAtIndex(targetIndex,ListView.Center);queueList.forceLayout();
+                    const row=queueList.itemAtIndex(targetIndex);
+                    if(row)queueList.contentY=Math.max(queueList.originY,Math.min(queueList.originY+Math.max(0,queueList.contentHeight-queueList.height),row.y-(queueList.height-row.height)/2));
+                }
+            }
             spacing: 8
             TrackList {
                 id: queueList; objectName: "queueView"; Layout.fillWidth: true; Layout.fillHeight: true; model: app.queue; clip: true; reuseItems: true; cacheBuffer: 80; spacing: 4
@@ -469,7 +606,11 @@ ApplicationWindow {
                 onMenuRequested: (item,index,anchor)=>window.trackMenu(item,index,anchor,true)
                 onRemoveSelected: app.removeQueueRows(sourceRows())
                 onAddSelected: window.addBatch(queueList)
-                SungText { anchors.centerIn: parent; text: "Your queue is empty"; color: Theme.muted; visible: app.queue.count===0 }
+                Column { anchors.centerIn: parent; spacing: 14; visible: app.queue.count===0
+                    Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "queue"; size: 36; ink: Theme.muted }
+                    SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "Your queue is empty"; color: Theme.muted }
+                    MButton { anchors.horizontalCenter: parent.horizontalCenter; text: "Search music"; tonal: true; onClicked: window.focusSearch() }
+                }
             }
             SelectionBar { Layout.fillWidth: true; view: queueList; canRemove: true }
             RowLayout {
@@ -512,7 +653,7 @@ ApplicationWindow {
         MMenuItem { text: "Play selected next"; onTriggered: app.enqueueItems(window.bulkView.selection.items(),true) }
         MMenuItem { text: "Add selected to queue"; onTriggered: app.enqueueItems(window.bulkView.selection.items()) }
         MMenuItem { text: "Add selected to playlist"; onTriggered: window.addBatch(window.bulkView) }
-        MMenuItem { text: "Remove selected"; visible: window.bulkView && (window.bulkView.queueMode || !!window.localPlaylist); height: visible?44:0; onTriggered: window.bulkView.removeSelected() }
+        MMenuItem { text: "Remove selected"; visible: window.bulkView && (window.bulkView.queueMode || window.editableLocal || app.serverPlaylistEditable); height: visible?44:0; onTriggered: window.bulkView.removeSelected() }
         MMenuItem { text: "Select all"; onTriggered: window.bulkView.selection.selectAll() }
         MMenuItem { text: "Clear selection"; onTriggered: window.bulkView.selection.clear() }
     }
@@ -520,31 +661,38 @@ ApplicationWindow {
         id: actions; objectName: "trackActions"
         width: 230; padding: 8
         background: Rectangle { color: Theme.high; radius: 20; border.color: Theme.outline }
-        MMenuItem { text: "Open"; visible: !(window.menuItem.videoId || window.menuItem.localPath); onTriggered: app.open(window.menuItem) }
-        MMenuItem { objectName: "playKeepQueueAction"; text: "Play now, keep queue"; visible: !!(window.menuItem.videoId || window.menuItem.localPath); onTriggered: app.playKeepingQueue(window.menuItem) }
-        MMenuItem { text: "Play next"; visible: !!(window.menuItem.videoId || window.menuItem.localPath); onTriggered: app.enqueue(window.menuItem,true) }
-        MMenuItem { text: "Add to queue"; visible: !!(window.menuItem.videoId || window.menuItem.localPath); onTriggered: app.enqueue(window.menuItem) }
+        MMenuItem { text: "Open"; visible: !(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.open(window.menuItem) }
+        MMenuItem { objectName: "playKeepQueueAction"; text: "Play now, keep queue"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.playKeepingQueue(window.menuItem) }
+        MMenuItem { text: "Play next"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.enqueue(window.menuItem,true) }
+        MMenuItem { text: "Add to queue"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.enqueue(window.menuItem) }
         MMenuItem { text: "Start radio"; visible: !!window.menuItem.videoId; onTriggered: app.radio(window.menuItem) }
-        MDivider { visible: !!(window.menuItem.videoId || window.menuItem.localPath); height: visible ? implicitHeight : 0 }
-        MMenuItem { text: app.isLiked(window.menuItem.id || "")?"Remove from liked songs":"Like song"; visible: !!(window.menuItem.videoId || window.menuItem.localPath); onTriggered: app.toggleLike(window.menuItem) }
-        MMenuItem { text: "Add to playlist"; visible: !!(window.menuItem.videoId || window.menuItem.localPath); onTriggered: addPlaylistDialog.open() }
-        MMenuItem { text: "Go to artist"; visible: !!window.menuItem.artistId; onTriggered: app.open({kind:"artist",browseId:window.menuItem.artistId,title:window.menuItem.artist}) }
-        MMenuItem { text: "Go to album"; visible: !!window.menuItem.albumId; onTriggered: app.open({kind:"album",browseId:window.menuItem.albumId,title:window.menuItem.album}) }
-        MMenuItem { text: window.menuItem.localPath?"Copy file path":"Copy link"; onTriggered: app.copyLink(window.menuItem) }
+        MDivider { visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); height: visible ? implicitHeight : 0 }
+        MMenuItem { text: app.isLiked(window.menuItem.id || "")?"Remove from liked songs":"Like song"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.toggleLike(window.menuItem) }
+        MMenuItem { objectName: "trackDetailsAction"; text: "Track details"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: trackDetails.inspect(window.menuItem) }
+        MMenuItem { text: "Add to playlist"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: addPlaylistDialog.open() }
+        MMenuItem { text: "Go to artist"; visible: !!window.menuItem.artistId; onTriggered: app.open(window.relatedItem(window.menuItem,"artist")) }
+        MMenuItem { text: "Go to album"; visible: !!window.menuItem.albumId; onTriggered: app.open(window.relatedItem(window.menuItem,"album")) }
+        MMenuItem { text: window.menuItem.source==="subsonic"?"Copy song details":window.menuItem.localPath?"Copy file path":"Copy link"; onTriggered: app.copyLink(window.menuItem) }
+        MMenuItem { text: "Add to server playlist"; visible: !!window.menuItem.serverSong; enabled: app.server.connected; onTriggered: {window.batchItems=[];serverAddDialog.open()} }
+        MMenuItem { text: "Rate song"; visible: !!window.menuItem.serverSong; enabled: app.server.connected; onTriggered: serverRatingDialog.open() }
+        MMenuItem { text: "Remove from server playlist"; visible: app.serverPlaylistEditable && !window.menuQueue; onTriggered: app.removeServerRows([window.menuIndex]) }
+        MMenuItem { text: "Rename server playlist"; visible: window.menuItem.source==="subsonic" && window.menuItem.kind==="playlist" && !!window.menuItem.editable; onTriggered: {serverName.text=window.menuItem.title;serverRenameDialog.open()} }
+        MMenuItem { text: "Delete server playlist"; visible: window.menuItem.source==="subsonic" && window.menuItem.kind==="playlist" && !!window.menuItem.editable; onTriggered: serverDeleteDialog.open() }
         MMenuItem { text: "Locate file…"; visible: !!window.menuItem.localPath; onTriggered: window.openFileDialog("locate") }
         MMenuItem { text: "Remove from local files"; visible: app.libraryId==="files" && !!window.menuItem.localPath && !window.menuQueue; onTriggered: app.removeLocalFile(window.menuItem.id) }
-        MDivider { visible: window.menuQueue || !!window.localPlaylist; height: visible?implicitHeight:0 }
+        MDivider { visible: window.menuQueue || window.editableLocal; height: visible?implicitHeight:0 }
         MMenuItem { text: "Move up"; visible: window.menuQueue; height: visible?44:0; enabled: window.menuIndex>0; onTriggered: app.moveQueue(window.menuIndex,window.menuIndex-1) }
         MMenuItem { text: "Move down"; visible: window.menuQueue; height: visible?44:0; enabled: window.menuIndex<app.queue.count-1; onTriggered: app.moveQueue(window.menuIndex,window.menuIndex+1) }
         MMenuItem { text: "Remove from queue"; visible: window.menuQueue; height: visible?44:0; onTriggered: app.removeQueue(window.menuIndex) }
-        MMenuItem { text: "Move up in playlist"; visible: !window.menuQueue && !!window.localPlaylist; height: visible?44:0; enabled: window.menuIndex>0 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex-1) }
-        MMenuItem { text: "Move down in playlist"; visible: !window.menuQueue && !!window.localPlaylist; height: visible?44:0; enabled: window.menuIndex<app.results.count-1 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex+1) }
-        MMenuItem { text: "Remove from playlist"; visible: !window.menuQueue && !!window.localPlaylist; height: visible?44:0; onTriggered: app.removeFromPlaylist(window.localPlaylist,window.menuIndex) }
+        MMenuItem { text: "Move up in playlist"; visible: !window.menuQueue && window.editableLocal; height: visible?44:0; enabled: window.menuIndex>0 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex-1) }
+        MMenuItem { text: "Move down in playlist"; visible: !window.menuQueue && window.editableLocal; height: visible?44:0; enabled: window.menuIndex<app.results.count-1 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex+1) }
+        MMenuItem { text: "Remove from playlist"; visible: !window.menuQueue && window.editableLocal; height: visible?44:0; onTriggered: app.removeFromPlaylist(window.localPlaylist,window.menuIndex) }
     }
     MMenu {
         id: playlistActions
         MMenuItem { text: {app.pins;return app.isPinned({kind:"local",id:window.editPlaylistId})?"Unpin from Home":"Pin to Home";} onTriggered: app.togglePin({kind:"local",id:window.editPlaylistId,title:playlistName.text}) }
-        MMenuItem { text: "Clean up…"; onTriggered: window.openCleanup(window.editPlaylistId) }
+        MMenuItem { text: "Edit rules"; visible: !!app.smartPlaylist(window.editPlaylistId).id; onTriggered: smartDialog.edit(window.editPlaylistId) }
+        MMenuItem { text: "Clean up…"; visible: !app.smartPlaylist(window.editPlaylistId).id; onTriggered: window.openCleanup(window.editPlaylistId) }
         MMenuItem { text: "Rename"; onTriggered: {window.playlistAction="rename";playlistDialog.open();} }
         MMenuItem { text: "Delete"; onTriggered: deletePlaylistDialog.open() }
     }
@@ -615,11 +763,11 @@ ApplicationWindow {
         }
     }
     MDialog {
-        id: playlistDialog; objectName: "playlistDialog"; anchors.centerIn: parent; width: 380; modal: true; acceptEnabled: playlistName.text.trim().length>0; title: window.playlistAction==="rename"?"Rename playlist":"New playlist"
+        id: playlistDialog; objectName: "playlistDialog"; initialFocus: playlistName; acceptText: window.playlistAction==="rename" ? "Save" : "Create"; anchors.centerIn: parent; width: 380; modal: true; acceptEnabled: playlistName.text.trim().length>0; title: window.playlistAction==="rename"?"Rename playlist":"New playlist"
         background: Rectangle { color: Theme.container; radius: 28 }
         palette.windowText: Theme.text; palette.text: Theme.text; palette.buttonText: Theme.text
         standardButtons: Dialog.Save | Dialog.Cancel
-        TextField { font.family: Theme.fontFamily; id: playlistName; objectName: "playlistName"; width: parent.width; implicitHeight: 48; leftPadding: 14; rightPadding: 14; placeholderText: "Playlist name"; placeholderTextColor: Theme.muted; selectionColor: Theme.primaryContainer; selectedTextColor: Theme.text; color: Theme.text; selectByMouse: true; maximumLength: 120; background: Rectangle { color: Theme.surface; radius: 12; border.width: playlistName.activeFocus?2:1; border.color: playlistName.activeFocus?Theme.primary:Theme.outline } onAccepted: {if(text.trim())playlistDialog.accept();} }
+        MTextField { id: playlistName; objectName: "playlistName"; width: parent.width; label: "Playlist name"; maximumLength: 120; onAccepted: if(playlistDialog.acceptEnabled)playlistDialog.accept() }
         onOpened: playlistName.forceActiveFocus()
         onAccepted: { if(window.playlistAction==="queue")app.saveQueue(playlistName.text);else if(window.playlistAction==="rename")app.renamePlaylist(window.editPlaylistId,playlistName.text);else {const id=app.createPlaylist(playlistName.text);if(id&&window.playlistAction==="add"){if(window.batchItems.length)app.addItemsToPlaylist(id,window.batchItems);else app.addToPlaylist(id,window.menuItem);}} }
     }
@@ -634,7 +782,8 @@ ApplicationWindow {
             sourceComponent: Component {
         ColumnLayout {
             anchors.fill: parent
-            ListView { objectName: "playlistChoices"; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: Math.min(52,app.playlists.length*52); clip: true; model: app.playlists; delegate: MButton { objectName: "playlistChoice"; required property var modelData; width: ListView.view.width; text: modelData.title; leftAligned: true; onClicked: {const playlistId=modelData.id;addPlaylistDialog.close();if(window.batchItems.length)app.addItemsToPlaylist(playlistId,window.batchItems);else app.addToPlaylist(playlistId,window.menuItem);} } }
+            ListView { objectName: "playlistChoices"; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: Math.min(52,app.playlists.length*52); clip: true; model: app.playlists.filter(p=>!p.smart); delegate: MButton { objectName: "playlistChoice"; required property var modelData; width: ListView.view.width; text: modelData.title; leftAligned: true; onClicked: {const playlistId=modelData.id;addPlaylistDialog.close();window.addPlaylistSelection(playlistId);} } }
+            MButton { Layout.fillWidth: true; text: "Server playlist…"; visible: app.server.connected; onClicked: {addPlaylistDialog.close();serverAddDialog.open()} }
             MButton { Layout.fillWidth: true; text: "New playlist"; symbol: "plus"; tonal: true; onClicked: {addPlaylistDialog.close();window.playlistAction="add";playlistName.clear();playlistDialog.open();} }
         }
             }
@@ -647,53 +796,84 @@ ApplicationWindow {
         onAccepted: {app.deletePlaylist(window.editPlaylistId);window.localPlaylist="";}
     }
     MDialog {
+        id: serverAddDialog; objectName: "serverAddDialog"; anchors.centerIn: parent; width: 380; height: Math.min(window.height-64,420); modal: true; title: "Add to server playlist"; standardButtons: Dialog.Cancel
+        ListView { anchors.fill: parent; clip: true; model: app.server.playlists
+            delegate: MButton { required property var modelData; width: ListView.view.width; text: modelData.title; leftAligned: true; enabled: !!modelData.editable; onClicked: {app.addServerPlaylist(modelData.remoteId,window.batchItems.length?window.batchItems:[window.menuItem]);serverAddDialog.close()} }
+            SungText { anchors.centerIn: parent; visible: app.server.playlists.length===0; text: "Create a playlist in Music server"; color: Theme.muted }
+        }
+    }
+    MDialog {
+        id: serverRenameDialog; objectName: "serverRenameDialog"; initialFocus: serverName; acceptText: "Save"; anchors.centerIn: parent; width: 360; modal: true; title: "Rename server playlist"; standardButtons: Dialog.Save | Dialog.Cancel; acceptEnabled: serverName.text.trim().length>0
+        MTextField { id: serverName; width: parent.width; label: "Playlist name"; maximumLength:120; onAccepted: if(serverRenameDialog.acceptEnabled)serverRenameDialog.accept() }
+        onAccepted: app.renameServerPlaylist(window.menuItem,serverName.text)
+    }
+    MDialog {
+        id: serverDeleteDialog; objectName: "serverDeleteDialog"; acceptText: "Delete"; anchors.centerIn: parent; width: 360; modal: true; title: "Delete server playlist?"; standardButtons: Dialog.Ok | Dialog.Cancel
+        SungText { width: parent.width; text: "This removes the playlist from your server. Songs are kept."; wrapMode: Text.Wrap }
+        onAccepted: app.deleteServerPlaylist(window.menuItem)
+    }
+    MDialog {
+        id: serverRatingDialog; objectName: "serverRatingDialog"; anchors.centerIn: parent; width: 380; modal: true; title: "Rate song"; standardButtons: Dialog.Cancel
+        Column { width: parent.width; spacing: 8
+            Row { anchors.horizontalCenter: parent.horizontalCenter; spacing: 8; Repeater { model:5; MButton { required property int index; objectName: "rating_"+(index+1); text:String(index+1); tip: "Rate " + (index+1) + " out of 5"; width: 48; selected: window.menuItem.rating===index+1; onClicked:{app.rateServerSong(window.menuItem,index+1);serverRatingDialog.close()} } } }
+            MButton { objectName: "clearRatingButton"; anchors.horizontalCenter: parent.horizontalCenter; text: "Clear rating"; enabled: !!window.menuItem.rating; onClicked: {app.rateServerSong(window.menuItem,0);serverRatingDialog.close()} }
+        }
+    }
+    ServerConnection { id: serverConnection }
+    MDialog {
         id: settingsDialog; objectName: "settingsDialog"; anchors.centerIn: parent; width: 460; height: Math.min(window.height-64,660); modal: true; title: "Settings"
         padding: 24; background: Rectangle { color: Theme.container; radius: 28 }
         palette.windowText: Theme.text; palette.buttonText: Theme.text; palette.text: Theme.text
         standardButtons: Dialog.Close
         property bool contentReady: false
-        onAboutToShow: contentReady=true
+        property string searchQuery: ""
+        function matches(terms) {return searchQuery.trim().toLowerCase().split(/\s+/).every(word=>terms.toLowerCase().indexOf(word)>=0);}
+        onAboutToShow: {contentReady=true;searchQuery="";}
+        onOpened: if(contentItem.item)contentItem.item.focusSearch()
         contentItem: Loader {
             active: settingsDialog.contentReady
             sourceComponent: Component {
+        Item {
+        function focusSearch() {settingsSearch.forceActiveFocus();}
+        MTextField { id: settingsSearch; rightPadding: 48; objectName: "settingsSearch"; anchors.left: parent.left; anchors.right: parent.right; placeholderText: "Search settings"; text: settingsDialog.searchQuery; onTextEdited: {settingsDialog.searchQuery=text;settingsScrollView.contentItem.contentY=0;} MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; symbol: "close"; tip: "Clear settings search"; visible: !!settingsDialog.searchQuery; onClicked: {settingsDialog.searchQuery="";settingsSearch.forceActiveFocus();} } }
         ScrollView {
             id: settingsScrollView; objectName: "settingsScroll"
             rightPadding: 12
-            anchors.fill: parent; contentWidth: availableWidth; contentHeight: settingsOptions.implicitHeight; clip: true
-            ScrollBar.vertical: T.ScrollBar {
+            anchors.fill: parent; anchors.topMargin: settingsSearch.height+16; contentWidth: availableWidth; contentHeight: settingsOptions.implicitHeight; clip: true
+            ScrollBar.vertical: MScrollBar {
                 objectName: "settingsScrollBar"
                 parent: settingsScrollView; x: settingsScrollView.width-width
                 y: settingsScrollView.topPadding; height: settingsScrollView.availableHeight
                 orientation: Qt.Vertical
-                implicitWidth: 8; padding: 2
-                active: true; policy: T.ScrollBar.AsNeeded; visible: size < 1
-                contentItem: Rectangle { implicitWidth: 4; implicitHeight: 24; radius: 2; color: parent.pressed ? Theme.primary : Theme.muted; opacity: parent.hovered || parent.pressed ? 1 : 0.6 }
-                background: null
             }
             ColumnLayout {
-                id: settingsOptions
-                width: parent.width; spacing: 18
-                SungText { text: "Appearance"; font.pixelSize: 16; font.weight: Font.Medium }
-                RowLayout { spacing: 8; Repeater { model: ["system","light","dark"]; MButton { required property string modelData; text: modelData==="system" && desktopTheme.available?"Noctalia":modelData.charAt(0).toUpperCase()+modelData.slice(1); selected: app.theme===modelData; onClicked: app.theme=modelData } } }
-                MSwitch { text: "Animations"; checked: app.motion; onToggled: app.motion=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
-                MSwitch { text: "Autoplay similar songs"; checked: app.autoplay; onToggled: app.autoplay=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
-                MSwitch { objectName: "historyPauseSwitch"; text: "Pause history this session"; checked: app.historyPaused; onToggled: app.historyPaused=checked }
-                MSwitch { objectName: "trackNotificationsSwitch"; text: "Track notifications"; checked: app.trackNotifications; onToggled: app.trackNotifications=checked }
-                RowLayout { Layout.fillWidth: true; SungText { text: "Volume step"; Layout.fillWidth: true } MButton { objectName: "volumeStepButton"; text: app.volumeStep+"%"; tonal: true; onClicked: volumeStepMenu.popup(this,width-volumeStepMenu.width,height+4) } }
-                RowLayout { Layout.fillWidth: true; SungText { text: "Playback speed"; Layout.fillWidth: true } MButton { objectName: "playbackSpeedButton"; text: Number(app.playbackRate.toFixed(2))+"×"; tonal: true; onClicked: rateDialog.open() } }
-                RowLayout { Layout.fillWidth: true; SungText { text: "Sleep timer"; Layout.fillWidth: true } MButton { text: app.sleepStatus; symbol: "chevron"; tonal: true; onClicked: sleepMenu.popup(this,width-sleepMenu.width,height+4) } }
+                id: settingsOptions; objectName: "settingsOptions"
+                width: settingsScrollView.availableWidth; spacing: 18
+                MButton { visible: settingsDialog.matches("Music server library"); Layout.fillWidth: true; text: "Music server"; symbol: "library"; leftAligned: true; onClicked: {settingsDialog.close();serverConnection.open()} }
+                MButton { visible: settingsDialog.matches("Keyboard shortcuts keys help"); objectName: "shortcutHelpButton"; Layout.fillWidth: true; text: "Keyboard shortcuts"; leftAligned: true; onClicked: {settingsDialog.close();shortcutHelp.open()} }
+                SungText { visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); text: "Appearance"; font.pixelSize: 16; font.weight: Font.Medium }
+                RowLayout { visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); spacing: 8; Repeater { model: ["system","light","dark"]; MButton { required property string modelData; text: modelData==="system" && desktopTheme.available?"Noctalia":modelData.charAt(0).toUpperCase()+modelData.slice(1); selected: app.theme===modelData; onClicked: app.theme=modelData } } }
+                MSwitch { visible: settingsDialog.matches("Animations"); text: "Animations"; checked: app.motion; onToggled: app.motion=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
+                MSwitch { visible: settingsDialog.matches("Autoplay similar songs"); text: "Autoplay similar songs"; checked: app.autoplay; onToggled: app.autoplay=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
+                MSwitch { visible: settingsDialog.matches("Pause history this session privacy"); objectName: "historyPauseSwitch"; text: "Pause history this session"; checked: app.historyPaused; onToggled: app.historyPaused=checked }
+                MSwitch { visible: settingsDialog.matches("Track notifications"); objectName: "trackNotificationsSwitch"; text: "Track notifications"; checked: app.trackNotifications; onToggled: app.trackNotifications=checked }
+                RowLayout { visible: settingsDialog.matches("Volume step"); Layout.fillWidth: true; SungText { text: "Volume step"; Layout.fillWidth: true } MButton { objectName: "volumeStepButton"; text: app.volumeStep+"%"; tonal: true; onClicked: volumeStepMenu.popup(this,width-volumeStepMenu.width,height+4) } }
+                RowLayout { visible: settingsDialog.matches("Playback speed rate"); Layout.fillWidth: true; SungText { text: "Playback speed"; Layout.fillWidth: true } MButton { objectName: "playbackSpeedButton"; text: Number(app.playbackRate.toFixed(2))+"×"; tonal: true; onClicked: rateDialog.open() } }
+                RowLayout { visible: settingsDialog.matches("Sleep timer"); Layout.fillWidth: true; SungText { text: "Sleep timer"; Layout.fillWidth: true } MButton { text: app.sleepStatus; symbol: "chevron"; tonal: true; onClicked: sleepMenu.popup(this,width-sleepMenu.width,height+4) } }
 
-                MButton { objectName: "audioDeviceButton"; text: app.audioDeviceName; symbol: "volume"; tip: "Audio output"; tonal: true; Layout.fillWidth: true; leftAligned: true; onClicked: audioDeviceDialog.open() }
-                MSwitch { text: "Prepare next track"; checked: app.prepareNext; onToggled: app.prepareNext=checked }
-                MSwitch { text: "Find missing lyrics on LRCLIB"; checked: app.lyricsFallback; onToggled: app.lyricsFallback=checked }
-                SungText { text: "YouTube"; font.pixelSize: 16; font.weight: Font.Medium; Layout.topMargin: 8 }
-                MButton { text: app.cookies?"Replace cookies":"Import cookies"; symbol: "folder"; tonal: true; onClicked: window.openFileDialog("cookies") }
-                MButton { text: "Remove cookies"; visible: !!app.cookies; onClicked: app.clearCookies() }
-                SungText { text: "Optional cookies.txt for tracks that require sign-in. Your library stays on this device."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: Theme.muted; font.pixelSize: 12 }
-                RowLayout { MButton { text: "Clear artwork cache"; onClicked: app.clearCache() } MButton { text: "Clear history"; onClicked: app.clearHistory() } }
-                RowLayout { MButton { text: "Export library"; onClicked: window.openFileDialog("export") } MButton { text: "Import library"; onClicked: window.openFileDialog("import") } }
-                SungText { text: "Sung 0.11.0"; color: Theme.muted; font.pixelSize: 12; Layout.topMargin: 8 }
+                MButton { visible: settingsDialog.matches("Audio output device speakers headphones"); objectName: "audioDeviceButton"; text: app.audioDeviceName; symbol: "volume"; tip: "Audio output"; tonal: true; Layout.fillWidth: true; leftAligned: true; onClicked: audioDeviceDialog.open() }
+                MSwitch { visible: settingsDialog.matches("Prepare next track"); text: "Prepare next track"; checked: app.prepareNext; onToggled: app.prepareNext=checked }
+                MSwitch { visible: settingsDialog.matches("Find missing lyrics on LRCLIB"); text: "Find missing lyrics on LRCLIB"; checked: app.lyricsFallback; onToggled: app.lyricsFallback=checked }
+                SungText { visible: settingsDialog.matches("YouTube cookies import replace remove sign in"); text: "YouTube"; font.pixelSize: 16; font.weight: Font.Medium; Layout.topMargin: 8 }
+                MButton { visible: settingsDialog.matches("YouTube cookies import replace remove sign in"); text: app.cookies?"Replace cookies":"Import cookies"; symbol: "folder"; tonal: true; onClicked: window.openFileDialog("cookies") }
+                MButton { text: "Remove cookies"; visible: !!app.cookies && settingsDialog.matches("YouTube cookies import replace remove sign in"); onClicked: app.clearCookies() }
+                SungText { visible: settingsDialog.matches("YouTube cookies import replace remove sign in"); text: "Optional cookies.txt for tracks that require sign-in. Your library stays on this device."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: Theme.muted; font.pixelSize: 12 }
+                RowLayout { visible: settingsDialog.matches("Clear artwork cache Clear history"); MButton { text: "Clear artwork cache"; onClicked: app.clearCache() } MButton { text: "Clear history"; onClicked: app.clearHistory() } }
+                RowLayout { visible: settingsDialog.matches("Export import library backup restore"); MButton { text: "Export library"; onClicked: window.openFileDialog("export") } MButton { text: "Import library"; onClicked: window.openFileDialog("import") } }
+                SungText { visible: settingsDialog.matches("Sung "); text: "Sung " + Qt.application.version; color: Theme.muted; font.pixelSize: 12; Layout.topMargin: 8 }
+                SungText { objectName: "settingsNoResults"; text: "No settings found"; color: Theme.muted; visible: {settingsDialog.searchQuery;for(let i=0;i<settingsOptions.children.length;++i){const child=settingsOptions.children[i];if(child!==this && child.visible && child.implicitHeight>0)return false;}return true;} }
             }
+        }
         }
             }
         }
@@ -708,6 +888,7 @@ ApplicationWindow {
         MMenuItem { text: "90 minutes"; onTriggered: app.setSleep(90) }
     }
     Rectangle {
+        objectName: "errorBar"
         anchors.bottom: parent.bottom; anchors.bottomMargin: 140; anchors.horizontalCenter: parent.horizontalCenter
         width: Math.min(window.width-120,errorText.implicitWidth+(app.canRetry?180:100)); height: Math.min(150,errorText.implicitHeight+32)
         radius: 18; color: Theme.containerText; visible: !!app.error; z: 50
@@ -717,17 +898,24 @@ ApplicationWindow {
     }
     Rectangle {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 140; anchors.horizontalCenter: parent.horizontalCenter; z: 40
-        objectName: "toastBar"; width: Math.min(window.width-48,toastLabel.implicitWidth+(window.toastText===app.undoMessage?120:40)); height: Math.max(48,toastLabel.implicitHeight+24); radius: 16; color: Theme.text
-        opacity: toastTimer.running?1:0; visible: opacity>0
+        id: toastBar; objectName: "toastBar"; width: Math.min(window.width-48,720,toastLabel.implicitWidth+(window.toastHasUndo?168:40)); height: Math.max(48,toastLabel.implicitHeight+24); radius: 16; color: Theme.text
+        opacity: window.toastPending && !app.error && !window.modalOpen ? 1 : 0
+        visible: opacity>0 && !app.error && !window.modalOpen
+        Accessible.role: Accessible.AlertMessage; Accessible.name: window.toastText
+        HoverHandler { id: toastHover }
         Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-        MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Undo"; ink: Theme.background; visible: window.toastText===app.undoMessage && !!app.undoMessage; onClicked: app.undo() }
-        SungText { id: toastLabel; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 20; anchors.right: parent.right; anchors.rightMargin: window.toastText===app.undoMessage?100:20; wrapMode: Text.Wrap; maximumLineCount: 3; text: window.toastText; color: Theme.background }
+        MButton { id: toastUndo; objectName: "toastUndo"; anchors.right: toastDismiss.left; anchors.verticalCenter: parent.verticalCenter; text: "Undo"; ink: Theme.dark ? Theme.primaryText : Theme.primaryContainer; visible: window.toastHasUndo; onClicked: app.undo() }
+        MButton { id: toastDismiss; objectName: "toastDismiss"; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; symbol: "close"; tip: "Dismiss notification"; ink: Theme.background; visible: window.toastHasUndo; onClicked: window.toastPending=false }
+        SungText { id: toastLabel; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 20; anchors.right: parent.right; anchors.rightMargin: window.toastHasUndo?148:20; wrapMode: Text.Wrap; maximumLineCount: 2; text: window.toastText; color: Theme.background }
     }
-    Timer { id: toastTimer; interval: window.toastText===app.undoMessage ? 6000 : 2400 }
-    Connections { target: app; function onToast(message){window.toastText=message;toastTimer.restart();} function onTrackChanged(){if(window.side==="lyrics" || window.compactMode || window.immersive)app.fetchLyrics();}
+    Timer { id: toastTimer; interval: 5000; running: window.toastPending && !window.toastHasUndo && !app.error && !window.modalOpen && !toastHover.hovered && !toastUndo.activeFocus && !toastDismiss.activeFocus; onTriggered: window.toastPending=false }
+    Connections { target: app; function onToast(message){window.toastPending=false;window.toastText=message;window.toastPending=true;} function onTrackChanged(){if(window.coverFlying)window.cancelCoverFlight();if(window.side==="lyrics" || window.compactMode || window.immersive)app.fetchLyrics();}
+        function onViewAboutToChange(){window.rememberView();}
         function onCatalogChanged(){
+            Qt.callLater(window.restoreView);
             if(!app.collection.query && app.collection.sortKey==="original")window.collectionTools=false;
             if(app.page==="home"){window.destination="home";window.localPlaylist="";searchField.clear();}
+            else if(app.page==="server"){window.destination="library";window.libraryTab="server";window.localPlaylist="";searchField.suggestions=[];searchField.text=app.serverRequest.query || "";}
             else if(app.page==="library" || app.page==="local"){
                 window.destination="library";
                 window.localPlaylist=app.page==="local"?app.libraryId:"";
@@ -749,6 +937,20 @@ ApplicationWindow {
             model: [{key:"original",label:"Original order"},{key:"title",label:"Title"},{key:"artist",label:"Artist"},{key:"duration",label:"Duration"}]
             MMenuItem { required property var modelData; objectName: "sort_"+modelData.key; text: modelData.label; checkable: true; checked: app.collection.sortKey===modelData.key; onTriggered: app.collection.sortKey=modelData.key }
         }
+    }
+    SmartPlaylistDialog { id: smartDialog; anchors.centerIn: parent }
+    TrackDetailsDialog { id: trackDetails; anchors.centerIn: parent }
+    ShortcutHelp { id: shortcutHelp; anchors.centerIn: parent }
+    MDialog {
+        id: duplicateDialog; objectName: "duplicateDialog"; anchors.centerIn: parent
+        width: Math.min(440,window.width-48); implicitHeight: implicitHeaderHeight+implicitFooterHeight+duplicateLabel.implicitHeight+48
+        title: "Skip duplicates?"; modal: true; standardButtons: Dialog.Cancel | Dialog.Ok; acceptText: "Skip duplicates"
+        property string playlistId: ""
+        property var items: []
+        property int duplicates: 0
+        contentItem: SungText { id: duplicateLabel; text: duplicateDialog.duplicates+(duplicateDialog.duplicates===1?" song is already included.":" songs are already included."); wrapMode: Text.Wrap }
+        onAccepted: {app.addItemsToPlaylist(playlistId,items);items=[];playlistId="";}
+        onRejected: {items=[];playlistId="";}
     }
     MDialog {
         id: audioDeviceDialog; objectName: "audioDeviceDialog"; anchors.centerIn: parent

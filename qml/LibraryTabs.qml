@@ -45,7 +45,8 @@ Flickable {
                 {label:"Playlists", key:"playlists", name:"playlistsTab"},
                 {label:"Local files", key:"files", name:"localFilesTab"},
                 {label:"Mixes", key:"mixes", name:"mixesTab"},
-                {label:"History", key:"history", name:"historyTab"}
+                {label:"History", key:"history", name:"historyTab"},
+                {label:"Music server", key:"server", name:"serverTab"}
             ]
             AbstractButton {
                 id: tab

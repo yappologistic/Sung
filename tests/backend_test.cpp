@@ -10,7 +10,10 @@
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
+#include <QAbstractItemModelTester>
+#include <QRandomGenerator>
 #include <limits>
+#include <cmath>
 
 class BackendTest : public QObject {
   Q_OBJECT
@@ -27,6 +30,100 @@ private slots:
     qputenv("XDG_CONFIG_HOME", storage.path().toUtf8());
     QCoreApplication::setApplicationName("sung-test");
     QCoreApplication::setOrganizationName("SungTests");
+  }
+  void measuredAudioBands() {
+    const auto pcm=[](double frequency,double amplitude,QAudioFormat::SampleFormat type,bool inverseStereo=false){
+      QAudioFormat f;f.setSampleRate(48000);f.setChannelCount(inverseStereo?2:1);f.setSampleFormat(type);
+      QByteArray data(f.bytesForFrames(9600),Qt::Uninitialized);
+      for(int i=0;i<9600;++i)for(int c=0;c<f.channelCount();++c){
+        const double x=amplitude*std::sin(2*3.14159265358979323846*frequency*i/48000)*(c?-1:1);
+        const int at=i*f.channelCount()+c;
+        switch(type){case QAudioFormat::Float:reinterpret_cast<float*>(data.data())[at]=x;break;
+          case QAudioFormat::Int16:reinterpret_cast<qint16*>(data.data())[at]=qRound(x*32767);break;
+          case QAudioFormat::Int32:reinterpret_cast<qint32*>(data.data())[at]=qint32(x*2147483647);break;
+          case QAudioFormat::UInt8:reinterpret_cast<quint8*>(data.data())[at]=qRound(128+x*127);break;
+          default:break;}
+      }
+      return QAudioBuffer(data,f);
+    };
+    const std::array<double,5> frequencies{100,350,1200,3500,10000};
+    for(auto format:{QAudioFormat::Float,QAudioFormat::Int16,QAudioFormat::Int32,QAudioFormat::UInt8}){
+      for(int band=0;band<5;++band){AudioLevels analyzer;analyzer.process(pcm(frequencies[band],0.45,format,true));const auto levels=analyzer.takeLevels();QCOMPARE(levels.size(),5);for(int other=0;other<5;++other)if(other!=band)QVERIFY2(levels[band].toDouble()>levels[other].toDouble(),"The matching frequency band should dominate, including inverse-phase stereo");}
+      AudioLevels silence;silence.process(pcm(100,0,format));QCOMPARE(silence.takeLevels(),QVariantList({0.,0.,0.,0.,0.}));
+    }
+    AudioLevels quiet,loud;quiet.process(pcm(1200,.02,QAudioFormat::Float));loud.process(pcm(1200,.45,QAudioFormat::Float));QVERIFY(loud.takeLevels()[2].toDouble()>quiet.takeLevels()[2].toDouble()+.3);
+    AudioLevels decay;decay.process(pcm(100,.45,QAudioFormat::Float));decay.takeLevels();for(int i=0;i<3;++i){decay.process(pcm(100,0,QAudioFormat::Float));decay.takeLevels();}QCOMPARE(decay.takeLevels(),QVariantList({0.,0.,0.,0.,0.}));
+  }
+  void audioBandsFollowPlayback() {
+    QTemporaryDir music;const auto path=music.filePath("bands.wav");
+    QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","aevalsrc=if(lt(t\\,1.5)\\,0.45*sin(2*PI*100*t)\\,if(lt(t\\,3)\\,0\\,if(lt(t\\,4.5)\\,0.45*sin(2*PI*3500*t)\\,0))):s=48000:d=6","-c:a","pcm_s16le",path});QVERIFY(encode.waitForFinished(10000));QCOMPARE(encode.exitCode(),0);
+    Backend b;b.setVolume(0);b.setMotion(true);b.setUiActive(true);b.setAutoplay(false);b.setPrepareNext(false);b.clearQueue();
+    b.playItem({{"id","local_audio_bands"},{"localPath",path},{"kind","song"},{"title","Band fixture"}});
+    QTRY_VERIFY_WITH_TIMEOUT(b.playing() && b.audioLevels()[0].toDouble()>.3,5000);
+    QVERIFY(b.audioLevels()[0].toDouble()>b.audioLevels()[3].toDouble());
+    b.pause();QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));b.toggle();b.seek(1900);
+    QTest::qWait(250);QTRY_COMPARE_WITH_TIMEOUT(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}),700);
+    b.seek(3300);QTRY_VERIFY_WITH_TIMEOUT(b.audioLevels()[3].toDouble()>.3,1500);QVERIFY(b.audioLevels()[3].toDouble()>b.audioLevels()[0].toDouble());
+    b.setMotion(false);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));QTest::qWait(100);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));
+    b.setMotion(true);b.seek(200);QTRY_VERIFY_WITH_TIMEOUT(b.audioLevels()[0].toDouble()>.3,1500);b.setUiActive(false);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));QTest::qWait(100);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));b.stop();b.clearQueue();b.setUiActive(true);
+  }
+  void animatedQueueAndSeekPreview() {
+    Entries rows;QAbstractItemModelTester modelTest(&rows,QAbstractItemModelTester::FailureReportingMode::QtTest);
+    QRandomGenerator random(812);
+    for(int n=0;n<150;++n){QVariantList wanted;for(int i=0,count=random.bounded(40);i<count;++i)wanted.append(track(QString::number(random.bounded(12))));rows.reconcile(wanted);QCOMPARE(rows.rows,wanted);}
+    rows.assign({track("one"),track("two"),track("three")});QPersistentModelIndex retained(rows.index(1));
+    rows.reconcile({track("two"),track("one"),track("three")});QCOMPARE(retained.row(),0);QCOMPARE(retained.data(Qt::UserRole).toMap().value("id").toString(),QString("two"));
+    RowSelection selection;selection.setModel(&rows);selection.select(0,0);rows.reconcile({track("one"),track("three"),track("two")});QCOMPARE(selection.count(),0);
+    QVariantList large;for(int i=0;i<600;++i)large.append(track(QString::number(i)));rows.reconcile(large);QCOMPARE(rows.rows,large);
+    Backend b;b.m_lyricLines=Lrc::parse("[00:02] First line\n[00:07] Second line",12000);b.m_queue.assign({track("preview0001")});b.m_index=0;b.m_lyricOffsets.clear();
+    QCOMPARE(b.previewLyric(1000),QString());QCOMPARE(b.previewLyric(2000),QString("First line"));QCOMPARE(b.previewLyric(7000),QString("Second line"));QCOMPARE(b.previewLyric(12000),QString());
+    b.m_lyricOffsets["preview0001"]=1000;QCOMPARE(b.previewLyric(6000),QString("Second line"));
+    b.m_playlists.clear();const auto id=b.createPlaylist("Mosaic");QVariantList songs;
+    for(int i=0;i<6;++i){auto song=track(QString::number(i));song["art"]="file:///art-"+QString::number(i%4)+".png";songs.append(song);}b.addItemsToPlaylist(id,songs);
+    QCOMPARE(b.playlists().first().toMap().value("artworks").toStringList().size(),4);b.m_playlists.clear();b.m_lyricOffsets.clear();
+  }
+  void smartPlaylistsAndDetails() {
+    Backend b;b.m_playlists.clear();b.m_localTracks.clear();b.m_favorites.clear();b.m_lastPlayed.clear();
+    auto a=track("smart000001"),c=track("smart000002"),d=track("smart000003");
+    a["artist"]="Example Artist";c["artist"]="Different Artist";d["artist"]="Example Artist";
+    d.remove("videoId");d["id"]="local_smart000003";d["localPath"]="/tmp/missing-song.flac";
+    b.m_localTracks={d};b.m_favorites={a};auto regular=b.createPlaylist("Saved");b.addItemsToPlaylist(regular,{a,c});
+    const auto id=b.saveSmartPlaylist({},"Example",{{"artist","EXAMPLE"}});QVERIFY(!id.isEmpty());
+    b.openPlaylist(id);QCOMPARE(b.results()->count(),2);
+    b.addItemsToPlaylist(id,{c});b.removePlaylistRows(id,{0});b.movePlaylistTrack(id,0,1);QCOMPARE(b.results()->count(),2);
+    b.saveSmartPlaylist(id,"Online",{{"source","youtube"},{"likedOnly",true}});QCOMPARE(b.results()->count(),1);
+    b.toggleLike(c);QCOMPARE(b.results()->count(),2);b.toggleLike(a);QCOMPARE(b.results()->count(),1);
+    b.m_lastPlayed[c.value("id").toString()]=QDateTime::currentSecsSinceEpoch()-qint64(40)*86400;
+    b.saveSmartPlaylist(id,"Older",{{"days",30}});QCOMPARE(b.results()->count(),1);QCOMPARE(b.results()->get(0).value("id"),c.value("id"));
+    b.saveSmartPlaylist(id,"Never",{{"days",-1}});QCOMPARE(b.results()->count(),2);
+    b.save();b.load();b.openPlaylist(id);QCOMPARE(b.results()->count(),2);QVERIFY(b.smartPlaylist(id).contains("rules"));
+    const auto exported=QUrl::fromLocalFile(storage.filePath("smart-export.json"));b.exportLibrary(exported);
+    b.m_playlists.clear();b.importLibrary(exported);QVERIFY(b.smartPlaylist(id).contains("rules"));b.openPlaylist(id);QCOMPARE(b.results()->count(),2);
+    b.deletePlaylist(id);QVERIFY(b.smartPlaylist(id).isEmpty());b.undo();QVERIFY(!b.smartPlaylist(id).isEmpty());
+    auto details=b.trackDetails(d);QVERIFY(!details.isEmpty());
+    bool missing=false;for(const auto &v:details)if(v.toMap().value("value")=="File missing")missing=true;QVERIFY(missing);
+    a["streamUrl"]="https://private.invalid/?token=secret";for(const auto &v:b.trackDetails(a))QVERIFY(!v.toMap().value("value").toString().contains("secret"));
+    Entries entries;entries.assign({a,d,c});QCOMPARE(entries.data(entries.index(0),Qt::UserRole+1).toString(),QString("YouTube Music"));QCOMPARE(entries.data(entries.index(1),Qt::UserRole+1).toString(),QString("Local files"));QCOMPARE(entries.count(),3);
+    b.m_playlists.clear();b.m_localTracks.clear();b.m_favorites.clear();b.m_lastPlayed.clear();
+    const auto temporary=b.saveSmartPlaylist({},"Temporary",{});b.openPlaylist(temporary);b.undo();QCOMPARE(b.page(),QString("library"));QCOMPARE(b.libraryId(),QString("playlists"));
+  }
+  void viewOptionsAndDuplicateAdditions() {
+    Backend b;b.m_playlists.clear();b.m_favorites={track("qol00000001"),track("qol00000002")};
+    const auto id=b.createPlaylist("QOL fixture");
+    const QVariantList batch{track("qol00000001"),track("qol00000002"),track("qol00000002")};
+    auto info=b.playlistAdditionInfo(id,batch);QCOMPARE(info.value("added").toInt(),2);QCOMPARE(info.value("duplicates").toInt(),1);
+    b.addToPlaylist(id,track("qol00000001"));
+    info=b.playlistAdditionInfo(id,batch);QCOMPARE(info.value("added").toInt(),1);QCOMPARE(info.value("duplicates").toInt(),2);
+    b.addItemsToPlaylist(id,batch);b.openPlaylist(id);QCOMPARE(b.results()->count(),2);QVERIFY(b.undoMessage().contains("skipped 2"));
+    b.undo();QCOMPARE(b.results()->count(),1);
+    b.collection()->setQuery("Track");b.collection()->setSortKey("artist");
+    b.library("favorites");QCOMPARE(b.collection()->query(),QString());QCOMPARE(b.collection()->sortKey(),QString("original"));
+    b.collection()->setSortKey("title");b.openPlaylist(id);
+    QCOMPARE(b.collection()->query(),QString("Track"));QCOMPARE(b.collection()->sortKey(),QString("artist"));
+    b.back();QCOMPARE(b.collection()->sortKey(),QString("title"));
+    b.library("history");b.library("favorites");QCOMPARE(b.collection()->sortKey(),QString("title"));
+    for(int i=0;i<40;++i)b.beginView(QString("bounded:%1").arg(i));QVERIFY(b.m_viewOptions.size()<=32);
+    b.m_playlists.clear();b.m_favorites.clear();
   }
   void folderImportAndPlaylistCleanup() {
     const auto oldHelper=qgetenv("SUNG_HELPER"),oldPython=qgetenv("SUNG_PYTHON");

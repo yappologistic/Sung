@@ -46,8 +46,8 @@ Item {
             Accessible.name: modelData.text; Accessible.description: modelData.start>=0 ? "Seek to "+app.formatTime(Math.max(0,modelData.start-app.lyricOffset)) : "Untimed lyric"
             onClicked: lyricPane.jumpMatch(index)
             background: Rectangle { radius: 12; color: parent.ListView.isCurrentItem?Theme.high:"transparent" }
-            SungText { anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; visible: modelData.start>=0; text: app.formatTime(Math.max(0,modelData.start-app.lyricOffset)); color: Theme.muted; font.pixelSize: 12 }
-            contentItem: SungText { id: matchText; text: modelData.text; leftPadding: 12; rightPadding: modelData.start>=0?64:12; topPadding: 12; bottomPadding: 12; wrapMode: Text.Wrap; font.pixelSize: 18; color: Theme.text }
+            SungText { font.features: {"tnum": 1}; anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; visible: modelData.start>=0; text: app.formatTime(Math.max(0,modelData.start-app.lyricOffset)); color: Theme.muted; font.pixelSize: 12 }
+            contentItem: MatchText { id: matchText; sourceText: modelData.text; query: lyricSearch.text; leftPadding: 12; rightPadding: modelData.start>=0?64:12; topPadding: 12; bottomPadding: 12; wrapMode: Text.Wrap; font.pixelSize: 18; color: Theme.text }
         }
         SungText { anchors.centerIn: parent; visible: lyricPane.matches.length===0; text: "No matches"; color: Theme.muted }
     }

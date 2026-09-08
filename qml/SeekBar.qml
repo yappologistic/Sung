@@ -17,6 +17,23 @@ Slider {
     enabled: volumeMode || app.duration>0
     onMoved: { if(volumeMode) app.volume=value; else app.seek(value); }
     Accessible.name: volumeMode ? "Volume" : "Playback position"
+    hoverEnabled: true
+    HoverHandler { id: seekHover }
+    readonly property real previewValue: pressed ? value : from+(to-from)*Math.max(0,Math.min(1,(seekHover.point.position.x-leftPadding-thumbWidth/2)/Math.max(1,availableWidth-thumbWidth)))
+    readonly property string previewLine: {app.lyricLines;app.lyricOffset;return !volumeMode && (seekHover.hovered || pressed)?app.previewLyric(previewValue):"";}
+    ToolTip {
+        objectName: "seekPreview"; visible: !s.volumeMode && s.enabled && s.visible && (seekHover.hovered || s.pressed)
+        delay: s.pressed?0:180; timeout: -1
+        x: Math.max(0,Math.min(s.width-width, (s.pressed?s.thumbCenter:seekHover.point.position.x)-width/2))
+        y: -height-6; width: s.previewLine?Math.min(280,Math.max(120,s.width)):76
+        padding: 10
+        contentItem: Column {
+            spacing: 4
+            SungText { width: parent.width; text: app.formatTime(s.previewValue); color: Theme.text; font.pixelSize: 12; horizontalAlignment: Text.AlignHCenter }
+            SungText { width: parent.width; visible: !!s.previewLine; text: s.previewLine; color: Theme.muted; font.pixelSize: 12; wrapMode: Text.Wrap; maximumLineCount: 2; horizontalAlignment: Text.AlignHCenter }
+        }
+        background: Rectangle { color: Theme.high; radius: 12; border.color: Theme.outline }
+    }
     background: Item {
         id: track
         x: s.leftPadding; y: s.topPadding+(s.availableHeight-height)/2

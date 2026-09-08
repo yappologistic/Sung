@@ -11,6 +11,7 @@
 #include <QStandardPaths>
 #include <utility>
 
+std::function<QUrl(const QUrl &)> RoundedArt::resolveServerArt;
 static QCache<QString, QImage> cache(8 * 1024 * 1024);
 static QNetworkAccessManager *manager() {
   static QNetworkAccessManager *n = nullptr;
@@ -71,11 +72,13 @@ void RoundedArt::reload() {
     if(!m_image.isNull())cache.insert(key,new QImage(m_image),m_image.sizeInBytes());
     emit readyChanged();update();return;
   }
-  if (m_source.scheme() != "https")
-    return;
-  QNetworkRequest req(m_source);
+  const bool server=m_source.scheme()=="sungcover";
+  const QUrl url=server&&resolveServerArt?resolveServerArt(m_source):m_source;
+  if(url.isEmpty() || (url.scheme()!="https" && !(server&&url.scheme()=="http")))return;
+  QNetworkRequest req(url);
+  if(server){req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);req.setAttribute(QNetworkRequest::CacheSaveControlAttribute,false);}
   req.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
-                   QNetworkRequest::PreferCache);
+                   server?QNetworkRequest::AlwaysNetwork:QNetworkRequest::PreferCache);
   auto r = manager()->get(req);
   m_reply = r;
   connect(r, &QNetworkReply::downloadProgress, this,

@@ -11,6 +11,7 @@ Window {
     minimumWidth: 520; maximumWidth: 520
     minimumHeight: 216; maximumHeight: 216
     color: Theme.background
+    TrackPresentation { id: presentation }
     signal restoreRequested()
     Component.onCompleted: windowResources.manage(mini)
     onClosing: Qt.quit()
@@ -28,11 +29,11 @@ Window {
             anchors.fill: parent; anchors.margins: 16; spacing: 4
             RowLayout {
                 Layout.fillWidth: true; spacing: 12
-                Artwork { url: app.current.art || ""; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: 12; pixels: 128 }
+                Artwork { url: presentation.shown.art || ""; opacity: presentation.fade; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: 12; pixels: 128 }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 4
-                    SungText { text: app.current.title || "Nothing playing"; Layout.fillWidth: true; font.pixelSize: 16; font.weight: Font.DemiBold }
-                    SungText { text: app.current.artist || ""; Layout.fillWidth: true; font.pixelSize: 13; color: Theme.muted }
+                    SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { y: presentation.offset } Layout.fillWidth: true; font.pixelSize: 16; font.weight: Font.DemiBold }
+                    SungText { text: presentation.shown.artist || ""; opacity: presentation.fade; transform: Translate { y: presentation.offset } Layout.fillWidth: true; font.pixelSize: 13; color: Theme.muted }
                 }
                 MButton { objectName: "miniRestoreButton"; symbol: "expand"; tip: "Full player · Ctrl+M"; onClicked: mini.restoreRequested() }
                 MButton { symbol: "close"; tip: "Quit Sung"; onClicked: Qt.quit() }
@@ -47,15 +48,15 @@ Window {
                 Layout.alignment: Qt.AlignHCenter; spacing: 12
                 MButton { symbol: "heart"; tip: app.liked?"Remove from liked songs":"Like"; selected: app.liked; enabled: app.currentIndex>=0; onClicked: app.toggleLike(app.current) }
                 MButton { symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() }
-                MButton { objectName: "miniPlayButton"; busy: app.resolving; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause":"Play"; filled: true; implicitWidth: 64; enabled: app.queue.count>0; onClicked: app.toggle() }
+                MButton { objectName: "miniPlayButton"; busy: app.buffering; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause":"Play"; filled: true; implicitWidth: 64; enabled: app.queue.count>0; onClicked: app.toggle() }
                 MButton { symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() }
                 MButton { objectName: "miniVolumeButton"; symbol: "volume"; tip: "Volume"; onClicked: volumeMenu.open() }
             }
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
-                SungText { text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34 }
+                SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34 }
                 SeekBar { Layout.fillWidth: true; implicitHeight: 28 }
-                SungText { text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
+                SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: 11; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
             }
         }
     }

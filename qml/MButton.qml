@@ -9,6 +9,11 @@ AbstractButton {
     property bool tonal: false
     property bool selected: false
     property bool busy: false
+    property bool confirmed: false
+    function confirm() {confirmed=true;confirmation.restart();}
+    Timer { id: confirmation; interval: 1100; onTriggered: control.confirmed=false }
+    onVisibleChanged: if(!visible){confirmation.stop();confirmed=false;}
+    readonly property bool needsTooltip: tip.length > 0 && (!text.length || tip !== text || buttonLabel.truncated)
     property color ink: filled ? Theme.primaryText : selected ? Theme.primary : Theme.text
     implicitWidth: text.length ? buttonLabel.implicitWidth + (symbol.length || busy ? 32 : 0) + 36 : 48
     implicitHeight: 48
@@ -16,9 +21,9 @@ AbstractButton {
     focusPolicy: Qt.StrongFocus
     opacity: enabled || busy ? 1 : 0.38
     Accessible.name: tip
-    Accessible.description: busy ? "Loading" : ""
+    Accessible.description: busy ? "Loading" : confirmed ? "Added to queue" : ""
     ToolTip {
-        visible: (control.hovered || control.visualFocus) && control.tip.length > 0
+        visible: (control.hovered || control.visualFocus) && control.needsTooltip
         delay: 650; text: control.tip
         padding: 10
         contentItem: SungText { text: control.tip; font.pixelSize: 12; color: Theme.background }
@@ -51,10 +56,10 @@ AbstractButton {
             Item {
                 width: 24; height: 24; visible: control.symbol.length > 0 || control.busy
                 anchors.verticalCenter: parent.verticalCenter
-                Icon { anchors.centerIn: parent; visible: !control.busy; name: control.symbol; ink: control.ink }
+                Icon { anchors.centerIn: parent; visible: !control.busy; name: control.confirmed?"check":control.symbol; ink: control.ink }
                 Loader {
                     anchors.fill: parent; active: control.busy
-                    sourceComponent: MBusyIndicator { objectName: "buttonSpinner"; running: control.busy; ink: control.ink; trackColor: control.filled ? Theme.primary : Theme.primaryContainer; label: "Loading"; Accessible.ignored: true }
+                    sourceComponent: MBusyIndicator { objectName: "buttonSpinner"; running: control.busy; ink: control.ink; trackColor: "transparent"; label: "Loading"; Accessible.ignored: true }
                 }
             }
             SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; width: control.leftAligned ? Math.max(0,control.width-(control.symbol.length || control.busy?76:36)) : implicitWidth; elide: Text.ElideRight; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }

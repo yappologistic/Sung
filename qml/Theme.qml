@@ -28,6 +28,7 @@ QtObject {
     readonly property color primaryContainer: followDesktop ? desktopTheme.colors.primaryContainer : (dark ? "#75351b" : "#ffdbcb")
     readonly property color containerText: followDesktop ? desktopTheme.colors.containerText : (dark ? "#ffdbcb" : "#743419")
     readonly property color secondary: followDesktop ? desktopTheme.colors.secondary : (dark ? "#d8c4a0" : "#6c5b3b")
+    readonly property color error: dark ? "#ffb4ab" : "#ba1a1a"
     readonly property int fast: app.motion ? 150 : 0
     readonly property int normal: app.motion ? 200 : 0
     readonly property int slow: app.motion ? 500 : 0

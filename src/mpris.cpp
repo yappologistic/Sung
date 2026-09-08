@@ -17,11 +17,11 @@ QVariantMap PlayerAdaptor::metadata() const {
                                 "/org/mpris/MediaPlayer2/track/" +
                                 b->trackToken()))},
           {"mpris:length", b->duration() * 1000},
-          {"mpris:artUrl", t.value("art")},
+          {"mpris:artUrl", t.value("source")=="subsonic"?QVariant(b->serverArtwork()):t.value("art")},
           {"xesam:title", t.value("title")},
           {"xesam:artist", QStringList{t.value("artist").toString()}},
           {"xesam:album", t.value("album")},
-          {"xesam:url", t.value("localPath").toString().isEmpty()?"https://music.youtube.com/watch?v="+t.value("videoId").toString():QUrl::fromLocalFile(t.value("localPath").toString()).toString()}};
+          {"xesam:url", t.value("source")=="subsonic"?QString():t.value("localPath").toString().isEmpty()?"https://music.youtube.com/watch?v="+t.value("videoId").toString():QUrl::fromLocalFile(t.value("localPath").toString()).toString()}};
 }
 void PlayerAdaptor::SetPosition(const QDBusObjectPath &id, qlonglong pos) {
   if (canSeek() && pos>=0 && pos<=b->duration()*1000 && id.path() ==

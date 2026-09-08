@@ -7,6 +7,8 @@ ListView {
     property bool queueMode: false
     property bool reorderEnabled: false
     property string playlistId: ""
+    property string matchQuery: ""
+    readonly property int dropIndex: drop.containsDrag?drop.before:-1
     required property var dragHub
     property alias selection: selection
     signal activate(int row, var item)
@@ -15,6 +17,23 @@ ListView {
     signal addSelected()
     clip: true; spacing: 4; reuseItems: true; cacheBuffer: 80
     boundsBehavior: Flickable.StopAtBounds
+    readonly property bool animateEdits: queueMode && app.motion && visible && Window.window && Window.window.visible && Window.window.visibility!==Window.Minimized
+    onAnimateEditsChanged: if(!animateEdits){for(const child of contentItem.children)if(child.motionRaised!==undefined)child.motionRaised=false;}
+    displaced: Transition { enabled: list.animateEdits; NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    move: Transition { enabled: list.animateEdits; SequentialAnimation {
+        PropertyAction { property: "motionRaised"; value: true }
+        NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        PropertyAction { property: "motionRaised"; value: false }
+    } }
+    add: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    remove: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; to: 0; duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    section.property: queueMode ? "musicSource" : ""
+    section.criteria: ViewSection.FullString
+    section.delegate: Item {
+        required property string section
+        width: list.width; height: 32
+        SungText { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width-24; text: parent.section; color: Theme.muted; font.pixelSize: 12; elide: Text.ElideRight }
+    }
     RowSelection { id: selection; model: list.model }
     Connections {
         target: list.model
@@ -22,6 +41,7 @@ ListView {
         function onModelReset(){cancelDrag();}
         function onRowsInserted(){cancelDrag();}
         function onRowsRemoved(){cancelDrag();}
+        function onRowsMoved(){cancelDrag();}
         function onLayoutChanged(){cancelDrag();}
     }
     function sourceRows() {
@@ -33,7 +53,13 @@ ListView {
     }
     function insertion(y) {
         const row=indexAt(1,contentY+y);
-        if(row<0)return y+contentY<=originY?0:count;
+        if(row<0){
+            const at=y+contentY;
+            // Section headings and spacing are not model rows. Find the next visible song.
+            let next=count;
+            for(let i=0;i<contentItem.children.length;++i){const child=contentItem.children[i];if(child.selectionIndex!==undefined && child.y>=at)next=Math.min(next,child.selectionIndex);}
+            return at<=originY?0:next;
+        }
         const item=itemAtIndex(row);
         return row+(item && contentY+y>item.y+item.height/2?1:0);
     }
@@ -63,13 +89,17 @@ ListView {
     delegate: TrackRow {
         required property var entry; required property int index
         objectName: (list.queueMode?"queueRow_":"trackRow_")+index
+        matchQuery: list.matchQuery
+        transform: Translate { y: list.dropIndex<0?0:index>=list.dropIndex?10:-10
+            Behavior on y { NumberAnimation { duration: app.motion?130:0; easing.type: Easing.OutCubic } }
+        }
         track: entry; rowIndex: list.queueMode?index:app.collection.sourceIndex(index); queueMode: list.queueMode
         selection: list.selection; selectionIndex: index; listOwner: list; dragHub: list.dragHub
         onClicked: list.activate(index,entry)
         onMenuRequested: (item,row,anchor)=>list.menuRequested(item,row,anchor)
     }
     DropArea {
-        id: drop; parent: list; anchors.fill: parent
+        id: drop; objectName: "trackDropArea"; parent: list; anchors.fill: parent
         keys: ["sung-tracks"]
         property int before: -1
         property real pointerY: 0
@@ -81,7 +111,7 @@ ListView {
             if(!compatible())return;
             const at=list.insertion(event.y);
             const hub=list.dragHub;
-            if(hub.owner===list){if(list.queueMode)app.moveQueueRows(hub.rows,at);else app.movePlaylistRows(list.playlistId,hub.rows,at);}
+            if(hub.owner===list){if(list.queueMode)app.moveQueueRows(hub.rows,at);else if(app.serverPlaylistEditable)app.moveServerRows(hub.rows,at);else app.movePlaylistRows(list.playlistId,hub.rows,at);}
             else if(list.queueMode)app.enqueueItems(hub.items,false,at);
             event.acceptProposedAction();before=-1;
         }
@@ -94,6 +124,11 @@ ListView {
         }
     }
     Rectangle {
+        parent: list; anchors.fill: parent; z: 9; radius: 16; color: "transparent"; border.color: Theme.primary; border.width: 2
+        visible: drop.containsDrag
+    }
+    Rectangle {
+        objectName: "dropInsertionLine"
         parent: list; z: 10; height: 3; radius: 1.5; color: Theme.primary; width: list.width
         visible: drop.containsDrag && drop.before>=0
         y: {const item=list.itemAtIndex(drop.before);return Math.max(0,Math.min(list.height-3,item?item.y-list.contentY:list.contentHeight-list.contentY));}

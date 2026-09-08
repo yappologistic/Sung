@@ -1,6 +1,8 @@
 #pragma once
 #include <QAbstractListModel>
 #include <QAudioOutput>
+#include <QAudioBufferOutput>
+#include "audiolevels.h"
 #include <QMediaPlayer>
 #include <QProcess>
 #include <QSettings>
@@ -13,6 +15,8 @@
 #include <QAudioDevice>
 #include "collectionview.h"
 #include "playbacknotifier.h"
+#include "subsonic.h"
+#include <QElapsedTimer>
 
 class Entries : public QAbstractListModel {
   Q_OBJECT
@@ -24,17 +28,33 @@ public:
   }
   int count() const { return rows.size(); }
   QVariant data(const QModelIndex &i, int role) const override {
-    return i.isValid() && i.row() >= 0 && i.row() < rows.size() && role == Qt::UserRole
-               ? rows[i.row()]
-               : QVariant();
+    if (!i.isValid() || i.row()<0 || i.row()>=rows.size()) return {};
+    if(role==Qt::UserRole) return rows[i.row()];
+    if(role==Qt::UserRole+1) {
+      const auto t=rows[i.row()].toMap();
+      return t.value("source")=="subsonic" ? "Music server" : !t.value("localPath").toString().isEmpty() ? "Local files" : "YouTube Music";
+    }
+    return {};
   }
   QHash<int, QByteArray> roleNames() const override {
-    return {{Qt::UserRole, "entry"}};
+    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"}};
   }
   void assign(const QVariantList &v) {
     beginResetModel();
     rows = v;
     endResetModel();
+    emit countChanged();
+  }
+  // Preserve delegates during small queue edits. Large replacements stay bounded.
+  void reconcile(const QVariantList &v) {
+    if(rows.size()>512 || v.size()>512){assign(v);return;}
+    for(int i=0;i<v.size();++i){
+      if(i<rows.size() && rows[i]==v[i])continue;
+      int found=-1;for(int j=i+1;j<rows.size();++j)if(rows[j]==v[i]){found=j;break;}
+      if(found>=0){beginMoveRows({},found,found,{},i);rows.move(found,i);endMoveRows();}
+      else {beginInsertRows({},i,i);rows.insert(i,v[i]);endInsertRows();}
+    }
+    if(rows.size()>v.size()){beginRemoveRows({},v.size(),rows.size()-1);rows.erase(rows.begin()+v.size(),rows.end());endRemoveRows();}
     emit countChanged();
   }
   Q_INVOKABLE QVariantMap get(int i) const {
@@ -52,6 +72,9 @@ signals:
 
 class Backend : public QObject {
   Q_OBJECT
+  Q_PROPERTY(Subsonic *server READ server CONSTANT)
+  Q_PROPERTY(bool serverPlaylistEditable READ serverPlaylistEditable NOTIFY catalogChanged)
+  Q_PROPERTY(QVariantMap serverRequest READ serverRequest NOTIFY catalogChanged)
   Q_PROPERTY(bool importingLocal READ importingLocal NOTIFY localImportChanged)
   Q_PROPERTY(QString localImportStatus READ localImportStatus NOTIFY localImportChanged)
   Q_PROPERTY(QStringList recentSearches READ recentSearches NOTIFY recentSearchesChanged)
@@ -62,6 +85,7 @@ class Backend : public QObject {
   Q_PROPERTY(QString audioDeviceId READ audioDeviceId WRITE setAudioDeviceId NOTIFY audioDevicesChanged)
   Q_PROPERTY(QString audioDeviceName READ audioDeviceName NOTIFY audioDevicesChanged)
   Q_PROPERTY(QVariantList sections READ sections NOTIFY catalogChanged)
+  Q_PROPERTY(QString viewKey READ viewKey NOTIFY catalogChanged)
   Q_PROPERTY(QString page READ page NOTIFY catalogChanged)
   Q_PROPERTY(QString libraryId READ libraryId NOTIFY catalogChanged)
   Q_PROPERTY(QString query READ query NOTIFY catalogChanged)
@@ -76,8 +100,11 @@ class Backend : public QObject {
   Q_PROPERTY(QString error READ error NOTIFY errorChanged)
   Q_PROPERTY(QVariantMap current READ current NOTIFY trackChanged)
   Q_PROPERTY(int currentIndex READ currentIndex NOTIFY trackChanged)
+  Q_PROPERTY(QVariantList audioLevels READ audioLevels NOTIFY audioLevelsChanged)
   Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
   Q_PROPERTY(bool resolving READ resolving NOTIFY playbackChanged)
+  Q_PROPERTY(bool buffering READ buffering NOTIFY playbackChanged)
+  Q_PROPERTY(QString coverPlayId READ coverPlayId NOTIFY playbackChanged)
   Q_PROPERTY(qint64 position READ position NOTIFY positionChanged)
   Q_PROPERTY(qint64 duration READ duration NOTIFY playbackChanged)
   Q_PROPERTY(double volume READ volume WRITE setVolume NOTIFY settingsChanged)
@@ -115,6 +142,25 @@ class Backend : public QObject {
   Q_PROPERTY(bool cleanupBusy READ cleanupBusy NOTIFY cleanupChanged)
   Q_PROPERTY(QVariantList cleanupItems READ cleanupItems NOTIFY cleanupChanged)
 public:
+  Q_INVOKABLE QVariantMap smartPlaylist(const QString &id) const;
+  Q_INVOKABLE QString saveSmartPlaylist(const QString &id,const QString &name,const QVariantMap &rules);
+  Q_INVOKABLE QString previewLyric(qint64 position) const;
+  Q_INVOKABLE QVariantList trackDetails(const QVariantMap &track) const;
+  QVariantList playlistRows(const QVariantMap &playlist) const;
+  QVariantList audioLevels() const {return m_audioLevels;}
+  Subsonic *server() {return &m_server;}
+  QString serverArtwork() const {return m_serverArtwork;}
+  bool serverPlaylistEditable() const {return m_page=="server" && m_request.value("mode")=="playlist" && m_request.value("editable").toBool();}
+  QVariantMap serverRequest() const {return m_page=="server"?m_request:QVariantMap{};}
+  Q_INVOKABLE void browseServer(const QString &mode="albums",const QString &query={},const QString &filter="songs");
+  Q_INVOKABLE void addServerPlaylist(const QString &remoteId,const QVariantList &songs);
+  Q_INVOKABLE void renameServerPlaylist(const QVariantMap &playlist,const QString &name);
+  Q_INVOKABLE void deleteServerPlaylist(const QVariantMap &playlist);
+  Q_INVOKABLE void removeServerRows(const QVariantList &indices);
+  Q_INVOKABLE void moveServerRows(const QVariantList &indices,int before);
+  Q_INVOKABLE void rateServerSong(const QVariantMap &song,int rating);
+  Q_INVOKABLE void saveServerQueue();
+  Q_INVOKABLE void restoreServerQueue();
   QStringList musicFolders() const { return m_musicFolders; }
   bool cleanupBusy() const { return m_cleanupBusy; }
   QVariantList cleanupItems() const { return m_cleanupItems; }
@@ -142,6 +188,7 @@ public:
   void setAudioDeviceId(const QString &id);
   QVariantList sections() const { return m_sections; }
   QString page() const { return m_page; }
+  QString viewKey() const { return m_viewKey; }
   QString libraryId() const { return m_libraryId; }
   QString query() const { return m_request.value("query").toString(); }
   QString searchFilter() const {
@@ -163,7 +210,9 @@ public:
   bool playing() const {
     return m_media.playbackState() == QMediaPlayer::PlayingState;
   }
+  QString coverPlayId() const { return m_coverPlayId; }
   bool resolving() const { return m_resolving; }
+  bool buffering() const { return m_wantPlay && (m_resolving || m_media.mediaStatus()==QMediaPlayer::LoadingMedia || m_media.mediaStatus()==QMediaPlayer::StalledMedia || m_media.mediaStatus()==QMediaPlayer::BufferingMedia); }
   qint64 position() const { return m_media.source().isEmpty() ? m_savedPosition : m_media.position(); }
   qint64 duration() const {
     return m_media.duration() > 0
@@ -230,6 +279,7 @@ public:
   Q_INVOKABLE void removeRecentSearch(const QString &query);
   Q_INVOKABLE QVariantList localMatches(const QString &query) const;
   Q_INVOKABLE void enqueueItems(const QVariantList &items, bool next=false, int before=-1);
+  Q_INVOKABLE QVariantMap playlistAdditionInfo(const QString &id, const QVariantList &items) const;
   Q_INVOKABLE void addItemsToPlaylist(const QString &id,const QVariantList &items);
   Q_INVOKABLE void removePlaylistRows(const QString &id,const QVariantList &indices);
   Q_INVOKABLE void movePlaylistRows(const QString &id,const QVariantList &indices,int before);
@@ -259,6 +309,7 @@ public:
   Q_INVOKABLE void playResults(int index = 0);
   Q_INVOKABLE void playCollection(int index = 0);
   Q_INVOKABLE void enqueueCollection();
+  Q_INVOKABLE void playCover(const QVariantMap &item);
   Q_INVOKABLE void playItem(const QVariantMap &item);
   Q_INVOKABLE void enqueue(const QVariantMap &item, bool next = false);
   Q_INVOKABLE void enqueueResults();
@@ -296,6 +347,7 @@ public:
   QString trackToken() const { return QString::number(m_trackToken); }
   QMediaPlayer *media() { return &m_media; }
 signals:
+  void viewAboutToChange();
   void localImportChanged();
   void cleanupChanged();
   void recentSearchesChanged();
@@ -303,6 +355,7 @@ signals:
   void errorChanged();
   void trackChanged();
   void playbackChanged();
+  void audioLevelsChanged();
   void positionChanged();
   void lyricIndexChanged();
   void settingsChanged();
@@ -317,6 +370,18 @@ signals:
 
 private:
   friend class BackendTest;
+  friend class SubsonicTest;
+  void serverBrowseRequest(QVariantMap request,bool push=true,bool append=false);
+  void setupServer();
+  Subsonic m_server;
+  QString m_serverArtwork;
+  std::shared_ptr<QTemporaryDir> m_serverArtDirectory;
+  QTimer m_serverListenTimer;
+  QElapsedTimer m_serverElapsed;
+  quint64 m_serverListenToken=0;
+  qint64 m_serverListened=0,m_serverStarted=0;
+  bool m_serverSubmitted=false;
+
   using Callback = std::function<void(const QVariantMap &)>;
   void invalidateUndo(const QString &type);
   void clearLyrics();
@@ -341,7 +406,8 @@ private:
   void applyLyrics(const QVariantMap &data);
   QVariantList libraryRows(const QString &kind) const;
   void cancel(const QString &channel);
-  void navigate(const QString &page, const QString &title, bool push = true);
+  void navigate(const QString &page, const QString &title, bool push = true, const QString &key = {});
+  void beginView(const QString &key);
   void browseRequest(QVariantMap req, bool push = true);
   void load();
   void recordHistory();
@@ -360,6 +426,9 @@ private:
   QMediaDevices m_devices;
   QVariantList m_lyricLines;
   QVariantList m_sections, m_favorites, m_history, m_playlists, m_back, m_pins;
+  QString m_viewKey = "home";
+  QMap<QString,QVariantMap> m_viewOptions;
+  QStringList m_viewOrder;
   QString m_page = "home", m_title = "Listen", m_cover, m_error, m_lyrics,
           m_libraryId;
   QVariantMap m_request, m_lyricOffsets;
@@ -381,10 +450,19 @@ private:
   bool m_lyricsLoaded=false;
   QVariantMap m_lastPlayed, m_undoLastPlayed;
   quint64 m_recordedToken=0;
+  QString m_coverPlayId;
+  quint64 m_coverPlayToken = 0;
+  void cancelCoverPlay();
   bool m_busy = false, m_more = false, m_resolving = false,
        m_lyricsBusy = false, m_retry = false, m_wantPlay = false;
   int m_index = -1;
+  void resetAudioLevels();
+  AudioLevels m_levelAnalyzer;
+  QVariantList m_audioLevels{0.0,0.0,0.0,0.0,0.0};
+  QElapsedTimer m_levelPublish;
+  QTimer m_levelIdle;
   QAudioOutput m_audio;
+  QAudioBufferOutput m_visualAudio;
   QMediaPlayer m_media;
   QTimer m_saveTimer, m_sleepTimer, m_sleepTick;
   QHash<QString, QProcess *> m_processes;
