@@ -30,7 +30,9 @@ def stage(name,cmd,timeout=600,env=None):
     return good
 build=a.build_dir.resolve() if a.build_dir else out/'build'
 env=os.environ.copy()
-env.update(QT_QPA_PLATFORMTHEME='generic',QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',QT_FFMPEG_DECODING_HW_DEVICE_TYPES=',',QT_FFMPEG_ENCODING_HW_DEVICE_TYPES=',')
+# Do not inherit a desktop-forced threaded render loop into the software harness.
+# Qt Quick Shapes can race window teardown there; native GPU tests keep their own loop.
+env.update(QT_FORCE_STDERR_LOGGING='1',QT_QPA_PLATFORMTHEME='generic',QT_QPA_PLATFORM='offscreen',QT_QUICK_BACKEND='software',QSG_RENDER_LOOP='basic',QT_FFMPEG_DECODING_HW_DEVICE_TYPES=',',QT_FFMPEG_ENCODING_HW_DEVICE_TYPES=',')
 # Isolated XDG_DATA_HOME also hides user-installed fonts from fontconfig.
 # Expose only the requested font directory, not the user's application data.
 if shutil.which('fc-match'):
@@ -53,6 +55,8 @@ if ready:
     else: rows.append(dict(stage='mpris',status='fail',detail='dbus-run-session and qdbus6 are required'))
     e=profile('search-selection-profile');e.update(SUNG_HELPER=str(root/'tests/catalog_fixture.py'),SUNG_PYTHON='/usr/bin/python3',SUNG_TEST_OUTPUT=str(out/'search-selection'))
     stage('search-selection',[str(build/'sung'),'--isolated','--search-selection-test'],120,e)
+    e=profile("visual-polish-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"visual-polish"))
+    stage("visual-polish",[str(build/"sung"),"--isolated","--visual-polish-test"],40,e)
     if a.offline:
         rows.append(dict(stage='live-ui-and-audit',status='skipped',detail='--offline selected; streaming and live catalog not verified'))
     else:

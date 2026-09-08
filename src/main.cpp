@@ -41,7 +41,7 @@ public:
     QString name = parts.value(0);
     if (name.contains(".."))
       return {};
-    QSize s = requested.isValid() ? requested : QSize(24, 24);
+    QSize s = !requested.isEmpty() ? requested : QSize(24, 24);
     s = s.boundedTo(QSize(256, 256));
     // Cache the untinted raster, not the QML texture. Window remapping still gets
     // fresh textures, while theme transitions reuse the same SVG coverage mask.
@@ -153,6 +153,7 @@ int main(int argc, char **argv) {
     QTimer::singleShot(0, &app, [&] { runBenchmark(&backend, window); });
     return app.exec();
   }
+  if(args.contains("--visual-polish-test")){QTimer::singleShot(0,&app,[&]{runVisualPolishTests(&backend,window);});return app.exec();}
   if(args.contains("--search-selection-test")){QTimer::singleShot(0,&app,[&]{runSearchSelectionTests(&backend,window);});return app.exec();}
   if (args.contains("--features-test")) {
     QTimer::singleShot(0, &app, [&] { runFeatureTests(&backend, window); });

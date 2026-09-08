@@ -10,3 +10,5 @@ void runLyricsTests(Backend*,QQuickWindow*);
 
 void runFeatureTests(Backend*,QQuickWindow*);
 void runSearchSelectionTests(Backend*,QQuickWindow*);
+
+void runVisualPolishTests(Backend*,QQuickWindow*);

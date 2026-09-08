@@ -36,7 +36,7 @@ Item {
             Layout.alignment: Qt.AlignHCenter; spacing: 16
             MButton { symbol: "shuffle"; selected: app.shuffle; tip: app.shuffle?"Shuffle on":"Shuffle off"; onClicked: app.shuffle=!app.shuffle }
             MButton { symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() }
-            MButton { objectName: "immersivePlayButton"; symbol: app.resolving?"refresh":app.playing?"pause":"play"; filled: true; implicitWidth: 80; implicitHeight: 56; tip: app.playing?"Pause":"Play"; enabled: app.queue.count>0; onClicked: app.toggle() }
+            MButton { objectName: "immersivePlayButton"; busy: app.resolving; symbol: app.playing||app.resolving?"pause":"play"; filled: true; implicitWidth: 80; implicitHeight: 56; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; onClicked: app.toggle() }
             MButton { symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() }
             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; onClicked: app.repeat=(app.repeat+1)%3 }
         }

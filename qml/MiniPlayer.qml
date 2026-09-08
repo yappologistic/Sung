@@ -47,7 +47,7 @@ Window {
                 Layout.alignment: Qt.AlignHCenter; spacing: 12
                 MButton { symbol: "heart"; tip: app.liked?"Remove from liked songs":"Like"; selected: app.liked; enabled: app.currentIndex>=0; onClicked: app.toggleLike(app.current) }
                 MButton { symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() }
-                MButton { objectName: "miniPlayButton"; symbol: app.resolving?"refresh":app.playing?"pause":"play"; tip: app.playing?"Pause":"Play"; filled: true; implicitWidth: 64; enabled: app.queue.count>0; onClicked: app.toggle() }
+                MButton { objectName: "miniPlayButton"; busy: app.resolving; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause":"Play"; filled: true; implicitWidth: 64; enabled: app.queue.count>0; onClicked: app.toggle() }
                 MButton { symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() }
                 MButton { objectName: "miniVolumeButton"; symbol: "volume"; tip: "Volume"; onClicked: volumeMenu.open() }
             }

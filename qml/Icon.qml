@@ -11,7 +11,7 @@ Item {
     height: size
     Image {
         anchors.fill: parent
-        source: icon.visible && (!icon.Window.window || icon.Window.window.visible) ? "image://symbols/" + icon.name + "/" + icon.ink.toString().substring(1) : ""
+        source: icon.name.length > 0 && icon.visible && (!icon.Window.window || icon.Window.window.visible) ? "image://symbols/" + icon.name + "/" + icon.ink.toString().substring(1) : ""
         // Fresh textures on window re-entry also support Qt's software renderer.
         cache: false
         sourceSize: Qt.size(icon.size * Screen.devicePixelRatio, icon.size * Screen.devicePixelRatio)

@@ -6,6 +6,12 @@ MenuItem {
     height: visible ? implicitHeight : 0
     leftPadding: 14; rightPadding: 14
     palette.windowText: control.enabled ? Theme.text : Theme.muted
+    indicator: Icon {
+        name: "check"; size: 20; ink: control.enabled ? Theme.text : Theme.muted
+        x: control.mirrored ? control.width-width-control.rightPadding : control.leftPadding
+        y: (control.height-height)/2
+        visible: control.checkable && control.checked
+    }
     contentItem: SungText {
         objectName: "menuItemLabel"
         text: control.text; color: control.enabled ? Theme.text : Theme.muted

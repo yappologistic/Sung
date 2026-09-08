@@ -2,11 +2,15 @@ import QtQuick
 import QtQuick.Controls
 Slider {
     id: slider
+    readonly property bool handlesArrowKeys: true
     implicitHeight: 40
-    background: Rectangle {
+    readonly property real thumbCenter: visualPosition * (availableWidth - 4) + 2
+    background: Item {
         x: slider.leftPadding; y: slider.topPadding+(slider.availableHeight-height)/2
-        width: slider.availableWidth; height: 4; radius: 2; color: Theme.high
-        Rectangle { width: slider.visualPosition*parent.width; height: parent.height; radius: 2; color: Theme.primary }
+        width: slider.availableWidth; height: 4
+        Rectangle { objectName: "sliderActiveTrack"; width: Math.max(0, slider.thumbCenter-8); height: 4; radius: 2; color: Theme.primary }
+        Rectangle { objectName: "sliderInactiveTrack"; x: Math.min(parent.width, slider.thumbCenter+8); width: parent.width-x; height: 4; radius: 2; color: Theme.high }
+        Rectangle { x: parent.width-4; width: 4; height: 4; radius: 2; color: Theme.muted; visible: slider.thumbCenter+8<parent.width-4 }
     }
     handle: Rectangle {
         x: slider.leftPadding+slider.visualPosition*(slider.availableWidth-width)

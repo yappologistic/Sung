@@ -24,7 +24,7 @@ set_source_files_properties(qml/FileDialogs.qml PROPERTIES QT_QML_SKIP_CACHEGEN 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_target_properties(sung PROPERTIES QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode")
 qt_add_qml_module(sung URI SungUi VERSION 1.0 NO_PLUGIN NO_RESOURCE_TARGET_PATH RESOURCE_PREFIX "/"
- QML_FILES qml/TrackList.qml qml/SelectionBar.qml qml/FileDialogs.qml qml/SettingSlider.qml qml/LyricsView.qml qml/ImmersivePlayer.qml qml/MiniPlayer.qml qml/MMenu.qml qml/MMenuItem.qml qml/MDivider.qml qml/MDialog.qml qml/MSwitch.qml qml/Main.qml qml/Theme.qml qml/Icon.qml qml/MButton.qml qml/SungText.qml qml/Artwork.qml qml/TrackRow.qml qml/ArtCard.qml qml/SeekBar.qml)
+ QML_FILES qml/MChip.qml qml/LibraryTabs.qml qml/MBusyIndicator.qml qml/TrackList.qml qml/SelectionBar.qml qml/FileDialogs.qml qml/SettingSlider.qml qml/LyricsView.qml qml/ImmersivePlayer.qml qml/MiniPlayer.qml qml/MMenu.qml qml/MMenuItem.qml qml/MDivider.qml qml/MDialog.qml qml/MSwitch.qml qml/Main.qml qml/Theme.qml qml/Icon.qml qml/MButton.qml qml/SungText.qml qml/Artwork.qml qml/TrackRow.qml qml/ArtCard.qml qml/SeekBar.qml)
 file(GLOB icons CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" assets/icons/*.svg)
 qt_add_resources(sung assets PREFIX "/" FILES ${icons} assets/sung.svg
  OPTIONS --compress 19 --threshold 0)

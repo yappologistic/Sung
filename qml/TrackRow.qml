@@ -11,7 +11,8 @@ ItemDelegate {
     property var dragHub: null
     property bool selected: selection ? (selection.revision,selection.contains(selectionIndex)) : false
     property bool selectable: selection && !!(track.videoId || track.localPath) && track.available!==false
-    property bool selectionVisible: selectable && (hovered || pointer.containsMouse || selection.count>0)
+    property bool keyboardCurrent: activeFocus || (listOwner && listOwner.activeFocus && listOwner.currentIndex===selectionIndex)
+    property bool selectionVisible: selectable && (hovered || pointer.containsMouse || keyboardCurrent || selection.count>0)
     property bool dragging: false
     property point pressPoint
     property int pressModifiers: 0
@@ -25,9 +26,10 @@ ItemDelegate {
     opacity: enabled ? 1 : 0.45
     Accessible.description: selectable ? "Ctrl-click to toggle selection, Shift-click for a range. Drag selected songs to move them." : ""
     Accessible.name: (track.title || "") + ", " + (track.artist || "")
+    Accessible.selected: selected
     background: Rectangle {
         radius: 16; color: row.selected ? Theme.primaryContainer : row.active ? Theme.high : row.hovered ? Theme.container : "transparent"
-        border.width: row.activeFocus ? 2 : 0; border.color: Theme.primary
+        border.width: row.keyboardCurrent ? 2 : 0; border.color: Theme.primary
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
     }
     MouseArea {
@@ -63,11 +65,11 @@ ItemDelegate {
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 3
-            SungText { text: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: 15; font.weight: row.active ? Font.DemiBold : Font.Medium; color: row.active ? Theme.primary : Theme.text }
-            SungText { visible: row.track.kind!=="smart"; text: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: Theme.muted; font.pixelSize: 13 }
+            SungText { objectName: "trackTitle"; text: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; font.weight: row.active ? Font.DemiBold : Font.Medium; color: row.selected ? Theme.containerText : row.active ? Theme.primary : Theme.text }
+            SungText { visible: row.track.kind!=="smart"; text: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.selected ? Theme.containerText : Theme.muted; font.pixelSize: Theme.bodyMedium }
         }
-        Icon { name: "volume"; size: 20; ink: Theme.primary; visible: row.active && app.playing }
-        SungText { visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: 12; color: Theme.muted; Layout.rightMargin: 2 }
-        MButton { visible: row.track.kind!=="smart"; symbol: "more"; tip: "Track actions"; onClicked: row.menuRequested(row.track,row.rowIndex,this) }
+        Icon { name: "volume"; size: 20; ink: row.selected ? Theme.containerText : Theme.primary; visible: row.active && app.playing }
+        SungText { visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: 12; color: row.selected ? Theme.containerText : Theme.muted; Layout.rightMargin: 2 }
+        MButton { visible: row.track.kind!=="smart"; symbol: "more"; tip: "Track actions"; Accessible.name: "Actions for "+(row.track.title||"track"); ink: row.selected ? Theme.containerText : Theme.text; onClicked: row.menuRequested(row.track,row.rowIndex,this) }
     }
 }

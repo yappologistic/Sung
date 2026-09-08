@@ -41,11 +41,21 @@ ListView {
         if(event.key===Qt.Key_A && (event.modifiers&Qt.ControlModifier)){selection.selectAll();event.accepted=true;}
         else if(event.key===Qt.Key_Escape && selection.count){selection.clear();event.accepted=true;}
         else if(event.key===Qt.Key_Delete && selection.count){list.removeSelected();event.accepted=true;}
-        else if(event.key===Qt.Key_Up || event.key===Qt.Key_Down){
-            currentIndex=Math.max(0,Math.min(count-1,currentIndex+(event.key===Qt.Key_Down?1:-1)));
-            positionViewAtIndex(currentIndex,ListView.Contain);
+        else if([Qt.Key_Up,Qt.Key_Down,Qt.Key_Home,Qt.Key_End,Qt.Key_PageUp,Qt.Key_PageDown].indexOf(event.key)>=0){
+            const previous=currentIndex;
+            const page=Math.max(1,Math.floor(height/((currentItem?currentItem.height:72)+spacing)));
+            let next=currentIndex+(event.key===Qt.Key_Down?1:event.key===Qt.Key_Up?-1:event.key===Qt.Key_PageDown?page:-page);
+            if(event.key===Qt.Key_Home)next=0;
+            else if(event.key===Qt.Key_End)next=count-1;
+            currentIndex=count ? Math.max(0,Math.min(count-1,next)) : -1;
+            if(currentIndex>=0)positionViewAtIndex(currentIndex,ListView.Contain);
+            if((event.modifiers&Qt.ShiftModifier) && !selection.count && previous>=0)selection.select(previous,0);
             if(event.modifiers&Qt.ShiftModifier)selection.select(currentIndex,event.modifiers);
             forceActiveFocus();event.accepted=true;
+        } else if((event.key===Qt.Key_Menu || (event.key===Qt.Key_F10 && (event.modifiers&Qt.ShiftModifier))) && currentIndex>=0 && currentItem){
+            const item=model.get(currentIndex);
+            if(item.kind!=="smart")list.menuRequested(item,list.queueMode?currentIndex:app.collection.sourceIndex(currentIndex),currentItem);
+            event.accepted=true;
         } else if((event.key===Qt.Key_Space)&&(event.modifiers&Qt.ControlModifier)){selection.select(currentIndex,Qt.ControlModifier);event.accepted=true;}
         else if((event.key===Qt.Key_Return||event.key===Qt.Key_Enter)&&currentIndex>=0){list.activate(currentIndex,model.get(currentIndex));event.accepted=true;}
     }

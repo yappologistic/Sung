@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Templates as T
 import QtQuick.Layouts
 import QtCore
 
@@ -35,7 +36,7 @@ ApplicationWindow {
     property bool wasMaximized: false
     property bool geometryReady: false
     property var homeSections: app.page==="home" && app.pins.length ? [{title:"Pinned",items:app.pins}].concat(app.sections) : app.sections
-    property bool hasSongCollection: app.sections.length===0 && app.results.count>0 && !!(app.results.get(0).videoId || app.results.get(0).localPath)
+    property bool hasSongCollection: app.sections.length===0 && app.results.count>0 && !!!!(app.results.get(0).videoId || app.results.get(0).localPath)
     property var bulkView: null
     property var batchItems: []
     property var menuItem: ({})
@@ -45,19 +46,20 @@ ApplicationWindow {
     property string editPlaylistId: ""
     property string toastText: ""
     property bool searchFocused: searchField.activeFocus || (window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField")
-    property bool modalOpen: musicFoldersDialog.opened || cleanupDialog.opened || bulkActions.opened || volumeStepMenu.opened || rateDialog.opened || lyricTimingDialog.opened || settingsDialog.opened || playlistDialog.opened || addPlaylistDialog.opened || deletePlaylistDialog.opened || actions.opened || playlistActions.opened || sleepMenu.opened || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.opened || collectionSortMenu.opened
-    property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.objectName === "seekBar"
+    property bool modalOpen: musicFoldersDialog.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
+    property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.handlesArrowKeys === true
     function selectedView() {var item=window.activeFocusItem;while(item){if(item.sourceRows!==undefined)return item;item=item.parent;}return tracks;}
     function addBatch(view) {batchItems=view.selection.items();addPlaylistDialog.open();}
     QtObject {
         id: trackDrag
+        property bool dropping: false
         property var owner: null
         property var rows: []
         property var items: []
         function begin(view,indices,songs,point) {owner=view;rows=indices;items=songs;dragGhost.x=point.x;dragGhost.y=point.y;dragGhost.Drag.active=true;}
         function move(point) {dragGhost.x=point.x;dragGhost.y=point.y;}
-        function finish() {dragGhost.Drag.drop();cancel();}
-        function cancel() {dragGhost.Drag.cancel();owner=null;rows=[];items=[];}
+        function finish() {dropping=true;try {dragGhost.Drag.drop();} finally {dropping=false;cancel();}}
+        function cancel() {if(dropping)return;dragGhost.Drag.cancel();owner=null;rows=[];items=[];}
     }
     Rectangle {
         id: dragGhost; parent: window.contentItem; z: 1000
@@ -113,8 +115,8 @@ ApplicationWindow {
     Shortcut { sequence: "Space"; enabled: !window.searchFocused && !window.modalOpen && (!window.activeFocusItem || window.activeFocusItem===content); onActivated: app.toggle() }
     Shortcut { sequence: "Ctrl+Right"; enabled: !window.modalOpen; onActivated: app.next() }
     Shortcut { sequence: "Ctrl+Left"; enabled: !window.modalOpen; onActivated: app.previous() }
-    Shortcut { sequence: "Right"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused; onActivated: app.seek(app.position+10000) }
-    Shortcut { sequence: "Left"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused; onActivated: app.seek(app.position-10000) }
+    Shortcut { sequence: "Right"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: app.seek(app.position+10000) }
+    Shortcut { sequence: "Left"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: app.seek(app.position-10000) }
     Shortcut { sequence: "Ctrl+L"; enabled: !window.modalOpen && !window.immersive; onActivated: window.activateSide("queue") }
     Shortcut { sequence: "Ctrl+Y"; enabled: !window.modalOpen && !window.immersive; onActivated: window.activateSide("lyrics") }
     Shortcut { sequence: "Alt+Left"; enabled: !window.modalOpen && !window.immersive; onActivated: app.back() }
@@ -184,6 +186,10 @@ ApplicationWindow {
                             onActiveFocusChanged: {if(activeFocus){dismissed=false;updateSuggestions();}else suggestionDelay.stop();}
                             onAccepted: choose(highlighted)
                             Keys.onPressed: event=> {
+                                if((event.key===Qt.Key_Down || event.key===Qt.Key_Up) && suggestionDelay.running){suggestionDelay.stop();updateSuggestions();}
+                                if(event.key===Qt.Key_Delete && (event.modifiers&Qt.ShiftModifier) && highlighted>=0 && suggestions[highlighted].recent){
+                                    const previous=highlighted;app.removeRecentSearch(suggestions[highlighted].title);highlighted=Math.min(previous,suggestions.length-1);event.accepted=true;return;
+                                }
                                 if(event.key===Qt.Key_Down && suggestions.length){dismissed=false;highlighted=Math.min(suggestions.length-1,highlighted+1);suggestionList.positionViewAtIndex(highlighted,ListView.Contain);event.accepted=true;}
                                 else if(event.key===Qt.Key_Up && suggestions.length){highlighted=Math.max(-1,highlighted-1);if(highlighted>=0)suggestionList.positionViewAtIndex(highlighted,ListView.Contain);event.accepted=true;}
                                 else if(event.key===Qt.Key_Escape){dismissed=true;highlighted=-1;event.accepted=true;}
@@ -207,21 +213,34 @@ ApplicationWindow {
                             id: suggestionList; objectName: "suggestionList"; clip: true; model: searchField.suggestions; currentIndex: searchField.highlighted
                             ScrollBar.vertical: ScrollBar {}
                             delegate: Item {
+                                id: suggestionRow
+                                readonly property bool highlighted: index===searchField.highlighted
                                 required property var modelData; required property int index
                                 width: suggestionList.width; height: 56
-                                Rectangle { anchors.fill: parent; radius: 12; color: index===searchField.highlighted?Theme.primaryContainer:"transparent" }
+                                Rectangle { anchors.fill: parent; radius: 12; color: suggestionRow.highlighted?Theme.primaryContainer:"transparent" }
+                                Rectangle {
+                                    objectName: "suggestionStateLayer"; anchors.fill: parent; radius: 12
+                                    color: suggestionRow.highlighted?Theme.containerText:Theme.text
+                                    opacity: suggestionButton.down?Theme.pressedOpacity:suggestionButton.hovered?Theme.hoverOpacity:0
+                                    Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+                                }
                                 AbstractButton {
+                                    id: suggestionButton; objectName: "suggestion_"+index; hoverEnabled: true
                                     anchors.fill: parent; anchors.rightMargin: modelData.recent?40:0; focusPolicy: Qt.NoFocus
                                     leftPadding: 12; rightPadding: 12
-                                    Accessible.name: modelData.title+(modelData.origin?", "+modelData.origin:"")
+                                    Accessible.name: modelData.title+(modelData.artist?", "+modelData.artist:"")+(modelData.origin?", "+modelData.origin:"")
+                                    Accessible.selected: suggestionRow.highlighted
                                     onClicked: searchField.choose(index)
-                                    contentItem: Column {
-                                        width: parent.width; anchors.verticalCenter: parent.verticalCenter; spacing: 2
-                                        SungText { width: parent.width; text: modelData.title; font.pixelSize: 14 }
-                                        SungText { width: parent.width; visible: !!modelData.origin; text: (modelData.artist?modelData.artist+" · ":"")+(modelData.origin||""); font.pixelSize: 12; color: Theme.muted }
+                                    contentItem: Item {
+                                        Column {
+                                            objectName: "suggestionLabels"
+                                            width: parent.width; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                                            SungText { width: parent.width; text: modelData.title; color: suggestionRow.highlighted?Theme.containerText:Theme.text; font.pixelSize: 14 }
+                                            SungText { width: parent.width; visible: !!modelData.origin; text: (modelData.artist?modelData.artist+" · ":"")+(modelData.origin||""); font.pixelSize: 12; color: suggestionRow.highlighted?Theme.containerText:Theme.muted }
+                                        }
                                     }
                                 }
-                                MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; implicitWidth: 36; implicitHeight: 36; symbol: "close"; tip: "Remove recent search"; focusPolicy: Qt.NoFocus; visible: modelData.recent===true; onClicked: app.removeRecentSearch(modelData.title) }
+                                MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; implicitWidth: 36; implicitHeight: 36; symbol: "close"; tip: "Remove recent search · Shift+Delete"; focusPolicy: Qt.NoFocus; visible: modelData.recent===true; onClicked: app.removeRecentSearch(modelData.title) }
                             }
                         }
                     }
@@ -240,45 +259,44 @@ ApplicationWindow {
                         RowLayout {
                             Layout.fillWidth: true
                             Artwork { visible: !!app.cover; url: app.cover; Layout.preferredWidth: 76; Layout.preferredHeight: 76; radius: app.page==="artist" ? 38 : 18; pixels: 180 }
-                            SungText { text: window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; font.pixelSize: app.page==="home"?40:28; font.weight: Font.Medium; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                            SungText { text: window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium; font.weight: Font.Medium; Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                             MButton { objectName: "pinCollectionButton"; symbol: "pin"; visible: !!app.collectionItem.id; selected: {app.pins;return app.isPinned(app.collectionItem);} tip: selected?"Unpin from Home":"Pin to Home"; onClicked: app.togglePin(app.collectionItem) }
-                            MButton { symbol: "refresh"; tip: "Refresh"; visible: app.page!=="library"&&app.page!=="local"; enabled: !app.busy; onClicked: app.refresh() }
+                            MButton { symbol: "refresh"; busy: app.busy && (app.results.count>0 || window.homeSections.length>0); tip: "Refresh"; visible: app.page!=="library"&&app.page!=="local"; enabled: !app.busy; onClicked: app.refresh() }
                             MButton { objectName: "musicFoldersButton"; text: "Folders"; tip: "Manage music folders"; visible: window.destination==="library" && window.libraryTab==="files"; onClicked: musicFoldersDialog.open() }
                             MButton { objectName: "rescanFoldersButton"; symbol: "refresh"; tip: "Rescan music folders"; visible: window.destination==="library" && window.libraryTab==="files" && app.musicFolders.length>0; enabled: !app.importingLocal; onClicked: app.rescanMusicFolders() }
                             MButton { objectName: "playlistCleanupButton"; text: "Clean up"; visible: !!window.localPlaylist; onClicked: window.openCleanup(window.localPlaylist) }
                             MButton { objectName: "addLocalFilesButton"; symbol: "plus"; tip: "Add local audio files"; visible: window.destination==="library" && window.libraryTab==="files"; enabled: !app.importingLocal; tonal: true; onClicked: window.openFileDialog("audio") }
                             MButton { objectName: "newPlaylistButton"; symbol: "plus"; tip: "New playlist"; visible: window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist; tonal: true; onClicked: {window.playlistAction="create";playlistName.clear();playlistDialog.open();} }
                         }
-                        RowLayout {
+                        Flow {
+                            objectName: "searchFilters"
                             visible: app.page==="search"; Layout.fillWidth: true; spacing: 8
                             Repeater {
                                 model: [{label:"Songs",key:"songs"},{label:"Albums",key:"albums"},{label:"Artists",key:"artists"},{label:"Playlists",key:"playlists"},{label:"Videos",key:"videos"}]
-                                MButton { required property var modelData; objectName: "filter_"+modelData.key; text: modelData.label; selected: window.filter===modelData.key; implicitHeight: 36; onClicked: {window.filter=modelData.key;if(searchField.text.trim())app.search(searchField.text,window.filter);} }
+                                MChip { required property var modelData; objectName: "filter_"+modelData.key; text: modelData.label; selected: window.filter===modelData.key; onClicked: {window.filter=modelData.key;if(searchField.text.trim())app.search(searchField.text,window.filter);} }
                             }
-                            Item { Layout.fillWidth: true }
                         }
                         RowLayout {
                             visible: app.importingLocal; Layout.fillWidth: true
+                            MBusyIndicator { Layout.preferredWidth: 24; Layout.preferredHeight: 24; running: app.importingLocal; label: "Importing music" }
                             SungText { text: app.localImportStatus; color: Theme.muted; Layout.fillWidth: true }
                             MButton { text: "Cancel import"; onClicked: app.cancelLocalImport() }
                         }
-                        Flow {
-                            visible: window.destination==="library"; Layout.fillWidth: true; spacing: 8
-                            MButton { objectName: "likedTab"; text: "Liked songs"; selected: window.libraryTab==="favorites"; implicitHeight: 36; onClicked: window.chooseLibrary("favorites") }
-                            MButton { objectName: "playlistsTab"; text: "Playlists"; selected: window.libraryTab==="playlists"; implicitHeight: 36; onClicked: window.chooseLibrary("playlists") }
-                            MButton { objectName: "localFilesTab"; text: "Local files"; selected: window.libraryTab==="files"; implicitHeight: 36; onClicked: window.chooseLibrary("files") }
-                            MButton { objectName: "mixesTab"; text: "Mixes"; selected: window.libraryTab==="mixes" || window.libraryTab.startsWith("mix-"); implicitHeight: 36; onClicked: window.chooseLibrary("mixes") }
-                            MButton { objectName: "historyTab"; text: "History"; selected: window.libraryTab==="history"; implicitHeight: 36; onClicked: window.chooseLibrary("history") }
+                        LibraryTabs {
+                            objectName: "libraryTabs"
+                            visible: window.destination==="library"; Layout.fillWidth: true
+                            currentKey: window.libraryTab
+                            onChosen: key => window.chooseLibrary(key)
                         }
-                        RowLayout {
+                        Flow {
                             visible: app.page==="home" && window.destination!=="library"; Layout.fillWidth: true; spacing: 8
                             Repeater {
                                 model: [{title:"Feel good",q:"feel good songs"},{title:"Focus",q:"instrumental focus"},{title:"Unwind",q:"chill evening"},{title:"Energize",q:"workout energy"}]
-                                MButton { required property var modelData; text: modelData.title; tonal: true; implicitHeight: 40; onClicked: {searchField.text=modelData.q;window.destination="search";app.search(modelData.q,"songs");} }
+                                MChip { required property var modelData; text: modelData.title; selectable: false; onClicked: {searchField.text=modelData.q;window.destination="search";app.search(modelData.q,"songs");} }
                             }
                         }
                         RowLayout {
-                            visible: tracks.selection.count===0 && app.results.count>0 && app.sections.length===0 && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && (app.results.get(0).videoId || app.results.get(0).localPath)
+                            visible: tracks.selection.count===0 && app.results.count>0 && app.sections.length===0 && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath)
                             Layout.fillWidth: true; spacing: 10
                             MButton { text: "Play"; symbol: "play"; filled: true; enabled: app.collection.count>0; onClicked: app.playCollection(0) }
                             MButton { symbol: "queue"; tip: "Add displayed songs to queue"; tonal: true; enabled: app.collection.count>0; onClicked: app.enqueueCollection() }
@@ -307,7 +325,7 @@ ApplicationWindow {
                         SelectionBar { Layout.fillWidth: true; view: tracks; canRemove: !!window.localPlaylist }
                         Item {
                             Layout.fillWidth: true; Layout.fillHeight: true
-                            BusyIndicator { anchors.centerIn: parent; running: app.busy && app.results.count===0 && window.homeSections.length===0; visible: running; palette.dark: Theme.primary }
+                            MBusyIndicator { objectName: "catalogSpinner"; anchors.centerIn: parent; running: app.busy && app.results.count===0 && window.homeSections.length===0; label: "Loading music" }
                             ListView {
                                 id: shelves; anchors.fill: parent
                                 visible: window.homeSections.length>0 && !(window.destination==="library"&&window.libraryTab==="playlists")
@@ -346,7 +364,7 @@ ApplicationWindow {
                                 onAddSelected: window.addBatch(tracks)
                                 footer: Item {
                                     width: tracks.width; height: app.canMore?64:0
-                                    MButton { anchors.centerIn: parent; text: app.busy ? "Loading…" : "Load more"; enabled: !app.busy; tonal: true; visible: app.canMore; onClicked: app.more() }
+                                    MButton { anchors.centerIn: parent; text: app.busy ? "Loading…" : "Load more"; busy: app.busy; enabled: !app.busy; tonal: true; visible: app.canMore; onClicked: app.more() }
                                 }
                                 SungText { anchors.centerIn: parent; visible: app.collection.count===0 && !app.busy; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"Add your music with +":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "No songs yet" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: 18 }
                             }
@@ -421,7 +439,7 @@ ApplicationWindow {
                             Layout.alignment: Qt.AlignHCenter; spacing: 6
                             MButton { symbol: "shuffle"; tip: "Shuffle"; selected: app.shuffle; onClicked: app.shuffle=!app.shuffle; visible: window.width>=980 }
                             MButton { symbol: "previous"; tip: "Previous · Ctrl+←"; enabled: app.queue.count>0; onClicked: app.previous() }
-                            MButton { objectName: "playButton"; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"; filled: true; implicitWidth: 64; implicitHeight: 48; enabled: app.queue.count>0; onClicked: app.toggle(); BusyIndicator { anchors.centerIn: parent; width: 40; height: 40; running: app.resolving; visible: running } }
+                            MButton { objectName: "playButton"; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"; filled: true; implicitWidth: 64; implicitHeight: 48; enabled: app.queue.count>0; onClicked: app.toggle(); busy: app.resolving }
                             MButton { symbol: "next"; tip: "Next · Ctrl+→"; enabled: app.queue.count>0; onClicked: app.next() }
                             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; selected: app.repeat>0; onClicked: app.repeat=(app.repeat+1)%3; visible: window.width>=980 }
                         }
@@ -435,7 +453,7 @@ ApplicationWindow {
                     Item { Layout.fillWidth: true; visible: window.width>=1320 }
                     MButton { symbol: "lyrics"; tip: "Lyrics · Ctrl+Y"; selected: window.side==="lyrics"; enabled: app.currentIndex>=0; onClicked: window.activateSide("lyrics") }
                     MButton { objectName: "queueButton"; symbol: "queue"; tip: "Queue · Ctrl+L"; selected: window.side==="queue"; onClicked: window.activateSide("queue") }
-                    RowLayout { visible: window.width>=1160; spacing: 0; MButton { symbol: app.volume>0?"volume":"mute"; tip: "Mute"; onClicked: window.toggleMute() } SeekBar { volumeMode: true; Layout.preferredWidth: 66 } }
+                    RowLayout { visible: window.width>=1160; spacing: 0; MButton { symbol: app.volume>0?"volume":"mute"; tip: app.volume>0?"Mute":"Unmute"; onClicked: window.toggleMute() } SeekBar { volumeMode: true; Layout.preferredWidth: 66 } }
                 }
             }
         }
@@ -484,7 +502,7 @@ ApplicationWindow {
                     MButton { symbol: "radio"; tip: "Start radio"; enabled: !!app.current.videoId; onClicked: app.radio(app.current) }
                     MButton { symbol: "more"; tip: "Track actions"; enabled: app.currentIndex>=0; onClicked: window.trackMenu(app.current,app.currentIndex,this,true) }
                 }
-                RowLayout { Layout.fillWidth: true; MButton { symbol: app.volume>0?"volume":"mute"; tip: "Mute"; onClicked: window.toggleMute() } SeekBar { volumeMode: true; Layout.fillWidth: true } }
+                RowLayout { Layout.fillWidth: true; MButton { symbol: app.volume>0?"volume":"mute"; tip: app.volume>0?"Mute":"Unmute"; onClicked: window.toggleMute() } SeekBar { volumeMode: true; Layout.fillWidth: true } }
             }
         }
     }
@@ -565,10 +583,10 @@ ApplicationWindow {
                 readonly property int selectedCount: app.cleanupItems.filter(r=>(removeDuplicates&&r.duplicate)||(removeMissing&&r.missing)).length
                 RowLayout {
                     Layout.fillWidth: true
-                    MButton { objectName: "cleanupDuplicates"; text: "Duplicates"; selected: cleanupContent.removeDuplicates; onClicked: cleanupContent.removeDuplicates=!cleanupContent.removeDuplicates }
-                    MButton { objectName: "cleanupMissing"; text: "Missing files"; selected: cleanupContent.removeMissing; onClicked: cleanupContent.removeMissing=!cleanupContent.removeMissing }
+                    MChip { objectName: "cleanupDuplicates"; text: "Duplicates"; selected: cleanupContent.removeDuplicates; onClicked: cleanupContent.removeDuplicates=!cleanupContent.removeDuplicates }
+                    MChip { objectName: "cleanupMissing"; text: "Missing files"; selected: cleanupContent.removeMissing; onClicked: cleanupContent.removeMissing=!cleanupContent.removeMissing }
                     Item { Layout.fillWidth: true }
-                    MButton { symbol: "refresh"; tip: "Check again"; enabled: !app.cleanupBusy&&!app.importingLocal; onClicked: app.inspectPlaylist(cleanupDialog.playlistId) }
+                    MButton { symbol: "refresh"; busy: app.cleanupBusy; tip: "Check again"; enabled: !app.cleanupBusy&&!app.importingLocal; onClicked: app.inspectPlaylist(cleanupDialog.playlistId) }
                 }
                 ListView {
                     objectName: "cleanupList"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; reuseItems: true; spacing: 4
@@ -616,14 +634,14 @@ ApplicationWindow {
             sourceComponent: Component {
         ColumnLayout {
             anchors.fill: parent
-            ListView { objectName: "playlistChoices"; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: Math.min(52,app.playlists.length*52); clip: true; model: app.playlists; delegate: MButton { objectName: "playlistChoice"; required property var modelData; width: ListView.view.width; text: modelData.title; leftAligned: true; onClicked: {if(window.batchItems.length)app.addItemsToPlaylist(modelData.id,window.batchItems);else app.addToPlaylist(modelData.id,window.menuItem);addPlaylistDialog.close();} } }
+            ListView { objectName: "playlistChoices"; Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: Math.min(52,app.playlists.length*52); clip: true; model: app.playlists; delegate: MButton { objectName: "playlistChoice"; required property var modelData; width: ListView.view.width; text: modelData.title; leftAligned: true; onClicked: {const playlistId=modelData.id;addPlaylistDialog.close();if(window.batchItems.length)app.addItemsToPlaylist(playlistId,window.batchItems);else app.addToPlaylist(playlistId,window.menuItem);} } }
             MButton { Layout.fillWidth: true; text: "New playlist"; symbol: "plus"; tonal: true; onClicked: {addPlaylistDialog.close();window.playlistAction="add";playlistName.clear();playlistDialog.open();} }
         }
             }
         }
     }
     MDialog {
-        id: deletePlaylistDialog; objectName: "deletePlaylistDialog"; anchors.centerIn: parent; width: 380; modal: true; title: "Delete playlist?"; standardButtons: Dialog.Yes | Dialog.No; onOpened: standardButton(Dialog.Yes).text="Delete"
+        id: deletePlaylistDialog; objectName: "deletePlaylistDialog"; anchors.centerIn: parent; width: 380; modal: true; title: "Delete playlist?"; standardButtons: Dialog.Yes | Dialog.No; onOpened: {standardButton(Dialog.Yes).text="Delete";standardButton(Dialog.No).text="Cancel";}
         background: Rectangle { color: Theme.container; radius: 24 }
         palette.windowText: Theme.text; palette.buttonText: Theme.text
         onAccepted: {app.deletePlaylist(window.editPlaylistId);window.localPlaylist="";}
@@ -639,8 +657,21 @@ ApplicationWindow {
             active: settingsDialog.contentReady
             sourceComponent: Component {
         ScrollView {
-            anchors.fill: parent; contentWidth: availableWidth; clip: true
+            id: settingsScrollView; objectName: "settingsScroll"
+            rightPadding: 12
+            anchors.fill: parent; contentWidth: availableWidth; contentHeight: settingsOptions.implicitHeight; clip: true
+            ScrollBar.vertical: T.ScrollBar {
+                objectName: "settingsScrollBar"
+                parent: settingsScrollView; x: settingsScrollView.width-width
+                y: settingsScrollView.topPadding; height: settingsScrollView.availableHeight
+                orientation: Qt.Vertical
+                implicitWidth: 8; padding: 2
+                active: true; policy: T.ScrollBar.AsNeeded; visible: size < 1
+                contentItem: Rectangle { implicitWidth: 4; implicitHeight: 24; radius: 2; color: parent.pressed ? Theme.primary : Theme.muted; opacity: parent.hovered || parent.pressed ? 1 : 0.6 }
+                background: null
+            }
             ColumnLayout {
+                id: settingsOptions
                 width: parent.width; spacing: 18
                 SungText { text: "Appearance"; font.pixelSize: 16; font.weight: Font.Medium }
                 RowLayout { spacing: 8; Repeater { model: ["system","light","dark"]; MButton { required property string modelData; text: modelData==="system" && desktopTheme.available?"Noctalia":modelData.charAt(0).toUpperCase()+modelData.slice(1); selected: app.theme===modelData; onClicked: app.theme=modelData } } }
@@ -686,11 +717,11 @@ ApplicationWindow {
     }
     Rectangle {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 140; anchors.horizontalCenter: parent.horizontalCenter; z: 40
-        width: toastLabel.implicitWidth+(window.toastText===app.undoMessage?120:40); height: 48; radius: 16; color: Theme.text
+        objectName: "toastBar"; width: Math.min(window.width-48,toastLabel.implicitWidth+(window.toastText===app.undoMessage?120:40)); height: Math.max(48,toastLabel.implicitHeight+24); radius: 16; color: Theme.text
         opacity: toastTimer.running?1:0; visible: opacity>0
         Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Undo"; ink: Theme.background; visible: window.toastText===app.undoMessage && !!app.undoMessage; onClicked: app.undo() }
-        SungText { id: toastLabel; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 20; text: window.toastText; color: Theme.background }
+        SungText { id: toastLabel; anchors.verticalCenter: parent.verticalCenter; anchors.left: parent.left; anchors.leftMargin: 20; anchors.right: parent.right; anchors.rightMargin: window.toastText===app.undoMessage?100:20; wrapMode: Text.Wrap; maximumLineCount: 3; text: window.toastText; color: Theme.background }
     }
     Timer { id: toastTimer; interval: window.toastText===app.undoMessage ? 6000 : 2400 }
     Connections { target: app; function onToast(message){window.toastText=message;toastTimer.restart();} function onTrackChanged(){if(window.side==="lyrics" || window.compactMode || window.immersive)app.fetchLyrics();}

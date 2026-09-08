@@ -1,3 +1,4 @@
+#include <QQmlProperty>
 #include "uitest.h"
 #include "backend.h"
 #include "rowselection.h"
@@ -6,6 +7,8 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <QFile>
 #include <QQuickItem>
+#include <QQmlComponent>
+#include <QQmlEngine>
 #include <QJSValue>
 #include <QFontInfo>
 #include <QQuickWindow>
@@ -439,6 +442,12 @@ void runLyricsTests(Backend *b,QQuickWindow *w) {
   w->setProperty("side","lyrics");QTest::qWait(30);
   auto list=findItem(w->contentItem(),"liveLyrics");check(list&&list->property("highlightMoveDuration").toInt()==0,"reduced motion disables lyric scrolling animation");
   if(list&&b->lyricLines().size()>11){b->seek(b->lyricLines()[11].toMap().value("start").toLongLong()+100);QTest::qWait(30);auto active=qobject_cast<QQuickItem*>(list->property("currentItem").value<QObject*>());auto label=active?findItem(active,"lyricLabel"):nullptr;check(label&&qAbs(label->scale()-1)<0.01&&label->opacity()>0.99,"reduced motion applies lyric emphasis immediately");}
+  if(auto pane=findItem(w->contentItem(),"lyricsView");pane&&list&&b->lyricLines().size()>11){
+    pane->setProperty("following",false);list->setProperty("contentY",0);pane->setProperty("following",true);QTest::qWait(100);
+    auto active=qobject_cast<QQuickItem*>(list->property("currentItem").value<QObject*>());
+    const auto center=active?active->mapToItem(list,QPointF(0,active->height()/2)).y():-1;
+    check(active&&qAbs(center-list->height()/2)<2,"resuming lyric follow immediately recenters paused current line");
+  }
   b->stop();check(b->lyricLines().isEmpty(),"stop clears synchronized lyrics");
   fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?2:0);
 }
@@ -568,7 +577,7 @@ void runFeatureTests(Backend *b,QQuickWindow *w) {
   click(w,"collectionSortButton");QTest::qWait(250);
   auto sort=findItem(w->contentItem(),"sort_original");
   if(sort){auto label=findItem(sort,"menuItemLabel");auto indicator=qobject_cast<QQuickItem*>(sort->property("indicator").value<QObject*>());check(label&&indicator&&label->x()+label->property("leftPadding").toReal()>=indicator->x()+indicator->width()+8,"sort checkmark has separate space from label");}else check(false,"sort Original order item exists");
-  if(sort){auto button=findItem(w->contentItem(),"collectionSortButton");const auto row=sort->mapRectToScene(sort->boundingRect());const auto anchor=button->mapRectToScene(button->boundingRect());check(qAbs(row.right()-anchor.right())<24&&qAbs(row.top()-anchor.bottom())<220,"sort menu stays aligned with its button within screen limits");auto indicator=qobject_cast<QQuickItem*>(sort->property("indicator").value<QObject*>());auto label=findItem(sort,"menuItemLabel");check(indicator&&label&&indicator->property("color")==label->property("color"),"sort checkmark uses readable theme foreground");}
+  if(sort){auto button=findItem(w->contentItem(),"collectionSortButton");const auto row=sort->mapRectToScene(sort->boundingRect());const auto anchor=button->mapRectToScene(button->boundingRect());check(qAbs(row.right()-anchor.right())<24&&qAbs(row.top()-anchor.bottom())<220,"sort menu stays aligned with its button within screen limits");auto indicator=qobject_cast<QQuickItem*>(sort->property("indicator").value<QObject*>());auto label=findItem(sort,"menuItemLabel");check(indicator&&label&&indicator->property("ink")==label->property("color"),"sort checkmark uses readable theme foreground");}
   shot(w,"sort-menu-fixed");click(w,"sort_title");check(b->collection()->sortKey()=="title","sort menu selects Title");
   b->collection()->setSortKey("original");
   click(w,"pinCollectionButton");check(b->pins().size()==1,"pin current collection to Home");
@@ -646,9 +655,24 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
   check(selection&&selection->rows()==QVariantList({0,1,2}),"Ctrl then Shift selects contiguous displayed songs without playback");check(b->currentIndex()==-1,"selection does not begin playback");shot("selection");
   click("trackRow_1",Qt::ControlModifier);check(selection&&selection->rows()==QVariantList({0,2}),"Ctrl toggles one selected song");
   if(selection){b->enqueueItems(selection->items(),true);check(b->queue()->count()==2 && b->queue()->get(1).value("id")==songs[2].toMap().value("id"),"bulk enqueue preserves displayed order");selection->clear();}
+  auto keyboardView=findItem(w->contentItem(),"tracksView");
+  if(keyboardView){
+    keyboardView->setProperty("currentIndex",0);keyboardView->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(w,Qt::Key_Down);QTest::qWait(100);
+    auto currentRow=findItem(w->contentItem(),"trackRow_1");
+    check(keyboardView->property("currentIndex").toInt()==1 && currentRow && currentRow->property("keyboardCurrent").toBool(),"arrow navigation visibly focuses the current track");
+    check(currentRow && currentRow->property("selectionVisible").toBool(),"keyboard-focused track exposes its selection control");
+    shot("keyboard-track-focus");
+  }
   b->collection()->setQuery("Aurora 4");QTest::qWait(250);click("trackRow_0",Qt::ControlModifier);
   auto view=findItem(w->contentItem(),"tracksView");QVariant indices;if(view)QMetaObject::invokeMethod(view,"sourceRows",Q_RETURN_ARG(QVariant,indices));
   check(indices.toList()==QVariantList({4}),"filtered selection maps back to saved source row");
+  if(view){
+    view->forceActiveFocus(Qt::TabFocusReason);QTest::keyClick(w,Qt::Key_F10,Qt::ShiftModifier);QTest::qWait(200);
+    check(w->property("modalOpen").toBool() && w->property("menuIndex").toInt()==4,"keyboard context menu targets the filtered source track");
+    shot("keyboard-track-menu");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  }
+
   b->removePlaylistRows(id,indices.toList());check(b->results()->count()==7,"bulk remove uses filtered source mapping");b->undo();check(b->results()->count()==8,"bulk removal Undo restores playlist");
   b->collection()->setQuery("");b->collection()->setSortKey("original");QTest::qWait(300);
   click("trackRow_0",Qt::ControlModifier);click("trackRow_1",Qt::ControlModifier);
@@ -716,7 +740,7 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
   b->importLyrics(QUrl::fromLocalFile(lrcPath),local.value("id").toString());b->setLyricOffset(250);w->setProperty("side","lyrics");QTest::qWait(300);click("lyricSearchButton");
   auto lyricField=findItem(w->contentItem(),"lyricSearchField");check(lyricField&&lyricField->hasActiveFocus(),"lyric search opens with keyboard focus");
   if(lyricField){for(char c:QByteArray("quiet"))QTest::keyClick(w,c);QTest::qWait(200);auto results=findItem(w->contentItem(),"lyricSearchResults");check(results&&results->property("count").toInt()==2,"lyric search finds repeated case-insensitive matches");shot("lyric-search");QTest::keyClick(w,Qt::Key_Down);QTest::keyClick(w,Qt::Key_Return);QTest::qWait(100);check(b->position()>=7750&&b->position()<8500,"keyboard result seeks with lyric offset");
-    click("lyricSearchButton");QTest::keyClick(w,Qt::Key_A,Qt::ControlModifier);for(char c:QByteArray("absent"))QTest::keyClick(w,c);QTest::qWait(150);check(results&&results->property("count").toInt()==0,"lyric search has an empty result state");QTest::keyClick(w,Qt::Key_Escape);check(w->property("side").toString()=="lyrics","Escape closes lyric search without closing the panel");}
+    click("lyricSearchButton");QTest::keyClick(w,Qt::Key_A,Qt::ControlModifier);for(char c:QByteArray("absent"))QTest::keyClick(w,c);QTest::qWait(150);check(results&&results->property("count").toInt()==0,"lyric search has an empty result state");QTest::keyClick(w,Qt::Key_Up);check(results&&results->property("currentIndex").toInt()==-1,"empty lyric search keeps no keyboard selection");QTest::keyClick(w,Qt::Key_Escape);check(w->property("side").toString()=="lyrics","Escape closes lyric search without closing the panel");}
   w->setProperty("immersive",true);QTest::qWait(300);click("immersiveLyricSearchButton");
   if(auto immersive=findItem(w->contentItem(),"immersivePlayer")){auto field=findItem(immersive,"lyricSearchField");check(field&&field->hasActiveFocus(),"immersive lyric search receives keyboard focus");if(field){for(char c:QByteArray("quiet"))QTest::keyClick(w,c);QTest::qWait(150);auto results=findItem(immersive,"lyricSearchResults");check(results&&results->property("count").toInt()==2,"immersive lyric search returns matching lines");shot("immersive-lyric-search");QTest::keyClick(w,Qt::Key_Escape);}}
   w->setProperty("immersive",false);QTest::qWait(100);
@@ -743,5 +767,189 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
   click("rescanFoldersButton");check(until([&]{return !b->importingLocal();},5000)&&b->results()->count()==2,"Rescan skips unchanged files without duplicate entries");
   b->forgetMusicFolder(musicDir);check(b->results()->count()==2&&QFile::exists(musicDir+"/Album/Folder song.wav"),"forgetting folder keeps music and original files");
   b->removeLocalFile(local.value("id").toString());check(QFile::exists(audioPath),"removing local library entry preserves original audio");b->resetLyrics();
+  b->openPlaylist(id);w->setProperty("side","");w->setProperty("collectionTools",true);b->collection()->setQuery("");b->collection()->setSortKey("original");
+  w->resize(780,580);QTest::qWait(300);click("collectionSortButton");
+  auto sortItem=findItem(w->contentItem(),"sort_original");
+  if(sortItem){
+    auto indicator=qobject_cast<QQuickItem*>(sortItem->property("indicator").value<QObject*>());
+    auto label=findItem(sortItem,"menuItemLabel");
+    check(indicator&&indicator->isVisible()&&label&&label->x()+label->property("leftPadding").toReal()>=indicator->x()+indicator->width()+8,"Material menu checkmark leaves readable label spacing");
+  }else check(false,"sort menu exposes current ordering");
+  shot("compact-sort-menu");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  click("settingsButton");shot("compact-settings-light");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  b->setTheme("dark");QTest::qWait(200);click("settingsButton");shot("compact-settings-dark");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  w->resize(1180,900);
+  // Hover actions must remain available when keyboard focus moves onto them.
+  QQmlComponent cardComponent(qmlEngine(w),QUrl("qrc:/qml/ArtCard.qml"));
+  QScopedPointer<QObject> cardObject(cardComponent.create(qmlContext(w)));
+  auto card=qobject_cast<QQuickItem*>(cardObject.data());
+  check(card,"cover card can be instantiated for focus regression");
+  if(card){
+    card->setParentItem(w->contentItem());card->setX(120);card->setY(100);card->setZ(100);
+    card->setProperty("track",QVariantMap{{"title","Keyboard focus"},{"kind","artist"}});
+    QTest::mouseMove(w,QPoint(2,2));auto action=findItem(card,"cardAction");
+    card->setProperty("focus",true);
+    if(action){action->forceActiveFocus(Qt::TabFocusReason);QTest::qWait(500);check(action->hasActiveFocus()&&action->isVisible()&&action->opacity()>0.99,"card action stays visible when keyboard-focused without hover");}
+    else check(false,"card action exists");
+  }
   b->stop();b->deletePlaylist(id);b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?2:0);
+}
+
+
+void runVisualPolishTests(Backend *b, QQuickWindow *w) {
+  int failures=0;
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto check=[&](bool ok,const char *label){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",label);fflush(stdout);if(!ok)++failures;};
+  auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  auto until=[](std::function<bool()> predicate){QElapsedTimer timer;timer.start();while(!predicate()&&timer.elapsed()<8000)QTest::qWait(20);return predicate();};
+  QWindowSystemInterface::handleFocusWindowChanged(w);QTest::qWait(50);
+  b->setVolume(0);b->setAutoplay(false);b->setMotion(true);b->setTheme("dark");
+  w->resize(1180,800);b->home();check(until([&]{return !b->busy();}),"fixture home loads");
+  QQmlComponent component(qmlEngine(w),QUrl("qrc:/qml/MBusyIndicator.qml"));
+  QScopedPointer<QObject> object(component.create(qmlContext(w)));
+  auto spinner=qobject_cast<QQuickItem*>(object.data());
+  check(spinner,"Material loading component creates");
+  if(spinner){
+    spinner->setParentItem(w->contentItem());spinner->setX(600);spinner->setY(360);spinner->setZ(90);spinner->setProperty("running",true);
+    QTest::qWait(120);check(spinner->property("animating").toBool(),"visible loading indicator animates");shot("01-loading-dark");
+    auto bounds=spinner->mapRectToScene(spinner->boundingRect()).toAlignedRect().adjusted(-12,-12,12,12);
+    auto first=w->grabWindow().copy(bounds);QTest::qWait(240);
+    const bool samplePixels=!qEnvironmentVariableIsSet("SUNG_TEST_BACKGROUND_ACTIVATION");
+    if(samplePixels)check(first!=w->grabWindow().copy(bounds),"loading arc visibly advances");
+    else fprintf(stdout,"SKIP animation pixel comparisons on compositor-throttled background workspace; offscreen run covers them\n");
+    b->setMotion(false);QTest::qWait(150);check(!spinner->property("animating").toBool(),"reduced motion stops spinner animation");
+    first=w->grabWindow().copy(bounds);QTest::qWait(160);if(samplePixels)check(first==w->grabWindow().copy(bounds),"reduced-motion indicator remains visually stable");
+    b->setTheme("light");QTest::qWait(50);check(spinner->property("ink").value<QColor>()==QColor("#964829"),"loading indicator follows light palette");shot("02-loading-light");
+    b->setMotion(true);spinner->setVisible(false);QTest::qWait(50);check(!spinner->property("animating").toBool(),"hidden loading indicator stops animation");
+    spinner->setVisible(true);spinner->setProperty("running",false);QTest::qWait(50);check(!spinner->property("animating").toBool(),"finished loading indicator stops animation");
+    spinner->setVisible(false);
+  }
+  b->setTheme("dark");
+  auto play=findItem(w->contentItem(),"playButton");check(play,"playback control exists");
+  qputenv("SUNG_BUFFER_FIXTURE","1");
+  b->playItem({{"id","spinner0003"},{"videoId","spinner0003"},{"title","Loading playback"},{"artist","Test fixture"},{"kind","song"}});
+  QTest::qWait(80);
+  check(b->resolving()&&play&&play->property("busy").toBool(),"playback preparation exposes loading state");
+  if(play){
+    auto ring=findItem(play,"buttonSpinner");check(ring&&ring->isVisible()&&ring->width()==24,"button loading indicator stays inside icon slot");
+    check(play->property("tip").toString().startsWith("Pause"),"loading playback retains Pause action");
+    shot("03-loading-playback");
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,play->mapToScene(QPointF(play->width()/2,play->height()/2)).toPoint());
+    check(until([&]{return !b->resolving();})&&!b->playing(),"clicking loading playback cancels preparation");
+    play->forceActiveFocus();QTest::keyClick(w,Qt::Key_Tab);QTest::keyClick(w,Qt::Key_Backtab);QTest::qWait(50);auto focus=findItem(play,"buttonFocusRing");
+    check(focus&&focus->isVisible()&&focus->width()>play->width(),"filled playback button exposes distinct keyboard focus ring");shot("04-keyboard-focus");
+  }
+  b->stop();b->dismissError();
+  b->search("Test","songs");check(until([&]{return !b->busy();}),"fixture search loads");
+  if(auto list=findItem(w->contentItem(),"tracksView")){
+    list->forceActiveFocus();QTest::keyClick(w,Qt::Key_End);QTest::qWait(100);
+    const int last=list->property("count").toInt()-1;
+    check(last>10&&list->property("currentIndex").toInt()==last,"End reaches the last track in a long list");
+    QTest::keyClick(w,Qt::Key_Home);QTest::keyClick(w,Qt::Key_PageDown);QTest::qWait(80);
+    const int pageRow=list->property("currentIndex").toInt();
+    check(pageRow>1&&pageRow<last,"Page Down advances by a visible page of tracks");
+    QTest::keyClick(w,Qt::Key_PageUp);check(list->property("currentIndex").toInt()==0,"Page Up returns to the first page");
+    QTest::keyClick(w,Qt::Key_End,Qt::ShiftModifier);QTest::qWait(120);
+    auto selection=qobject_cast<RowSelection*>(list->property("selection").value<QObject*>());
+    check(selection&&selection->count()==last+1&&selection->contains(0)&&selection->contains(last),"Shift+End selects from the focused row through the last track");
+    auto row=findItem(list,"trackRow_"+QString::number(last));auto title=row?findItem(row,"trackTitle"):nullptr;
+    check(title&&title->property("color").value<QColor>()==QColor("#ffdbcb"),"selected track uses its container foreground color");shot("11-keyboard-range");
+    if(selection)selection->clear();
+    QTest::keyClick(w,Qt::Key_Home);
+  }else check(false,"track list exists for page navigation");
+  w->resize(1000,700);w->setProperty("side","queue");QTest::qWait(600);
+  auto filters=findItem(w->contentItem(),"searchFilters");check(filters,"search filter container exists");
+  bool contained=filters!=nullptr;
+  for(const auto &name:{"filter_songs","filter_albums","filter_artists","filter_playlists","filter_videos"}){
+    auto item=findItem(w->contentItem(),name);
+    if(!item||!filters){contained=false;continue;}
+    const auto rect=item->mapRectToItem(filters,item->boundingRect());
+    contained=contained&&rect.left()>=-1&&rect.right()<=filters->width()+1&&rect.bottom()<=filters->height()+1;
+  }
+  check(contained,"all search filters fit beside queue at breakpoint");shot("05-search-with-queue");
+  w->setProperty("side","");w->resize(780,580);QTest::qWait(450);
+  auto field=findItem(w->contentItem(),"searchField");
+  b->rememberSearch("Evening mix");
+  if(field){
+    field->setProperty("text","");field->forceActiveFocus();QMetaObject::invokeMethod(field,"updateSuggestions");QTest::qWait(350);
+    auto labels=findItem(w->contentItem(),"suggestionLabels");
+    check(labels&&qAbs(labels->y()+labels->height()/2-labels->parentItem()->height()/2)<1,"recent search text is vertically centered");shot("07-recent-search");
+    if(auto suggestion=findItem(w->contentItem(),"suggestion_0")){
+      QTest::mouseMove(w,suggestion->mapToScene(QPointF(24,suggestion->height()/2)).toPoint());QTest::qWait(200);
+      auto state=findItem(suggestion->parentItem(),"suggestionStateLayer");
+      check(suggestion->property("hovered").toBool()&&state&&state->opacity()>0.07,"search suggestion gives visible pointer hover feedback");shot("12-search-hover");
+      QTest::keyClick(w,Qt::Key_Down);QTest::keyClick(w,Qt::Key_Delete,Qt::ShiftModifier);QTest::qWait(80);
+      check(!b->recentSearches().contains("Evening mix"),"Shift+Delete removes the highlighted recent search");
+      QTest::mouseMove(w,QPoint(2,2));
+      if(!qEnvironmentVariableIsSet("SUNG_TEST_BACKGROUND_ACTIVATION")){
+        QTest::keyClick(w,Qt::Key_Z);QTest::keyClick(w,Qt::Key_Down);
+        auto results=findItem(w->contentItem(),"suggestionList");
+        check(results&&results->property("count").toInt()==0&&field->property("highlighted").toInt()==-1,"fast arrow navigation cannot choose stale suggestions for a new query");
+        field->setProperty("text","");QMetaObject::invokeMethod(field,"updateSuggestions");QTest::qWait(200);
+      }
+    }else check(false,"recent suggestion exposes its action");
+    if(qEnvironmentVariableIsSet("SUNG_TEST_BACKGROUND_ACTIVATION")){
+      // A hidden workspace can revoke keyboard focus; set up the native layout
+      // sample directly. The offscreen path exercises real key delivery.
+      field->setProperty("text","Loading");field->setProperty("dismissed",false);field->forceActiveFocus();
+      QMetaObject::invokeMethod(field,"updateSuggestions");
+      if(auto suggestions=findItem(w->contentItem(),"suggestionList"))QMetaObject::invokeMethod(suggestions,"forceLayout");
+      w->grabWindow();
+    }else{for(char c:QByteArray("Loading")){QTest::keyClick(w,c);}}
+    QTest::qWait(350);
+    labels=findItem(w->contentItem(),"suggestionLabels");
+    check(labels&&labels->height()>25&&qAbs(labels->y()+labels->height()/2-labels->parentItem()->height()/2)<1,"two-line song suggestion is vertically centered");shot("08-song-suggestion");
+    QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);w->contentItem()->forceActiveFocus();
+  }else check(false,"search input exists for suggestion alignment");
+  emit b->toast(QString("Imported a very long album and playlist name ").repeated(12));QTest::qWait(200);
+  auto toast=findItem(w->contentItem(),"toastBar");
+  check(toast&&toast->width()<=w->width()-48&&toast->height()>48,"long notification wraps within compact window");shot("06-compact-notification");
+  if(auto nav=findItem(w->contentItem(),"nav_library"))QMetaObject::invokeMethod(nav,"clicked");
+  QTest::qWait(250);
+  auto liked=findItem(w->contentItem(),"likedTab");auto playlists=findItem(w->contentItem(),"playlistsTab");
+  auto history=findItem(w->contentItem(),"historyTab");auto tabs=findItem(w->contentItem(),"libraryTabs");
+  check(liked&&playlists&&history&&tabs,"library navigation tabs exist");
+  if(liked&&playlists&&history&&tabs){
+    liked->forceActiveFocus(Qt::TabFocusReason);QTest::keyClick(w,Qt::Key_Right);QTest::qWait(50);
+    check(playlists->hasActiveFocus(),"Right arrow moves library tab focus without seeking");
+    QTest::keyClick(w,Qt::Key_Space);QTest::qWait(100);
+    check(w->property("libraryTab").toString()=="playlists","keyboard activates library destination");
+    auto ring=findItem(playlists,"tabFocusRing");check(ring&&ring->isVisible(),"keyboard-focused library tab has a distinct focus outline");
+    QTest::keyClick(w,Qt::Key_Tab);QTest::qWait(50);
+    check(!w->activeFocusItem()||!w->activeFocusItem()->property("libraryNavigation").toBool(),"Tab exits the tab strip instead of visiting each tab");
+    QTest::keyClick(w,Qt::Key_Backtab);QTest::qWait(50);
+    check(playlists->hasActiveFocus(),"Shift+Tab re-enters at the selected library tab");
+    QQmlProperty(tabs,"Layout.maximumWidth",qmlContext(w)).write(240);w->grabWindow();QTest::qWait(50);
+    QTest::keyClick(w,Qt::Key_End);QTest::qWait(80);
+    auto rect=history->mapRectToItem(tabs,history->boundingRect());
+    check(history->hasActiveFocus()&&tabs->property("contentX").toDouble()>0&&rect.left()>=-1&&rect.right()<=tabs->width()+1,"focused last tab scrolls into compact tab viewport");
+    QTest::keyClick(w,Qt::Key_Return);QTest::qWait(100);
+    check(w->property("libraryTab").toString()=="history","last library tab remains actionable when scrolled");
+    shot("09-library-tabs");
+    QQmlProperty(tabs,"Layout.maximumWidth",qmlContext(w)).write(1000);w->grabWindow();QTest::qWait(100);
+    check(tabs->property("contentX").toDouble()==0,"expanding the tab strip restores the left edge without blank space");
+  }
+  if(auto settings=findItem(w->contentItem(),"settingsButton"))QMetaObject::invokeMethod(settings,"clicked");
+  QTest::qWait(450);w->grabWindow();
+  auto settingsBar=findItem(w->contentItem(),"settingsScrollBar");
+  auto thumb=settingsBar?qobject_cast<QQuickItem*>(settingsBar->property("contentItem").value<QObject*>()):nullptr;
+  if(settingsBar)fprintf(stdout,"SCROLL_GEOMETRY visible=%d width=%.1f height=%.1f size=%.3f thumb=%.1f opacity=%.1f\n",settingsBar->isVisible(),settingsBar->width(),settingsBar->height(),settingsBar->property("size").toDouble(),thumb?thumb->height():-1,thumb?thumb->opacity():-1);
+  check(settingsBar&&settingsBar->isVisible()&&settingsBar->width()>0&&thumb&&thumb->height()>0&&thumb->opacity()>0,"overflowing Settings exposes a visible scroll thumb");shot("10-settings-scroll");
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(180);
+  QQmlComponent sliderComponent(qmlEngine(w),QUrl("qrc:/qml/SettingSlider.qml"));
+  QScopedPointer<QObject> sliderObject(sliderComponent.create(qmlContext(w)));
+  auto slider=qobject_cast<QQuickItem*>(sliderObject.data());
+  check(slider,"settings slider creates");
+  if(slider){
+    slider->setParentItem(w->contentItem());slider->setX(140);slider->setY(220);slider->setWidth(300);slider->setZ(90);
+    slider->setProperty("value",0.5);QTest::qWait(80);
+    auto active=findItem(slider,"sliderActiveTrack"),inactive=findItem(slider,"sliderInactiveTrack");
+    const auto center=slider->property("thumbCenter").toDouble();
+    check(active&&inactive&&qAbs(active->width()-(center-8))<0.1&&qAbs(inactive->x()-(center+8))<0.1,"slider keeps six-pixel gaps on both sides of handle");
+    slider->forceActiveFocus();QTest::keyClick(w,Qt::Key_Right);QTest::qWait(50);
+    check(slider->property("value").toDouble()>0.5,"settings slider retains keyboard adjustment");
+    slider->setProperty("value",0.0);QTest::qWait(50);check(active&&active->width()==0,"slider minimum has no negative track width");
+    slider->setProperty("value",1.0);QTest::qWait(50);check(inactive&&inactive->width()==0,"slider maximum has no negative track width");
+  }
+  b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?2:0);
 }

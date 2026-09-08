@@ -3,10 +3,14 @@ import QtQuick.Controls
 import QtQuick.Shapes
 Slider {
     id: s
+    readonly property bool handlesArrowKeys: true
     objectName: "seekBar"
     stepSize: volumeMode ? app.volumeStep/100 : 5000
     implicitHeight: 40
     property bool volumeMode: false
+    readonly property real thumbWidth: volumeMode ? 12 : 4
+    readonly property real thumbCenter: visualPosition * (availableWidth - thumbWidth) + thumbWidth/2
+    readonly property real trackGap: volumeMode ? 0 : 6
     wheelEnabled: volumeMode
     from: 0; to: volumeMode ? 1 : Math.max(1,app.duration)
     value: volumeMode ? app.volume : app.position
@@ -17,12 +21,12 @@ Slider {
         id: track
         x: s.leftPadding; y: s.topPadding+(s.availableHeight-height)/2
         width: s.availableWidth; height: s.volumeMode ? 4 : 14
-        Rectangle { x: s.visualPosition*parent.width; width: parent.width-x; anchors.verticalCenter: parent.verticalCenter; height: 4; radius: 2; color: Theme.high }
-        Rectangle { visible: s.volumeMode; width: s.visualPosition*parent.width; height: 4; radius: 2; color: Theme.primary }
+        Rectangle { x: Math.min(parent.width,s.thumbCenter+s.thumbWidth/2+s.trackGap); width: parent.width-x; anchors.verticalCenter: parent.verticalCenter; height: 4; radius: 2; color: Theme.high }
+        Rectangle { visible: s.volumeMode; width: s.thumbCenter; height: 4; radius: 2; color: Theme.primary }
         Item {
             id: played; objectName: "playedWave"
             visible: !s.volumeMode
-            width: Math.max(0,s.visualPosition*track.width-6); height: track.height; clip: true; layer.enabled: true; layer.smooth: true
+            width: Math.max(0,s.thumbCenter-s.thumbWidth/2-s.trackGap); height: track.height; clip: true; layer.enabled: true; layer.smooth: true
             Shape {
                 id: wave; objectName: "seekWave"
                 width: track.width+28; height: track.height
@@ -37,7 +41,7 @@ Slider {
                 XAnimator { target: wave; from: 0; to: -28; duration: 1400; loops: Animation.Infinite; running: !s.volumeMode && app.playing && app.motion && s.visible && played.width>0 && s.Window.window && s.Window.window.visible && s.Window.window.visibility!==Window.Minimized }
             }
         }
-        Rectangle { x: parent.width-4; y: (parent.height-4)/2; width: 4; height: 4; radius: 2; color: Theme.muted; visible: !s.volumeMode }
+        Rectangle { x: parent.width-4; y: (parent.height-4)/2; width: 4; height: 4; radius: 2; color: Theme.muted; visible: !s.volumeMode && s.thumbCenter+s.thumbWidth/2+s.trackGap<parent.width-4 }
     }
     handle: Rectangle {
         x: s.leftPadding+s.visualPosition*(s.availableWidth-width)
