@@ -49,7 +49,7 @@ class CatalogTests(unittest.TestCase):
         import subprocess, tempfile
         from urllib.parse import urlparse, unquote
         with tempfile.TemporaryDirectory() as directory:
-            root=pathlib.Path(directory);cover=root/'cover.jpg';song=root/'Café #1.flac'
+            root=pathlib.Path(directory);cover=root/'embedded-source.jpg';song=root/'Café #1.flac'
             def ff(*args): subprocess.run(['ffmpeg','-nostdin','-v','error',*args],check=True,capture_output=True,timeout=10)
             ff('-f','lavfi','-i','color=c=blue:s=32x32','-frames:v','1','-threads','1',str(cover))
             ff('-f','lavfi','-i','anullsrc=r=44100:cl=mono','-i',str(cover),'-map','0:a','-map','1:v','-c:a','flac','-c:v','copy','-disposition:v','attached_pic','-t','1','-metadata','title=Tagged title','-metadata','artist=Artist',str(song))

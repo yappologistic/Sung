@@ -648,6 +648,41 @@ private slots:
     b.back();QCOMPARE(view->query(),"no matches");b.clearQueue();
     qunsetenv("SUNG_HELPER");qunsetenv("SUNG_PYTHON");
   }
+  void folderSortingPreservesIdentityAndSelection() {
+    Entries entries;CollectionView view;view.setSourceModel(&entries);
+    auto song=[](const QString &id,const QString &path){return QVariantMap{{"id",id},{"kind","song"},{"title","Identical title"},{"localPath",path}};};
+    const QVariantList rows={song("ten","/Music/Artist/Album/10.wav"),song("two","/Music/Artist/Album/2.wav"),song("other","/Music/Other/Album/1.wav"),song("case","/Music/artist/Album/1.wav"),song("unicode","/Music/Été #100%/1.wav")};
+    entries.assign(rows);view.setSortKey("folder");
+    QCOMPARE(view.get(0).value("id").toString(),"two");QCOMPARE(view.get(1).value("id").toString(),"ten");
+    QCOMPARE(view.sourceIndex(0),1);QCOMPARE(entries.rows,rows);
+    const int role=Qt::UserRole+2;QCOMPARE(entries.roleNames().value(role),"musicFolder");
+    QCOMPARE(view.data(view.index(0,0),role).toString(),"/Music/Artist/Album");
+    QSet<QString> closed;QString previous;
+    for(int i=0;i<view.count();++i){const auto folder=view.data(view.index(i,0),role).toString();if(folder!=previous){QVERIFY(!closed.contains(folder));closed.insert(folder);previous=folder;}}
+    RowSelection selection;selection.setModel(&view);selection.select(0,0);selection.select(1,Qt::ControlModifier);
+    QCOMPARE(selection.items().size(),2);QCOMPARE(selection.items()[0].toMap().value("id").toString(),"two");
+    view.setQuery("Other Album");QCOMPARE(view.count(),1);QCOMPARE(view.sourceIndex(0),2);QCOMPARE(selection.count(),0);
+    view.setQuery("Été #100%");QCOMPARE(view.count(),1);QCOMPARE(view.sourceIndex(0),4);
+    view.setQuery("");view.setSortKey("original");QCOMPARE(view.items(),rows);
+    view.setSortKey("invalid");QCOMPARE(view.sortKey(),"original");
+  }
+  void folderHeadingLabels() {
+    Backend b;b.m_musicFolders={"/mnt/Music"};
+    QCOMPARE(b.musicFolderLabel("/mnt/Music/Artist/Album"),"Music/Artist/Album");
+    QCOMPARE(b.musicFolderLabel("/mnt/Music"),"Music");
+    QCOMPARE(b.musicFolderLabel("/mnt/Music-other/Album"),"/mnt/Music-other/Album");
+    b.m_musicFolders.append("/media/Music");
+    QCOMPARE(b.musicFolderLabel("/mnt/Music/Album"),"/mnt/Music/Album");
+    QCOMPARE(b.musicFolderLabel("/media/Music/Album"),"/media/Music/Album");
+    b.m_musicFolders={"/mnt/Music","/mnt/Music/Artist"};
+    QCOMPARE(b.musicFolderLabel("/mnt/Music/Artist/Album"),"Artist/Album");
+    b.m_musicFolders.clear();QCOMPARE(b.musicFolderLabel(QDir::homePath()+"/Music/Album"),"~/Music/Album");
+  }
+  void animatedArtworkPreferencePersists() {
+    {Backend b;b.setAnimatedArtwork(false);QVERIFY(!b.animatedArtwork());}
+    {Backend b;QVERIFY(!b.animatedArtwork());b.setAnimatedArtwork(true);}
+    {Backend b;QVERIFY(b.animatedArtwork());}
+  }
   void audioOutputValidation() {
     Backend b;b.setAudioDeviceId("");
     QVERIFY(!b.audioDevices().isEmpty());QCOMPARE(b.audioDevices().first().toMap().value("name").toString(),"System default");

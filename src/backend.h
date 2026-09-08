@@ -30,6 +30,7 @@ public:
   QVariant data(const QModelIndex &i, int role) const override {
     if (!i.isValid() || i.row()<0 || i.row()>=rows.size()) return {};
     if(role==Qt::UserRole) return rows[i.row()];
+    if(role==Qt::UserRole+2) return CollectionView::folder(rows[i.row()].toMap());
     if(role==Qt::UserRole+1) {
       const auto t=rows[i.row()].toMap();
       return t.value("source")=="subsonic" ? "Music server" : !t.value("localPath").toString().isEmpty() ? "Local files" : "YouTube Music";
@@ -37,7 +38,7 @@ public:
     return {};
   }
   QHash<int, QByteArray> roleNames() const override {
-    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"}};
+    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"},{Qt::UserRole+2,"musicFolder"}};
   }
   void assign(const QVariantList &v) {
     beginResetModel();
@@ -119,6 +120,7 @@ class Backend : public QObject {
   Q_PROPERTY(int repeat READ repeat WRITE setRepeat NOTIFY settingsChanged)
   Q_PROPERTY(
       bool autoplay READ autoplay WRITE setAutoplay NOTIFY settingsChanged)
+  Q_PROPERTY(bool animatedArtwork READ animatedArtwork WRITE setAnimatedArtwork NOTIFY settingsChanged)
   Q_PROPERTY(bool motion READ motion WRITE setMotion NOTIFY settingsChanged)
   Q_PROPERTY(bool historyPaused READ historyPaused WRITE setHistoryPaused NOTIFY settingsChanged)
   Q_PROPERTY(bool trackNotifications READ trackNotifications WRITE setTrackNotifications NOTIFY settingsChanged)
@@ -162,6 +164,7 @@ public:
   Q_INVOKABLE void saveServerQueue();
   Q_INVOKABLE void restoreServerQueue();
   QStringList musicFolders() const { return m_musicFolders; }
+  Q_INVOKABLE QString musicFolderLabel(const QString &path) const;
   bool cleanupBusy() const { return m_cleanupBusy; }
   QVariantList cleanupItems() const { return m_cleanupItems; }
   Q_INVOKABLE void importMusicFolder(const QUrl &url);
@@ -242,6 +245,8 @@ public:
   void setRepeat(int);
   bool autoplay() const { return m_settings.value("autoplay", true).toBool(); }
   void setAutoplay(bool);
+  bool animatedArtwork() const { return m_settings.value("animatedArtwork",true).toBool(); }
+  void setAnimatedArtwork(bool value) { if(animatedArtwork()==value)return;m_settings.setValue("animatedArtwork",value);emit settingsChanged(); }
   bool motion() const { return m_settings.value("motion", true).toBool(); }
   void setMotion(bool);
   Q_INVOKABLE void setUiActive(bool active);

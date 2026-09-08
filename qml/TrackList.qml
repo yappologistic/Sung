@@ -5,6 +5,7 @@ import Sung.Native 1.0
 ListView {
     id: list
     property bool queueMode: false
+    property bool groupFolders: false
     property bool reorderEnabled: false
     property string playlistId: ""
     property string matchQuery: ""
@@ -27,12 +28,17 @@ ListView {
     } }
     add: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
     remove: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; to: 0; duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
-    section.property: queueMode ? "musicSource" : ""
+    section.property: queueMode ? "musicSource" : groupFolders ? "musicFolder" : ""
     section.criteria: ViewSection.FullString
     section.delegate: Item {
         required property string section
-        width: list.width; height: 32
-        SungText { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width-24; text: parent.section; color: Theme.muted; font.pixelSize: 12; elide: Text.ElideRight }
+        objectName: list.groupFolders ? "folderHeading" : "sourceHeading"
+        width: list.width; height: list.groupFolders ? 40 : 32
+        SungText { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width-24; text: {app.musicFolders;return list.groupFolders ? app.musicFolderLabel(parent.section) : parent.section;} color: Theme.muted; font.pixelSize: list.groupFolders ? 14 : 12; elide: list.groupFolders ? Text.ElideMiddle : Text.ElideRight }
+        HoverHandler { id: headingHover }
+        ToolTip.visible: list.groupFolders && headingHover.hovered
+        ToolTip.delay: 600
+        ToolTip.text: section
     }
     RowSelection { id: selection; model: list.model }
     Connections {

@@ -114,12 +114,82 @@ def lyric_fallback(req):
 
 AUDIO_EXTENSIONS = {'.mp3','.flac','.ogg','.opus','.m4a','.aac','.wav','.aiff','.aif','.wma'}
 
+
+ART_EXTENSIONS = ('.gif', '.webp', '.mp4', '.webm', '.jpg', '.jpeg', '.png')
+
+def local_cover(path, directories):
+    """Track-specific sidecars precede shared album covers; names ignore case."""
+    import os
+    if path.parent not in directories:
+        try:
+            matches = {}
+            with os.scandir(path.parent) as entries:
+                for entry in entries:
+                    if not entry.name.lower().endswith(ART_EXTENSIONS) or not entry.is_file(): continue
+                    key = entry.name.casefold()
+                    if key not in matches or entry.name < matches[key].name:
+                        matches[key] = path.parent / entry.name
+            directories[path.parent] = matches
+        except OSError:
+            directories[path.parent] = {}
+    names = directories[path.parent]
+    for stem in (path.stem, 'cover', 'folder', 'front', 'artwork'):
+        for extension in ART_EXTENSIONS:
+            candidate = names.get((stem + extension).casefold())
+            if candidate: return candidate
+    return None
+
+def local_stamp(path, cover):
+    st = path.stat()
+    stamp = f'{st.st_mtime_ns}:{st.st_size}'
+    if cover:
+        try:
+            st = cover.stat()
+            stamp += f'|{cover.name}:{st.st_mtime_ns}:{st.st_size}'
+        except OSError: pass
+    return stamp
+
+def cover_poster(cover, directory):
+    """Cache a bounded poster. Failure must never reject the audio import."""
+    import hashlib, os, subprocess
+    from pathlib import Path
+    try:
+        st = cover.stat()
+        if st.st_size > 128*1024*1024: return '', ''
+        probe = subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,crypto,data',
+                                '-select_streams','v:0','-show_entries','stream=width,height',
+                                '-of','json',str(cover)], capture_output=True, timeout=5)
+        streams = json.loads(probe.stdout).get('streams', []) if not probe.returncode and len(probe.stdout)<16384 else []
+        if not streams or not (0 < streams[0].get('width',0) <= 4096 and 0 < streams[0].get('height',0) <= 4096): return '', ''
+        directory = Path(directory); directory.mkdir(parents=True, exist_ok=True)
+        identity = hashlib.sha256(os.fsencode(str(cover))).hexdigest()
+        target = directory / ('cover_' + identity + '.jpg')
+        stamp = f'{st.st_mtime_ns}:{st.st_size}'
+        marker = target.with_suffix('.stamp')
+        if not target.is_file() or not marker.is_file() or marker.read_text()!=stamp:
+            if sum(f.stat().st_size for f in directory.glob('*.jpg')) >= 48*1024*1024 and not target.exists(): return '', ''
+            temporary = target.with_suffix('.tmp.jpg')
+            try:
+                result = subprocess.run(['ffmpeg','-nostdin','-v','error','-threads','1',
+                    '-protocol_whitelist','file,crypto,data','-i',str(cover),'-map','0:v:0',
+                    '-frames:v','1','-vf','scale=512:512:force_original_aspect_ratio=decrease',
+                    '-threads','1','-q:v','4','-y',str(temporary)],capture_output=True,timeout=5)
+                if result.returncode or not temporary.is_file() or temporary.stat().st_size>262144: return '', ''
+                temporary.replace(target); marker.write_text(stamp)
+            finally:
+                temporary.unlink(missing_ok=True)
+        motion = cover.as_uri()+'?v='+stamp if cover.suffix.lower() in ART_EXTENSIONS[:4] else ''
+        return target.as_uri()+'?v='+stamp, motion
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        return '', ''
+
 def scan_music_folders(req):
     import os
     from pathlib import Path
     known = req.get('known', {})
     files, failed, seen, visited = [], 0, set(), set()
     count, payload, limited = 0, 0, False
+    directories = {}
     def scan(directory, depth=0):
         nonlocal count, payload, limited, failed
         if limited: return
@@ -142,7 +212,7 @@ def scan_music_folders(req):
                         path = Path(entry.path).resolve()
                         if str(path) in seen: continue
                         seen.add(str(path))
-                        st = path.stat(); stamp = f'{st.st_mtime_ns}:{st.st_size}'
+                        stamp = local_stamp(path, local_cover(path, directories))
                         if known.get(str(path)) == stamp: continue
                         size = len(str(path).encode('utf-8'))
                         if len(files) >= 10000 or payload+size > 1048576:
@@ -185,6 +255,7 @@ def local_files(req):
     from pathlib import Path
     allowed = AUDIO_EXTENSIONS
     items, errors = [], []
+    directories = {}
     for name in req.get('files', [])[:4]:
         path = Path(name).resolve()
         try:
@@ -197,8 +268,9 @@ def local_files(req):
             seconds = float(info.get('duration') or 0)
             if not math.isfinite(seconds) or seconds<0 or seconds>604800: seconds=0
             identity = 'local_' + hashlib.sha256(os.fsencode(str(path))).hexdigest()
-            art = ''
-            if req.get('artDirectory') and any(v.get('disposition',{}).get('attached_pic') for v in data.get('streams',[])):
+            cover = local_cover(path, directories)
+            art, motion = cover_poster(cover, req['artDirectory']) if cover and req.get('artDirectory') else ('', '')
+            if not art and req.get('artDirectory') and any(v.get('disposition',{}).get('attached_pic') for v in data.get('streams',[])):
                 directory=Path(req['artDirectory']);directory.mkdir(parents=True,exist_ok=True)
                 target=directory/(identity+'.jpg')
                 if target.exists() or sum(f.stat().st_size for f in directory.glob('*.jpg'))<48*1024*1024:
@@ -208,7 +280,7 @@ def local_files(req):
                         elif target.exists(): target.unlink()
                     except (OSError, subprocess.TimeoutExpired):
                         if target.exists(): target.unlink()
-            items.append(dict(id=identity,kind='song',videoId='',localPath=str(path),localStamp=f'{path.stat().st_mtime_ns}:{path.stat().st_size}',title=str(tags.get('title') or path.stem)[:512],artist=str(tags.get('artist') or '')[:512],album=str(tags.get('album') or '')[:512],seconds=round(seconds),duration=f'{int(seconds)//60}:{int(seconds)%60:02d}' if seconds else '',art=art,available=True))
+            items.append(dict(id=identity,kind='song',videoId='',localPath=str(path),localStamp=local_stamp(path, cover),title=str(tags.get('title') or path.stem)[:512],artist=str(tags.get('artist') or '')[:512],album=str(tags.get('album') or '')[:512],seconds=round(seconds),duration=f'{int(seconds)//60}:{int(seconds)%60:02d}' if seconds else '',art=art,motionArt=motion,available=True))
         except (OSError, ValueError, subprocess.TimeoutExpired):
             errors.append(path.name)
     return {'items':items,'failed':errors}

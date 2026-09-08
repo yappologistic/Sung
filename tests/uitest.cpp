@@ -1,6 +1,8 @@
 #include <QQmlProperty>
 #include "uitest.h"
 #include "backend.h"
+#include "motionartwork.h"
+#include <QQmlContext>
 #include "rowselection.h"
 #include "roundedart.h"
 #include <QDir>
@@ -1307,4 +1309,64 @@ void runFolderImportTests(Backend *b,QQuickWindow *w) {
   click("musicFoldersButton");click("addMusicFolderButton");click("browseMusicFolderButton");if(picker){picker->setProperty("selectedFolder",QUrl::fromLocalFile(root));QMetaObject::invokeMethod(picker,"accept");}
   check(until([&]{return path&&path->isVisible();}),"selected folder returns to confirmation");QTest::qWait(450);click("confirmMusicFolderButton");check(until([&]{return !b->importingLocal();})&&b->results()->count()==1,"confirming same folder does not duplicate songs");
   b->stop();b->forgetMusicFolder(root);fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
+void runLocalArtworkTests(Backend *b,QQuickWindow *w) {
+  int failures=0;auto check=[&](bool ok,const char *label){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",label);fflush(stdout);if(!ok)++failures;};
+  auto until=[](const std::function<bool()> &p,int timeout=8000){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<timeout)QTest::qWait(25);return p();};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  auto click=[&](const char *name,Qt::KeyboardModifiers mods=Qt::NoModifier){w->grabWindow();auto item=findItem(w->contentItem(),name);check(item&&item->isVisible(),name);if(item){QTest::mouseClick(w,Qt::LeftButton,mods,item->mapToScene(QPointF(qMin(120.0,item->width()/2),item->height()/2)).toPoint());QTest::qWait(300);}};
+  auto encode=[&](const QStringList &args){QProcess ff;ff.start("ffmpeg",QStringList{"-nostdin","-v","error"}+args);check(ff.waitForFinished(10000)&&ff.exitCode()==0,"generated media fixture");};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setAutoplay(false);b->setMotion(true);b->setAnimatedArtwork(true);if(qEnvironmentVariableIsSet("SUNG_TEST_DARK"))b->setTheme("dark");b->library("files");
+  const auto root=dir+"/Music #100% ü";QDir().mkpath(root+"/Artist A/Album");QDir().mkpath(root+"/Artist B/Album");
+  const auto first=root+"/Artist A/Album/2.wav",second=root+"/Artist A/Album/10.wav",other=root+"/Artist B/Album/1.wav";
+  for(const auto &path:{second,other,first})encode({"-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","120",path});
+  const auto format=qEnvironmentVariable("SUNG_ART_FORMAT","gif");
+  const auto cover=root+"/Artist A/Album/cover."+format;
+  QStringList coverArgs={"-f","lavfi","-i","testsrc2=size=256x256:rate=12:duration=1","-threads","1"};if(format=="gif")coverArgs<<"-loop"<<"0";coverArgs<<cover;encode(coverArgs);
+  b->importMusicFolderPath(root);check(until([&]{return !b->importingLocal();},20000)&&b->results()->count()==3,"folder imports all songs with sidecars");
+  const auto original=b->results()->rows;click("collectionToolsButton");click("collectionSortButton");click("sort_folder");
+  auto view=findItem(w->contentItem(),"tracksView");
+  check(b->collection()->sortKey()=="folder" && view && view->property("groupFolders").toBool(),"Folder menu enables grouping");
+  check(b->collection()->get(0).value("localPath")==first && b->collection()->get(1).value("localPath")==second && b->collection()->get(2).value("localPath")==other,"natural filename order within distinct folder paths");
+  check(b->results()->rows==original,"folder sorting preserves saved order");
+  w->grabWindow();QList<QQuickItem*> headings;
+  std::function<void(QQuickItem*)> inspect=[&](QQuickItem *item){if(item->objectName()=="folderHeading"&&item->isVisible())headings.append(item);for(auto child:item->childItems())inspect(child);};inspect(w->contentItem());
+  check(headings.size()==2,"same-named albums have separate folder headings");
+  for(auto heading:headings){const auto rect=heading->mapRectToScene(heading->boundingRect());for(int i=0;i<3;++i){auto row=findItem(w->contentItem(),"trackRow_"+QString::number(i));if(row)check(!rect.intersects(row->mapRectToScene(row->boundingRect())),"folder heading does not overlap song row");}}
+  shot("01-folder-groups");
+  click("trackRow_0",Qt::ControlModifier);click("trackRow_1",Qt::ControlModifier);
+  auto selection=view?qobject_cast<RowSelection*>(view->property("selection").value<QObject*>()):nullptr;
+  check(selection&&selection->count()==2&&selection->items().first().toMap().value("localPath")==first,"multi-selection follows folder sort");
+  b->clearQueue();b->enqueueItems({b->collection()->get(2)});w->setProperty("side","queue");QTest::qWait(500);w->grabWindow();
+  auto from=findItem(w->contentItem(),"trackRow_0"),to=findItem(w->contentItem(),"queueRow_0");
+  check(from&&to,"grouped drag endpoints exist");
+  if(from&&to){const auto start=from->mapToScene(QPointF(120,from->height()/2)).toPoint(),end=to->mapToScene(QPointF(120,to->height()-4)).toPoint();QTest::mousePress(w,Qt::LeftButton,Qt::NoModifier,start);for(int i=1;i<=16;++i)QTest::mouseMove(w,start+(end-start)*i/16,20);QTest::mouseRelease(w,Qt::LeftButton,Qt::NoModifier,end);QTest::qWait(300);}
+  check(b->queue()->count()==3&&b->queue()->get(1).value("localPath")==first&&b->queue()->get(2).value("localPath")==second,"drag selected folder songs into queue preserves display order");b->undo();check(b->queue()->count()==1,"grouped drop supports Undo");
+  w->setProperty("side","");b->collection()->setQuery("Artist B/Album");QTest::qWait(250);check(b->collection()->count()==1&&b->collection()->get(0).value("localPath")==other,"folder paths are searchable");
+  check(!selection||selection->count()==0,"filter changes clear stale selection");b->collection()->setQuery("");b->library("favorites");b->library("files");QTest::qWait(250);check(b->collection()->sortKey()=="folder","folder view remembered across navigation");
+  b->playCollection(0);check(until([&]{return b->playing();}),"playback uses first sorted song");
+  auto motion=qmlContext(w)->contextProperty("motionArtwork").value<MotionArtwork*>();check(motion,"shared artwork controller exists");
+  if(motion){
+    QSignalSpy frames(motion,&MotionArtwork::frameChanged);check(until([&]{return frames.count()>4&&!motion->frame().isNull();}),"current cover animates while audio plays");
+    check(!b->current().value("motionArt").toString().isEmpty(),"imported motion URL reaches current track");shot("02-animated-player");
+    b->pause();QTest::qWait(200);const auto paused=frames.count();QTest::qWait(400);check(frames.count()==paused&&!motion->running(),"pausing audio freezes cover");
+    b->toggle();check(until([&]{return frames.count()>paused+2;}),"resuming audio resumes cover");
+    b->setMotion(false);check(until([&]{return motion->source().isEmpty()&&motion->frame().isNull();}),"reduced motion releases decoder and shows poster");check(b->playing(),"motion setting does not stop audio");b->setMotion(true);
+    b->setAnimatedArtwork(false);check(until([&]{return motion->source().isEmpty();}),"artwork preference disables animation independently");b->setAnimatedArtwork(true);check(until([&]{return !motion->frame().isNull();}),"artwork preference restores animation");
+    click("settingsButton");auto settingsSearch=findItem(w->contentItem(),"settingsSearch");if(settingsSearch){settingsSearch->setProperty("text","Animated album artwork");QMetaObject::invokeMethod(settingsSearch,"textEdited");}QTest::qWait(250);
+    click("animatedArtworkSwitch");check(!b->animatedArtwork()&&motion->source().isEmpty(),"Settings switch disables artwork");click("animatedArtworkSwitch");check(b->animatedArtwork(),"Settings switch enables artwork");shot("04-artwork-setting");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(300);
+    QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(500);auto immersive=findItem(w->contentItem(),"immersiveArtwork");check(immersive&&immersive->isVisible()&&!immersive->property("motionUrl").toString().isEmpty(),"immersive artwork uses animated cover");shot("03-immersive-cover");QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(400);
+    w->hide();check(until([&]{return motion->source().isEmpty()&&!motion->running();}),"hidden player releases artwork decoder");check(b->playing(),"hidden player continues audio");w->show();check(until([&]{return !motion->frame().isNull();}),"showing player restores animated cover");
+    if(QGuiApplication::platformName()=="offscreen"){
+      QMetaObject::invokeMethod(w,"openMiniPlayer");QTest::qWait(500);auto mini=w->property("miniPlayer").value<QQuickWindow*>();check(mini&&mini->isVisible()&&motion->running(),"mini player retains shared animation");if(mini)check(mini->grabWindow().save(dir+"/04-mini-cover.png"),"mini capture");QMetaObject::invokeMethod(w,"restorePlayer");QTest::qWait(300);
+    }
+    QFile::remove(cover);b->rescanMusicFolders();check(until([&]{return !b->importingLocal();},15000),"rescan completes after sidecar removal");check(b->current().value("motionArt").toString().isEmpty()&&motion->source().isEmpty(),"rescan removes stale animation from playing song");check(b->playing(),"artwork rescan preserves ongoing playback");
+    encode(coverArgs);b->rescanMusicFolders();check(until([&]{return !b->importingLocal()&&!motion->frame().isNull();},15000),"rescan discovers restored artwork during playback");
+    b->playCollection(2);check(until([&]{return b->playing();})&&motion->source().isEmpty(),"next song without artwork releases previous animation");
+  }
+  b->stop();b->collection()->setSortKey("title");QTest::qWait(250);check(view&&!view->property("groupFolders").toBool(),"other sort modes remove folder headings");
+  b->collection()->setSortKey("original");check(b->collection()->items()==b->results()->rows,"original order remains available");
+  fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }

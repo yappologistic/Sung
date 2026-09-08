@@ -37,6 +37,13 @@ RoundedArt::~RoundedArt() {
     m_reply->deleteLater();
   }
 }
+void RoundedArt::setAnimation(MotionArtwork *animation) {
+  if(m_animation==animation)return;
+  if(m_animation)disconnect(m_animation,nullptr,this,nullptr);
+  m_animation=animation;
+  if(animation)connect(animation,&MotionArtwork::frameChanged,this,[this]{emit readyChanged();update();});
+  emit animationChanged();emit readyChanged();update();
+}
 void RoundedArt::setSource(const QUrl &v) {
   if (m_source == v)
     return;
@@ -123,18 +130,19 @@ void RoundedArt::reload() {
   });
 }
 void RoundedArt::paint(QPainter *p) {
-  if (m_image.isNull())
+  const auto &image=m_animation && !m_animation->frame().isNull()?m_animation->frame():m_image;
+  if (image.isNull())
     return;
   QPainterPath path;
   path.addRoundedRect(boundingRect(), m_radius, m_radius);
   p->setClipPath(path);
   p->setRenderHint(QPainter::SmoothPixmapTransform);
   const auto s =
-      QSizeF(m_image.size())
+      QSizeF(image.size())
           .scaled(boundingRect().size(), Qt::KeepAspectRatioByExpanding);
   p->drawImage(QRectF((width() - s.width()) / 2, (height() - s.height()) / 2,
                       s.width(), s.height()),
-               m_image);
+               image);
 }
 
 void RoundedArt::clearCaches() { cache.clear(); if(manager()->cache())manager()->cache()->clear(); }

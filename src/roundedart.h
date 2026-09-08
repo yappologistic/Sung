@@ -4,10 +4,12 @@
 #include <QPointer>
 #include <QQuickPaintedItem>
 #include <functional>
+#include "motionartwork.h"
 
 class RoundedArt : public QQuickPaintedItem {
   Q_OBJECT
   friend class ArtworkTest;
+  Q_PROPERTY(MotionArtwork *animation READ animation WRITE setAnimation NOTIFY animationChanged)
   Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
   Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged)
   Q_PROPERTY(int pixels READ pixels WRITE setPixels NOTIFY pixelsChanged)
@@ -34,11 +36,14 @@ public:
     emit pixelsChanged();
     reload();
   }
-  bool ready() const { return !m_image.isNull(); }
+  MotionArtwork *animation() const { return m_animation; }
+  void setAnimation(MotionArtwork *animation);
+  bool ready() const { return (m_animation && !m_animation->frame().isNull()) || !m_image.isNull(); }
   void paint(QPainter *) override;
   static void clearCaches();
   static std::function<QUrl(const QUrl &)> resolveServerArt;
 signals:
+  void animationChanged();
   void sourceChanged();
   void radiusChanged();
   void pixelsChanged();
@@ -48,6 +53,7 @@ private:
   void reload();
   QUrl m_source;
   QImage m_image;
+  QPointer<MotionArtwork> m_animation;
   QPointer<QNetworkReply> m_reply;
   qreal m_radius = 16;
   int m_pixels = 360;

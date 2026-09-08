@@ -27,3 +27,5 @@ void runAudioIndicatorTests(Backend*,QQuickWindow*);
 
 void runInteractionTests(Backend *b, QQuickWindow *w);
 void runFolderImportTests(Backend *b, QQuickWindow *w);
+
+void runLocalArtworkTests(Backend *, QQuickWindow *);

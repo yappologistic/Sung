@@ -1782,6 +1782,18 @@ void Backend::importMusicFolder(const QUrl &url) {
   }
   scanMusicFolders({path});
 }
+QString Backend::musicFolderLabel(const QString &path) const {
+  QString root;
+  for(const auto &candidate:m_musicFolders)
+    if((path==candidate || path.startsWith(candidate.endsWith('/')?candidate:candidate+'/')) && candidate.size()>root.size())root=candidate;
+  if(!root.isEmpty()){
+    const auto name=QFileInfo(root).fileName();bool unique=!name.isEmpty();
+    for(const auto &other:m_musicFolders)if(other!=root && QFileInfo(other).fileName()==name)unique=false;
+    if(unique)return name+path.mid(root.size());
+  }
+  const auto home=QDir::homePath();
+  return path.startsWith(home+'/')?QStringLiteral("~")+path.mid(home.size()):path;
+}
 void Backend::rescanMusicFolders(){if(!importingLocal()&&!m_musicFolders.isEmpty())scanMusicFolders(m_musicFolders);}
 void Backend::forgetMusicFolder(const QString &path){
   if(importingLocal())return;

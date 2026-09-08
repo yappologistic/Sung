@@ -30,7 +30,7 @@ Item {
             ColumnLayout {
                 Layout.preferredWidth: player.coverSize; Layout.minimumWidth: player.coverSize; Layout.maximumWidth: player.coverSize; Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: 18
                 Item { Layout.fillHeight: true }
-                Artwork { id: immersiveArt; objectName: "immersiveArtwork"; Layout.preferredWidth: player.coverSize; Layout.preferredHeight: player.coverSize; Layout.maximumHeight: player.coverSize; url: presentation.shown.art || ""; opacity: player.coverHidden?0:presentation.fade; radius: 28; pixels: 850 }
+                Artwork { id: immersiveArt; objectName: "immersiveArtwork"; Layout.preferredWidth: player.coverSize; Layout.preferredHeight: player.coverSize; Layout.maximumHeight: player.coverSize; url: presentation.shown.art || ""; motionUrl: presentation.shown.motionArt || ""; opacity: player.coverHidden?0:presentation.fade; radius: 28; pixels: 850 }
                 SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade*player.detailsOpacity; transform: Translate { y: presentation.offset } Layout.fillWidth: true; font.pixelSize: player.width<900?22:30; font.weight: Font.DemiBold; wrapMode: Text.Wrap; maximumLineCount: 3 }
                 SungText { text: presentation.shown.artist || ""; opacity: presentation.fade*player.detailsOpacity; transform: Translate { y: presentation.offset } Layout.fillWidth: true; font.pixelSize: 18; color: Theme.muted; wrapMode: Text.Wrap; maximumLineCount: 2 }
                 Item { Layout.fillHeight: true }

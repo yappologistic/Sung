@@ -24,13 +24,14 @@ A minimal Material 3 player built with C++ and Qt Quick, designed for CachyOS an
 
 - **YouTube Music** — search songs, albums, artists and playlists; play audio without an embedded browser or ad interface.
 - **Navidrome / Subsonic** — browse and search your server, play original or transcoded audio, edit server playlists, rate songs, sync favorites and listening history, and display server lyrics.
-- **Your music** — import FLAC, MP3 and other supported audio files or folders. Mix local and YouTube songs in the same playlists.
+- **Your music** — import FLAC, MP3 and other supported audio files or folders; search paths and group songs by folder. Mix local and YouTube songs in the same playlists.
+- **Animated artwork** — play local animated covers in the player, immersive view and mini player; lists use still covers.
 - **Lyrics** — synchronized lyrics, an immersive view, timing adjustments, LRC import, seek previews and search with jump-to-line playback.
 - **Library tools** — likes, listening history, smart mixes, custom smart playlists, automatic playlist covers, playlist cleanup, multi-selection, drag reordering and Undo.
 - **Playback controls** — mini player, queue editing with source headings, shuffle, repeat, sleep timer, playback speed and audio-device selection.
 - **Desktop integration** — media keys through MPRIS, optional notifications, light/dark themes and Noctalia palette support.
 
-Native rendering, one audio decoder and bounded artwork caches keep Sung lightweight. Animations can be disabled in Settings.
+Native rendering and bounded artwork caches keep Sung lightweight. Animated covers share one additional decoder, released when the player is hidden. Animations can be disabled in Settings.
 
 ## Install
 
@@ -39,7 +40,7 @@ Native rendering, one audio decoder and bounded artwork caches keep Sung lightwe
 Install the build and runtime dependencies:
 
 ```bash
-sudo pacman -S --needed git base-devel cmake ninja python nodejs ffmpeg qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland
+sudo pacman -S --needed git base-devel cmake ninja python nodejs ffmpeg qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland qt6-imageformats
 ```
 
 Download and install Sung:
@@ -60,13 +61,17 @@ Installation is per-user in `~/.local`; do not run the install script with `sudo
 
 ### Other Linux distributions
 
-Install the equivalent development packages for **Qt 6.8+** (Core, Gui, Quick, Qml, QuickControls2, Multimedia, Network, DBus, Svg and Wayland), a C++20 compiler, CMake 3.24+, Ninja, Python 3 with `venv`/`pip`, Node.js 20+ and FFmpeg. Then follow the clone and install commands above.
+Install the equivalent development packages for **Qt 6.8+** (Core, Gui, Quick, Qml, QuickControls2, Multimedia, Network, DBus, Svg and Wayland), a C++20 compiler, CMake 3.24+, Ninja, Python 3 with `venv`/`pip`, Node.js 20+ and FFmpeg. Install the Qt image-format plugins for WebP artwork. Then follow the clone and install commands above.
 
 Sung uses Google Sans Flex when installed and otherwise falls back to a system font. Noctalia is optional.
 
 ## Getting started
 
 Search for music or paste a YouTube song or playlist link. Use **Library → Local files → +** to add files, or **Folders → Add folder…** for a whole music folder. Enter its absolute path (or `~/Music`), or use **Browse…**, then choose **Add folder**. This also works for network shares mounted as local folders and does not depend on the system folder picker. Subfolders are scanned recursively. The refresh button rescans saved folders for new and changed audio.
+
+In **Local files**, open **Find and sort songs → Folder** to group songs by their parent directory, with natural filename order inside each group. The filter also searches folder paths.
+
+For animated artwork, place a **GIF, animated WebP, MP4 or WebM** beside your music, named `cover`, `folder`, `front` or `artwork` (for example, `cover.mp4`). A matching song filename, such as `Song.gif` beside `Song.flac`, takes priority. Names are case-insensitive. JPG, PNG and static WebP sidecars also work as still covers. Import or rescan the folder after changing its artwork. Covers are limited to 128 MiB and 4096 × 4096 pixels; unreadable covers fall back to embedded artwork. Animation is silent, pauses with playback, and respects **Settings → Animations** and **Animated album artwork**. No artwork service account is needed.
 
 Create an automatic playlist from **Library → Playlists → Smart playlist**. Combine artist, title, source, liked status and last-played rules over your saved music. Use **Edit rules** to change it; matching songs update automatically.
 

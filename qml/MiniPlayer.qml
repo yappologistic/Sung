@@ -29,7 +29,7 @@ Window {
             anchors.fill: parent; anchors.margins: 16; spacing: 4
             RowLayout {
                 Layout.fillWidth: true; spacing: 12
-                Artwork { url: presentation.shown.art || ""; opacity: presentation.fade; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: 12; pixels: 128 }
+                Artwork { url: presentation.shown.art || ""; motionUrl: presentation.shown.motionArt || ""; opacity: presentation.fade; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: 12; pixels: 128 }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 4
                     SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { y: presentation.offset } Layout.fillWidth: true; font.pixelSize: 16; font.weight: Font.DemiBold }

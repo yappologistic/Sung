@@ -112,6 +112,8 @@ int main(int argc, char **argv) {
   app.setFont(font);
   qmlRegisterType<RowSelection>("Sung.Native", 1, 0, "RowSelection");
   qmlRegisterType<RoundedArt>("Sung.Native", 1, 0, "RoundedArt");
+  MotionArtwork motionArtwork;
+  qmlRegisterUncreatableType<MotionArtwork>("Sung.Native",1,0,"MotionArtwork","Shared current artwork");
   Backend backend;
   RoundedArt::resolveServerArt=[&backend](const QUrl &url){return backend.server()->artworkUrl(url);};
   QObject::connect(backend.server(),&Subsonic::accountChanged,&app,[]{RoundedArt::clearCaches();});
@@ -127,6 +129,7 @@ int main(int argc, char **argv) {
   engine.rootContext()->setContextProperty("windowResources", &windowResources);
   engine.addImageProvider("symbols", new Symbols);
   engine.rootContext()->setContextProperty("app", &backend);
+  engine.rootContext()->setContextProperty("motionArtwork", &motionArtwork);
   engine.rootContext()->setContextProperty("desktopTheme", &desktopTheme);
   QObject::connect(
       &engine, &QQmlApplicationEngine::objectCreationFailed, &app,
@@ -170,6 +173,7 @@ int main(int argc, char **argv) {
   }
   if(args.contains("--server-remote-test")){QTimer::singleShot(0,&app,[&]{runRemoteServerTest(&backend,window);});return app.exec();}
   if(args.contains("--server-test")){QTimer::singleShot(0,&app,[&]{runServerTests(&backend,window);});return app.exec();}
+  if(args.contains("--local-artwork-test")){QTimer::singleShot(0,&app,[&]{runLocalArtworkTests(&backend,window);});return app.exec();}
   if(args.contains("--folder-import-test")){QTimer::singleShot(0,&app,[&]{runFolderImportTests(&backend,window);});return app.exec();}
   if(args.contains("--interaction-test")){QTimer::singleShot(0,&app,[&]{runInteractionTests(&backend,window);});return app.exec();}
   if(args.contains("--audio-indicator-test")){QTimer::singleShot(0,&app,[&]{runAudioIndicatorTests(&backend,window);});return app.exec();}

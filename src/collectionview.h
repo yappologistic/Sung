@@ -2,6 +2,7 @@
 #include <QSortFilterProxyModel>
 #include <QCollator>
 #include <QVariantMap>
+#include <QFileInfo>
 
 // A view of a collection: filtering and sorting never change saved playlist order.
 class CollectionView : public QSortFilterProxyModel {
@@ -35,12 +36,16 @@ public:
     emit optionsChanged();
   }
   void setSortKey(const QString &value) {
-    if(!QStringList{"original","title","artist","duration"}.contains(value)||m_sort==value)return;
+    if(!QStringList{"original","title","artist","duration","folder"}.contains(value)||m_sort==value)return;
     m_sort=value;invalidate();sort(value=="original"?-1:0);emit optionsChanged();
   }
   Q_INVOKABLE QVariantMap get(int row) const {return row>=0&&row<count()?data(index(row,0),Qt::UserRole).toMap():QVariantMap{};}
   Q_INVOKABLE int sourceIndex(int row) const {return row>=0&&row<count()?mapToSource(index(row,0)).row():-1;}
   QVariantList items() const {QVariantList result;result.reserve(count());for(int i=0;i<count();++i)result.append(get(i));return result;}
+  static QString folder(const QVariantMap &item) {
+    const auto path=item.value("localPath").toString();
+    return path.isEmpty()?QString():QFileInfo(path).absolutePath();
+  }
   static qint64 seconds(const QVariantMap &item) {
     if(item.value("seconds").toLongLong()>0)return item.value("seconds").toLongLong();
     qint64 result=0;const auto parts=item.value("duration").toString().split(':');
@@ -54,13 +59,19 @@ protected:
   bool filterAcceptsRow(int row,const QModelIndex &parent) const override {
     if(m_terms.isEmpty())return true;
     const auto item=sourceModel()->data(sourceModel()->index(row,0,parent),Qt::UserRole).toMap();
-    const auto text=item.value("title").toString()+' '+item.value("artist").toString()+' '+item.value("album").toString();
+    const auto text=item.value("title").toString()+' '+item.value("artist").toString()+' '+item.value("album").toString()+' '+item.value("localPath").toString();
     for(const auto &term:m_terms) {if(!text.contains(term,Qt::CaseInsensitive))return false;}
     return true;
   }
   bool lessThan(const QModelIndex &a,const QModelIndex &b) const override {
     const auto x=sourceModel()->data(a,Qt::UserRole).toMap(),y=sourceModel()->data(b,Qt::UserRole).toMap();
-    if(m_sort=="duration") {const auto xs=seconds(x),ys=seconds(y);if(xs!=ys)return xs<ys;}
+    if(m_sort=="folder") {
+      const auto xf=folder(x),yf=folder(y);
+      if(xf!=yf){const int cmp=m_collator.compare(xf,yf);return cmp?cmp<0:xf<yf;}
+      const int cmp=m_collator.compare(QFileInfo(x.value("localPath").toString()).fileName(),QFileInfo(y.value("localPath").toString()).fileName());
+      if(cmp)return cmp<0;
+    }
+    else if(m_sort=="duration") {const auto xs=seconds(x),ys=seconds(y);if(xs!=ys)return xs<ys;}
     else {const int cmp=m_collator.compare(x.value(m_sort).toString(),y.value(m_sort).toString());if(cmp)return cmp<0;}
     return a.row()<b.row();
   }

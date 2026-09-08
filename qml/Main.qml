@@ -22,6 +22,8 @@ ApplicationWindow {
     property var miniPlayer: null
     readonly property bool uiActive: (visible && visibility!==Window.Minimized) || (miniPlayer!==null && miniPlayer.visible && miniPlayer.visibility!==Window.Minimized)
     onUiActiveChanged: {app.setUiActive(uiActive);if(!uiActive)cancelCoverFlight();}
+    Binding { target: motionArtwork; property: "source"; value: window.uiActive && app.motion && app.animatedArtwork ? (app.current.motionArt || "") : "" }
+    Binding { target: motionArtwork; property: "running"; value: window.uiActive && app.playing && app.motion && app.animatedArtwork }
     property var fileDialogs: null
     function openFileDialog(kind) {
         if(!fileDialogs) {
@@ -419,7 +421,7 @@ ApplicationWindow {
                                 Accessible.name: "Find songs in this list"
                             }
                             MButton { symbol: "close"; tip: "Clear list filter"; visible: !!app.collection.query; onClicked: app.collection.query="" }
-                            MButton { objectName: "collectionSortButton"; symbol: "sort"; tip: "Sort songs"; text: app.collection.sortKey==="original"?"Order":app.collection.sortKey==="title"?"Title":app.collection.sortKey==="artist"?"Artist":"Duration"; tonal: true; onClicked: collectionSortMenu.popup(this,width-collectionSortMenu.width,height+4) }
+                            MButton { objectName: "collectionSortButton"; symbol: "sort"; tip: "Sort songs"; text: app.collection.sortKey==="original"?"Order":app.collection.sortKey==="title"?"Title":app.collection.sortKey==="artist"?"Artist":app.collection.sortKey==="folder"?"Folder":"Duration"; tonal: true; onClicked: collectionSortMenu.popup(this,width-collectionSortMenu.width,height+4) }
                         }
                         SelectionBar { Layout.fillWidth: true; view: tracks; canRemove: window.editableLocal || app.serverPlaylistEditable }
                         Item {
@@ -460,6 +462,7 @@ ApplicationWindow {
                             TrackList {
                                 id: tracks; objectName: "tracksView"; anchors.fill: parent; clip: true; spacing: 4
                                 visible: app.sections.length===0 && !(window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist)
+                                groupFolders: app.page==="library" && app.libraryId==="files" && app.collection.sortKey==="folder"
                                 model: app.collection; reuseItems: true; cacheBuffer: 100; boundsBehavior: Flickable.StopAtBounds
                                 queueMode: false; reorderEnabled: (window.editableLocal || app.serverPlaylistEditable) && app.collection.sortKey==="original" && !app.collection.query
                                 playlistId: window.localPlaylist; dragHub: trackDrag
@@ -543,7 +546,7 @@ ApplicationWindow {
                 RowLayout {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 16
                     AbstractButton { id: nowButton; objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
-                        contentItem: Artwork { id: nowArtwork; url: nowPresentation.shown.art || ""; radius: 12; pixels: 150; opacity: window.coverFlying?0:nowPresentation.fade }
+                        contentItem: Artwork { id: nowArtwork; url: nowPresentation.shown.art || ""; motionUrl: nowPresentation.shown.motionArt || ""; radius: 12; pixels: 150; opacity: window.coverFlying?0:nowPresentation.fade }
                         background: Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; radius: 15; border.width: parent.activeFocus?2:0; border.color: Theme.primary }
                     }
                     ColumnLayout {
@@ -634,7 +637,7 @@ ApplicationWindow {
             contentWidth: availableWidth; clip: true
             ColumnLayout {
                 width: nowScroll.availableWidth; spacing: 18
-                Artwork { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(320,nowScroll.availableWidth); Layout.preferredHeight: width; url: app.current.art || ""; radius: 24; pixels: 650 }
+                Artwork { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(320,nowScroll.availableWidth); Layout.preferredHeight: width; url: app.current.art || ""; motionUrl: app.current.motionArt || ""; radius: 24; pixels: 650 }
                 SungText { text: app.current.title || "Nothing playing"; Layout.fillWidth: true; font.pixelSize: 24; font.weight: Font.Medium; wrapMode: Text.Wrap; elide: Text.ElideNone }
                 SungText { text: app.current.artist || ""; Layout.fillWidth: true; font.pixelSize: 16; color: Theme.muted }
                 RowLayout {
@@ -888,6 +891,7 @@ ApplicationWindow {
                 MButton { visible: settingsDialog.matches("Keyboard shortcuts keys help"); objectName: "shortcutHelpButton"; Layout.fillWidth: true; text: "Keyboard shortcuts"; leftAligned: true; onClicked: {settingsDialog.close();shortcutHelp.open()} }
                 SungText { visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); text: "Appearance"; font.pixelSize: 16; font.weight: Font.Medium }
                 RowLayout { visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); spacing: 8; Repeater { model: ["system","light","dark"]; MButton { required property string modelData; text: modelData==="system" && desktopTheme.available?"Noctalia":modelData.charAt(0).toUpperCase()+modelData.slice(1); selected: app.theme===modelData; onClicked: app.theme=modelData } } }
+                MSwitch { objectName: "animatedArtworkSwitch"; visible: settingsDialog.matches("Animated album artwork"); text: "Animated album artwork"; checked: app.animatedArtwork; onToggled: app.animatedArtwork=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
                 MSwitch { visible: settingsDialog.matches("Animations"); text: "Animations"; checked: app.motion; onToggled: app.motion=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
                 MSwitch { visible: settingsDialog.matches("Autoplay similar songs"); text: "Autoplay similar songs"; checked: app.autoplay; onToggled: app.autoplay=checked; palette.windowText: Theme.text; palette.highlight: Theme.primary }
                 MSwitch { visible: settingsDialog.matches("Pause history this session privacy"); objectName: "historyPauseSwitch"; text: "Pause history this session"; checked: app.historyPaused; onToggled: app.historyPaused=checked }
@@ -969,7 +973,7 @@ ApplicationWindow {
     MMenu {
         id: collectionSortMenu; objectName: "collectionSortMenu"
         Repeater {
-            model: [{key:"original",label:"Original order"},{key:"title",label:"Title"},{key:"artist",label:"Artist"},{key:"duration",label:"Duration"}]
+            model: [{key:"original",label:"Original order"},{key:"title",label:"Title"},{key:"artist",label:"Artist"},{key:"duration",label:"Duration"}].concat(app.page==="library" && app.libraryId==="files" ? [{key:"folder",label:"Folder"}] : [])
             MMenuItem { required property var modelData; objectName: "sort_"+modelData.key; text: modelData.label; checkable: true; checked: app.collection.sortKey===modelData.key; onTriggered: app.collection.sortKey=modelData.key }
         }
     }
