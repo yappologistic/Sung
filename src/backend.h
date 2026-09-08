@@ -165,6 +165,7 @@ public:
   bool cleanupBusy() const { return m_cleanupBusy; }
   QVariantList cleanupItems() const { return m_cleanupItems; }
   Q_INVOKABLE void importMusicFolder(const QUrl &url);
+  Q_INVOKABLE QString importMusicFolderPath(const QString &input);
   Q_INVOKABLE void rescanMusicFolders();
   Q_INVOKABLE void forgetMusicFolder(const QString &path);
   Q_INVOKABLE void inspectPlaylist(const QString &id);

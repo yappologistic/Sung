@@ -53,6 +53,8 @@ if ready:
     if shutil.which('dbus-run-session') and shutil.which('qdbus6'):
         stage('mpris',['dbus-run-session','--','python3',str(root/'tests/mpris_test.py'),str(build/'sung')],40,profile('mpris-profile'))
     else: rows.append(dict(stage='mpris',status='fail',detail='dbus-run-session and qdbus6 are required'))
+    e=profile("folder-import-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"folder-import"))
+    stage("folder-import",[str(build/"sung"),"--isolated","--folder-import-test"],60,e)
     e=profile('search-selection-profile');e.update(SUNG_HELPER=str(root/'tests/catalog_fixture.py'),SUNG_PYTHON='/usr/bin/python3',SUNG_TEST_OUTPUT=str(out/'search-selection'))
     stage('search-selection',[str(build/'sung'),'--isolated','--search-selection-test'],120,e)
     e=profile("qol-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"qol"))

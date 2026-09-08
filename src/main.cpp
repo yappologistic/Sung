@@ -157,6 +157,7 @@ int main(int argc, char **argv) {
   }
   if(args.contains("--server-remote-test")){QTimer::singleShot(0,&app,[&]{runRemoteServerTest(&backend,window);});return app.exec();}
   if(args.contains("--server-test")){QTimer::singleShot(0,&app,[&]{runServerTests(&backend,window);});return app.exec();}
+  if(args.contains("--folder-import-test")){QTimer::singleShot(0,&app,[&]{runFolderImportTests(&backend,window);});return app.exec();}
   if(args.contains("--interaction-test")){QTimer::singleShot(0,&app,[&]{runInteractionTests(&backend,window);});return app.exec();}
   if(args.contains("--audio-indicator-test")){QTimer::singleShot(0,&app,[&]{runAudioIndicatorTests(&backend,window);});return app.exec();}
   if(args.contains("--visual-delight-test")){QTimer::singleShot(0,&app,[&]{runVisualDelightTests(&backend,window);});return app.exec();}

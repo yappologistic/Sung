@@ -66,7 +66,7 @@ Sung uses Google Sans Flex when installed and otherwise falls back to a system f
 
 ## Getting started
 
-Search for music or paste a YouTube song or playlist link. Use **Library → Local files → +** to add files, or **Folders → Add folder…** for a whole music folder. The refresh button rescans saved folders for new and changed audio.
+Search for music or paste a YouTube song or playlist link. Use **Library → Local files → +** to add files, or **Folders → Add folder…** for a whole music folder. Enter its absolute path (or `~/Music`), or use **Browse…**, then choose **Add folder**. This also works for network shares mounted as local folders and does not depend on the system folder picker. Subfolders are scanned recursively. The refresh button rescans saved folders for new and changed audio.
 
 Create an automatic playlist from **Library → Playlists → Smart playlist**. Combine artist, title, source, liked status and last-played rules over your saved music. Use **Edit rules** to change it; matching songs update automatically.
 

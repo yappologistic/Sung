@@ -1753,6 +1753,25 @@ QVariantList Backend::searchLyrics(const QString &query) const {
   return rows;
 }
 
+QString Backend::importMusicFolderPath(const QString &input) {
+  if(importingLocal())return "Wait for the current import to finish.";
+  QString path=input.trimmed();
+  if(path.isEmpty())return "Enter a music folder path.";
+  if(path=="~")path=QDir::homePath();
+  else if(path.startsWith("~/"))path=QDir::homePath()+path.mid(1);
+  else if(path.startsWith("file:",Qt::CaseInsensitive)){
+    const QUrl url(path,QUrl::StrictMode);
+    if(!url.isValid() || !url.isLocalFile() || (!url.host().isEmpty() && url.host()!="localhost"))return "Use a local folder path or a mounted network share.";
+    path=url.toLocalFile();
+  }
+  if(!QDir::isAbsolutePath(path))return "Enter an absolute folder path or a path starting with ~/.";
+  const QFileInfo folder(path);
+  if(!folder.isDir() || !folder.isReadable() || folder.canonicalFilePath().isEmpty())return "Choose a readable music folder.";
+  if(!m_musicFolders.contains(folder.canonicalFilePath()) && m_musicFolders.size()>=64)return "You can save up to 64 music folders.";
+  importMusicFolder(QUrl::fromLocalFile(folder.canonicalFilePath()));
+  return {};
+}
+
 void Backend::importMusicFolder(const QUrl &url) {
   if(importingLocal()||!url.isLocalFile())return;
   const QFileInfo info(url.toLocalFile());const auto path=info.canonicalFilePath();

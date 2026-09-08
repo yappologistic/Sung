@@ -50,7 +50,7 @@ ApplicationWindow {
     readonly property bool serverDisconnected: app.page === "server" && !app.server.connected && !app.server.connecting
     property bool searchFocused: (window.activeFocusItem && window.activeFocusItem.handlesTextInput===true) || searchField.activeFocus || (window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField")
     readonly property bool editableLocal: {app.playlists;return !!localPlaylist && !app.smartPlaylist(localPlaylist).id;}
-    property bool modalOpen: smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
+    property bool modalOpen: smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
     property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.handlesArrowKeys === true
     function selectedView() {var item=window.activeFocusItem;while(item){if(item.sourceRows!==undefined)return item;item=item.parent;}return tracks;}
     function addBatch(view) {batchItems=view.selection.items();addPlaylistDialog.open();}
@@ -714,7 +714,42 @@ ApplicationWindow {
                 }
                 SungText { anchors.centerIn: parent; visible: app.musicFolders.length===0; text: "Add a folder to import its music"; color: Theme.muted }
             }
-            MButton { objectName: "addMusicFolderButton"; text: "Add folder…"; symbol: "plus"; tonal: true; enabled: !app.importingLocal; onClicked: {musicFoldersDialog.close();window.openFileDialog("folder");} }
+            MButton { objectName: "addMusicFolderButton"; text: "Add folder…"; symbol: "plus"; tonal: true; enabled: !app.importingLocal; onClicked: {musicFoldersDialog.close();musicFolderPath.clear();musicFolderEntry.pathError="";musicFolderEntry.open();} }
+        }
+    }
+    function finishFolderPick(url) {musicFolderPath.text=url.toString();musicFolderEntry.pathError="";musicFolderEntry.open();}
+    function returnToFolderEntry() {musicFolderEntry.open();}
+    MDialog {
+        id: musicFolderEntry; objectName: "musicFolderEntry"; anchors.centerIn: parent
+        title: "Add music folder"; modal: true; width: Math.min(560,window.width-48)
+        implicitHeight: header.implicitHeight+contentItem.implicitHeight+footer.implicitHeight+topPadding+bottomPadding
+        initialFocus: musicFolderPath
+        property string pathError: ""
+        function submit() {
+            if(app.importingLocal)return;
+            pathError=app.importMusicFolderPath(musicFolderPath.text);
+            if(!pathError){musicFolderPath.clear();close();}else musicFolderPath.forceActiveFocus();
+        }
+        contentItem: ColumnLayout {
+            spacing: 12
+            MTextField {
+                id: musicFolderPath; objectName: "musicFolderPath"; Layout.fillWidth: true
+                label: "Folder path"; placeholderText: activeFocus?"/path/to/Music or ~/Music":""
+                onTextChanged: musicFolderEntry.pathError=""
+                onAccepted: musicFolderEntry.submit()
+                Accessible.description: musicFolderEntry.pathError
+            }
+            SungText { objectName: "musicFolderPathError"; Layout.fillWidth: true; visible: !!musicFolderEntry.pathError; text: musicFolderEntry.pathError; color: Theme.error; wrapMode: Text.Wrap }
+            MButton { objectName: "browseMusicFolderButton"; text: "Browse…"; symbol: "folder"; enabled: !app.importingLocal; onClicked: {musicFolderEntry.close();window.openFileDialog("folder");} }
+        }
+        footer: Item {
+            implicitHeight: 88
+            RowLayout {
+                anchors.fill: parent; anchors.leftMargin: 24; anchors.rightMargin: 24; anchors.topMargin: 16; anchors.bottomMargin: 24; spacing: 8
+                Item { Layout.fillWidth: true }
+                MButton { text: "Cancel"; onClicked: musicFolderEntry.close() }
+                MButton { objectName: "confirmMusicFolderButton"; text: "Add folder"; filled: true; enabled: !!musicFolderPath.text.trim() && !app.importingLocal; onClicked: musicFolderEntry.submit() }
+            }
         }
     }
     MDialog {

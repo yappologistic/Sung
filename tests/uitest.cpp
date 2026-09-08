@@ -763,15 +763,28 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
   check(b->playing()&&b->media()->source()==QUrl::fromLocalFile(audioPath),"playlist cleanup preserves native playback");
   QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);b->undo();check(b->results()->count()==11,"cleanup has a single Undo");b->removePlaylistRows(id,{9,10});
   b->library("files");QTest::qWait(200);click("musicFoldersButton");shot("music-folders-empty");click("addMusicFolderButton");
+  auto folderPath=findItem(w->contentItem(),"musicFolderPath");check(until([&]{return folderPath&&folderPath->hasActiveFocus();},2000),"folder path entry opens with keyboard focus");
+  const auto musicDir=dir+"/Music #100%";QDir().mkpath(musicDir+"/Artist/Album");QFile::copy(audioPath,musicDir+"/Artist/Album/Folder song.wav");
+  if(folderPath)folderPath->setProperty("text","relative/path");
+  click("confirmMusicFolderButton");
+  auto pathError=findItem(w->contentItem(),"musicFolderPathError");check(pathError&&pathError->isVisible()&&!pathError->property("text").toString().isEmpty(),"invalid folder path stays open with inline error");shot("folder-path-error");
+  if(folderPath)folderPath->setProperty("text",musicDir);
+  click("browseMusicFolderButton");
   auto dialogs=w->property("fileDialogs").value<QObject*>();auto folderPicker=dialogs?dialogs->property("folderPicker").value<QObject*>():nullptr;
-  check(folderPicker&&folderPicker->property("visible").toBool(),"native music folder picker opens");
-  const auto musicDir=dir+"/Music";QDir().mkpath(musicDir+"/Album");QFile::copy(audioPath,musicDir+"/Album/Folder song.wav");
+  check(folderPicker&&folderPicker->property("visible").toBool(),"optional native folder picker opens");
+  if(folderPicker)QMetaObject::invokeMethod(folderPicker,"reject");
+  QTest::qWait(300);check(folderPath&&folderPath->isVisible()&&folderPath->property("text")==musicDir,"canceling native picker restores typed path");shot("folder-path-entry");
+  click("confirmMusicFolderButton");
+  check(until([&]{return !b->importingLocal();},10000)&&b->musicFolders().contains(musicDir),"typed folder path imports and remembers root without native selection");
+  check(b->results()->count()==2,"typed folder import adds nested audio");
+  click("musicFoldersButton");click("addMusicFolderButton");click("browseMusicFolderButton");
   if(folderPicker){folderPicker->setProperty("selectedFolder",QUrl::fromLocalFile(musicDir));QMetaObject::invokeMethod(folderPicker,"accept");}
   QTest::qWait(200);QWindowSystemInterface::handleFocusWindowChanged(nullptr);QWindowSystemInterface::handleFocusWindowChanged(w);
-  check(until([&]{return !b->importingLocal();},10000)&&b->musicFolders().contains(musicDir),"folder picker imports and remembers selected folder");
-  check(b->results()->count()==2,"recursive folder import adds nested song");click("musicFoldersButton");shot("music-folders");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  check(folderPath&&folderPath->isVisible()&&folderPath->property("text").toString().startsWith("file:"),"native selection returns to explicit folder confirmation");click("confirmMusicFolderButton");
+  check(until([&]{return !b->importingLocal();},10000)&&b->results()->count()==2,"native folder selection also imports without duplicates");
+  click("musicFoldersButton");shot("music-folders");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
   click("rescanFoldersButton");check(until([&]{return !b->importingLocal();},5000)&&b->results()->count()==2,"Rescan skips unchanged files without duplicate entries");
-  b->forgetMusicFolder(musicDir);check(b->results()->count()==2&&QFile::exists(musicDir+"/Album/Folder song.wav"),"forgetting folder keeps music and original files");
+  b->forgetMusicFolder(musicDir);check(b->results()->count()==2&&QFile::exists(musicDir+"/Artist/Album/Folder song.wav"),"forgetting folder keeps music and original files");
   b->removeLocalFile(local.value("id").toString());check(QFile::exists(audioPath),"removing local library entry preserves original audio");b->resetLyrics();
   b->openPlaylist(id);QTest::qWait(100);w->setProperty("side","");w->setProperty("collectionTools",true);b->collection()->setQuery("");b->collection()->setSortKey("original");
   w->resize(780,580);QTest::qWait(300);click("collectionSortButton");
@@ -1234,4 +1247,30 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
   b->setMotion(false);if(list){if(auto selection=qobject_cast<RowSelection*>(list->property("selection").value<QObject*>()))selection->clear();list->setProperty("contentY",220);}QTest::qWait(50);
   bool offscreenTip=false;for(auto tip:w->findChildren<QObject*>("fullTitleTip"))if(tip->property("visible").toBool())offscreenTip=true;check(!offscreenTip,"scrolling hides offscreen title tooltips");shot("06-reduced-motion");w->resize(900,650);QTest::qWait(300);shot("07-narrow-layout");
   b->stop();b->clearQueue();b->deletePlaylist(id);qunsetenv("SUNG_BUFFER_FIXTURE");fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
+void runFolderImportTests(Backend *b,QQuickWindow *w) {
+  int failures=0;auto check=[&](bool ok,const char *label){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",label);fflush(stdout);if(!ok)++failures;};
+  auto until=[](const std::function<bool()> &p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<8000)QTest::qWait(25);return p();};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto click=[&](const char *name){auto item=findItem(w->contentItem(),name);check(item&&item->isVisible(),name);if(item){QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,item->mapToScene(item->boundingRect().center()).toPoint());QTest::qWait(450);}};
+  auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1000,750);b->setVolume(0);b->setAutoplay(false);b->setTheme("dark");b->library("files");QTest::qWait(450);
+  const auto root=dir+"/Music #100% ü";QDir().mkpath(root+"/Artist/Album");const auto song=root+"/Artist/Album/Example.wav";
+  QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","12",song});check(encode.waitForFinished(10000)&&encode.exitCode()==0,"nested audio fixture created");
+  click("musicFoldersButton");click("addMusicFolderButton");auto path=findItem(w->contentItem(),"musicFolderPath");
+  check(until([&]{return path&&path->hasActiveFocus();}),"folder field receives focus");
+  if(path)path->setProperty("text","relative/path");
+  click("confirmMusicFolderButton");auto error=findItem(w->contentItem(),"musicFolderPathError");check(error&&error->isVisible(),"invalid path remains editable with inline error");shot("01-invalid-path");
+  if(path)path->setProperty("text",root);
+  click("browseMusicFolderButton");auto dialogs=w->property("fileDialogs").value<QObject*>();auto picker=dialogs?dialogs->property("folderPicker").value<QObject*>():nullptr;
+  check(picker&&picker->property("visible").toBool(),"optional picker opens");if(picker)QMetaObject::invokeMethod(picker,"reject");
+  check(until([&]{return path&&path->hasActiveFocus();})&&path->property("text")==root,"cancel restores path and focus");QTest::qWait(300);shot("02-path-entry");
+  auto button=findItem(w->contentItem(),"confirmMusicFolderButton");auto dialog=w->findChild<QObject*>("musicFolderEntry");
+  if(button&&dialog){const auto bottom=button->mapRectToScene(button->boundingRect()).bottom();const auto dialogBottom=dialog->property("y").toReal()+dialog->property("height").toReal();check(dialogBottom-bottom>=20,"confirmation button has bottom spacing");}
+  click("confirmMusicFolderButton");check(until([&]{return !b->importingLocal();})&&b->musicFolders().contains(root)&&b->results()->count()==1,"manual path recursively imports nested song");shot("03-imported");
+  b->playCollection(0);check(until([&]{return b->playing();}),"imported nested song plays");b->pause();
+  click("musicFoldersButton");click("addMusicFolderButton");click("browseMusicFolderButton");if(picker){picker->setProperty("selectedFolder",QUrl::fromLocalFile(root));QMetaObject::invokeMethod(picker,"accept");}
+  check(until([&]{return path&&path->isVisible();}),"selected folder returns to confirmation");QTest::qWait(450);click("confirmMusicFolderButton");check(until([&]{return !b->importingLocal();})&&b->results()->count()==1,"confirming same folder does not duplicate songs");
+  b->stop();b->forgetMusicFolder(root);fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
