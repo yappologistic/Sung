@@ -28,6 +28,7 @@
 #include <unistd.h>
 #ifdef SUNG_DIAGNOSTICS
 #include "uitest.h"
+#include <QElapsedTimer>
 void runBenchmark(Backend *, QQuickWindow *);
 #endif
 #include <cstdio>
@@ -71,6 +72,9 @@ private:
   QMutex m_mutex;
 };
 int main(int argc, char **argv) {
+#ifdef SUNG_DIAGNOSTICS
+  QElapsedTimer startupTimer;startupTimer.start();
+#endif
   if (!qEnvironmentVariableIsSet("QT_FFMPEG_DECODING_HW_DEVICE_TYPES"))
     qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",");
   if (!qEnvironmentVariableIsSet("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES"))
@@ -151,6 +155,15 @@ int main(int argc, char **argv) {
                      &QObject::deleteLater);
   });
 #ifdef SUNG_DIAGNOSTICS
+  if (qEnvironmentVariableIsSet("SUNG_STARTUP_PROBE")) {
+    fprintf(stdout,"STARTUP_READY_MS %.3f\n",startupTimer.nsecsElapsed()/1e6);fflush(stdout);
+    QObject::connect(window,&QQuickWindow::frameSwapped,&app,[&] {
+      fprintf(stdout,"STARTUP_FRAME_MS %.3f\n",startupTimer.nsecsElapsed()/1e6);fflush(stdout);
+      app.quit();
+    },Qt::QueuedConnection);
+    QTimer::singleShot(10000,&app,[&]{app.exit(2);});
+    return app.exec();
+  }
   if (args.contains("--benchmark")) {
     QTimer::singleShot(0, &app, [&] { runBenchmark(&backend, window); });
     return app.exec();

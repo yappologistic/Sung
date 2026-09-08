@@ -14,6 +14,8 @@ if a.seconds<1 or a.repeats<1:p.error('seconds and repeats must be positive')
 if a.native_workspace:
  active=json.loads(subprocess.check_output(['hyprctl','activeworkspace','-j']))['id']
  if active==a.native_workspace:p.error('Choose an inactive workspace')
+ workspaces=json.loads(subprocess.check_output(['hyprctl','workspaces','-j']))
+ if any(w['id']==a.native_workspace and w['windows'] for w in workspaces):p.error('Choose an empty workspace')
  version=json.loads(subprocess.check_output(['hyprctl','version','-j']))['version']
  if '0.56' not in version:p.error('Native launch currently supports Hyprland 0.56; use invisible software measurements on other versions')
 audio=out/'silence.wav'
@@ -32,6 +34,7 @@ for repeat in range(a.repeats):
   library=run/'data/Sung/sung';library.mkdir(parents=True)
   (library/'library.json').write_text(json.dumps(dict(queue=tracks,index=0,position=60100)))
   env.pop('QT_QUICK_BACKEND',None)
+  if not a.native_workspace:env['QSG_RENDER_LOOP']='basic'
   env.update(QT_QPA_PLATFORM='wayland' if a.native_workspace else 'offscreen',QT_QPA_PLATFORMTHEME='generic',FONTCONFIG_FILE=str(fonts),SUNG_HELPER=str(helper),SUNG_PYTHON='python3',SUNG_BENCH_AUDIO=str(audio),SUNG_BENCH_MODE=mode,SUNG_BENCH_MS=str(a.seconds*1000),SUNG_BENCH_OUTPUT=str(run),SUNG_BENCH_ART='1')
   if not a.native_workspace:env['QT_QUICK_BACKEND']='software'
   subprocess.run([str(a.binary.resolve().with_name('sung-artwork-fixture'))],env=env,check=True)
@@ -41,8 +44,8 @@ for repeat in range(a.repeats):
   if a.native_workspace:
    # exec preserves the launch PID so compositor rules apply to the test app.
    launcher=run/'launch.py';launcher.write_text('import os\nos.environ.update('+repr(env)+')\nopen('+repr(str(run/'pid'))+',"w").write(str(os.getpid()))\nf=os.open('+repr(str(run/'private.log'))+',os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)\nos.dup2(f,1);os.dup2(f,2)\nos.execv('+repr(command[0])+','+repr(command)+')\n')
-   lua='hl.dsp.exec_cmd('+json.dumps(shlex.join(['python3',str(launcher)]))+', {workspace='+json.dumps(str(a.native_workspace)+' silent')+',float=true,size={1180,800},no_initial_focus=true,suppress_event="activate activatefocus"})'
-   subprocess.run(['hyprctl','dispatch',lua],check=True,capture_output=True)
+   lua='hl.exec_cmd('+json.dumps(shlex.join(['python3',str(launcher)]))+', {workspace='+json.dumps(str(a.native_workspace)+' silent')+',float=true,size="1180 800",no_initial_focus=true,suppress_event="activate activatefocus"})'
+   subprocess.run(['hyprctl','eval',lua],check=True,capture_output=True)
    deadline=time.monotonic()+a.seconds+45
    result_file=run/(mode+'.json')
    while time.monotonic()<deadline:

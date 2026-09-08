@@ -22,12 +22,24 @@ AbstractButton {
     opacity: enabled || busy ? 1 : 0.38
     Accessible.name: tip
     Accessible.description: busy ? "Loading" : confirmed ? "Added to queue" : ""
-    ToolTip {
-        visible: (control.hovered || control.visualFocus) && control.needsTooltip
-        delay: 650; text: control.tip
-        padding: 10
-        contentItem: SungText { text: control.tip; font.pixelSize: 12; color: Theme.background }
-        background: Rectangle { color: Theme.text; radius: 8 }
+    Loader {
+        id: tooltipLoader
+        readonly property bool wanted: (control.hovered || control.visualFocus) && control.needsTooltip
+        // Keep the popup alive until its exit transition has finished.
+        active: false
+        function releaseIfIdle() { if (!wanted && (!item || !item.visible)) active=false; }
+        onWantedChanged: { if (wanted) active=true; else releaseIfIdle(); }
+        Component.onCompleted: if (wanted) active=true
+        sourceComponent: ToolTip {
+            objectName: "buttonTip"
+            parent: control
+            visible: tooltipLoader.wanted
+            onClosed: Qt.callLater(tooltipLoader.releaseIfIdle)
+            delay: 650; text: control.tip
+            padding: 10
+            contentItem: SungText { text: control.tip; font.pixelSize: 12; color: Theme.background }
+            background: Rectangle { color: Theme.text; radius: 8 }
+        }
     }
     background: Rectangle {
         radius: control.down ? 14 : control.height / 2

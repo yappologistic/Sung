@@ -1239,6 +1239,38 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
   b->collection()->setQuery("Aurora night");QTest::qWait(250);auto row=findItem(w->contentItem(),"trackRow_0");auto label=row?findItem(row,"trackTitle"):nullptr;
   check(label&&label->property("text").toString().contains("<b>Aurora")&&label->property("text").toString().contains("&lt;"),"matches highlighted while metadata markup is escaped");shot("02-search-matches");
   if(label){QTest::mouseMove(w,label->mapToScene(QPointF(40,label->height()/2)).toPoint());QTest::qWait(750);auto tip=label->findChild<QObject*>("fullTitleTip");check(tip&&tip->property("visible").toBool(),"truncated title reveals on hover");shot("03-full-title");}
+  if(label){
+    QTest::mouseMove(w,QPoint(1100,80));QTest::qWait(450);
+    check(!label->findChild<QObject*>("fullTitleTip"),"closed title tooltip releases its objects");
+    QTest::mouseMove(w,label->mapToScene(QPointF(40,label->height()/2)).toPoint());QTest::qWait(100);
+    QTest::mouseMove(w,QPoint(1100,80));QTest::qWait(750);
+    check(!label->findChild<QObject*>("fullTitleTip"),"short hover cancels delayed title tooltip");
+  }
+  QPointer<QQuickItem> focusBeforeTooltip=w->activeFocusItem();
+  QQmlComponent buttonComponent(qmlEngine(w),QUrl("qrc:/qml/MButton.qml"));
+  auto tooltipButton=qobject_cast<QQuickItem*>(buttonComponent.create());
+  check(tooltipButton,"tooltip test button loads");
+  if(tooltipButton){
+    tooltipButton->setParentItem(w->contentItem());tooltipButton->setPosition(QPointF(950,180));tooltipButton->setZ(100);
+    tooltipButton->setProperty("symbol","play");tooltipButton->setProperty("tip","Play fixture");
+    tooltipButton->setSize(QSizeF(48,48));w->grabWindow();
+    auto findTip=[&]()->QObject*{return tooltipButton->findChild<QObject*>("buttonTip");};
+    check(!findTip(),"button tooltip is not allocated before use");
+    QTest::mouseMove(w,tooltipButton->mapToScene(tooltipButton->boundingRect().center()).toPoint());QTest::qWait(250);
+    check(findTip()&&!findTip()->property("visible").toBool(),"button tooltip preserves delay");
+    QTest::qWait(500);
+    check(findTip()&&findTip()->property("visible").toBool()&&findTip()->property("parent").value<QQuickItem*>()==tooltipButton,"button tooltip appears anchored to button");
+    QTest::mouseMove(w,QPoint(1100,80));QTest::qWait(450);
+    check(!findTip(),"button tooltip releases after closing");
+    tooltipButton->forceActiveFocus(Qt::TabFocusReason);QTest::qWait(750);
+    check(findTip()&&findTip()->property("visible").toBool(),"keyboard focus still reveals button tooltip");
+    delete tooltipButton;
+    if(focusBeforeTooltip)focusBeforeTooltip->forceActiveFocus(Qt::OtherFocusReason);
+  }
+  if(qEnvironmentVariableIsSet("SUNG_TOOLTIP_PROBE")){
+    b->stop();b->clearQueue();b->deletePlaylist(id);qunsetenv("SUNG_BUFFER_FIXTURE");
+    fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);return;
+  }
   b->collection()->setQuery("not present");QTest::qWait(250);auto action=findItem(w->contentItem(),"emptyStateAction");check(action&&action->isVisible(),"empty filtered view offers an action");if(action)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,action->mapToScene(action->boundingRect().center()).toPoint());QTest::qWait(200);check(b->collection()->count()==30,"clear filters restores songs");
   QQmlComponent cardComponent(qmlEngine(w),QUrl("qrc:/qml/ArtCard.qml"));auto card=qobject_cast<QQuickItem*>(cardComponent.create());check(card,"cover component loads");if(card){card->setParentItem(w->contentItem());card->setX(350);card->setY(240);card->setZ(100);card->setProperty("track",QVariantMap{{"kind","local"},{"id",id},{"title","Evening collection"}});QTest::mouseMove(w,QPoint(400,300));QTest::qWait(250);auto play=findItem(card,"cardAction");check(play&&play->property("symbol")=="play"&&play->isVisible(),"collection hover exposes play action");shot("04-cover-play");if(play)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,play->mapToScene(play->boundingRect().center()).toPoint());check(b->buffering() || b->playing(),"play request exposes loading or ready state");check(until([&]{return b->playing();}),"cover action begins playback");check(until([&]{return !b->buffering();}),"loading feedback clears when audio is ready");check(b->queue()->count()==30&&b->page()=="local"&&b->libraryId()==id,"cover playback preserves page and plays whole local playlist");delete card;}
   b->playCover({{"kind","album"},{"id","fixture-album"}});check(!b->coverPlayId().isEmpty(),"remote cover request exposes loading state");check(until([&]{return b->coverPlayId().isEmpty()&&b->queue()->count()==2;}),"remote cover plays collection without navigation");check(b->libraryId()==id,"remote cover preserves collection page");
@@ -1265,6 +1297,8 @@ void runFolderImportTests(Backend *b,QQuickWindow *w) {
   if(path)path->setProperty("text",root);
   click("browseMusicFolderButton");auto dialogs=w->property("fileDialogs").value<QObject*>();auto picker=dialogs?dialogs->property("folderPicker").value<QObject*>():nullptr;
   check(picker&&picker->property("visible").toBool(),"optional picker opens");if(picker)QMetaObject::invokeMethod(picker,"reject");
+  // The offscreen plugin has no compositor to restore focus after a native dialog.
+  if(QGuiApplication::platformName()=="offscreen")QWindowSystemInterface::handleFocusWindowChanged(w);
   check(until([&]{return path&&path->hasActiveFocus();})&&path->property("text")==root,"cancel restores path and focus");QTest::qWait(300);shot("02-path-entry");
   auto button=findItem(w->contentItem(),"confirmMusicFolderButton");auto dialog=w->findChild<QObject*>("musicFolderEntry");
   if(button&&dialog){const auto bottom=button->mapRectToScene(button->boundingRect()).bottom();const auto dialogBottom=dialog->property("y").toReal()+dialog->property("height").toReal();check(dialogBottom-bottom>=20,"confirmation button has bottom spacing");}

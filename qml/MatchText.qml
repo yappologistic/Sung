@@ -20,11 +20,22 @@ SungText {
     textFormat: query.trim()?Text.StyledText:Text.PlainText
     Accessible.name: sourceText
     HoverHandler { id: hover }
-    ToolTip {
-        objectName: "fullTitleTip"
-        visible: label.tooltipEnabled && label.truncated && label.visible && (hover.hovered || label.revealFocused)
-        delay: 650; timeout: -1; width: Math.min(360,label.Window.window?label.Window.window.width-32:360); padding: 12
-        contentItem: SungText { text: label.sourceText; wrapMode: Text.Wrap; maximumLineCount: 8; font.pixelSize: 13; color: Theme.text }
-        background: Rectangle { color: Theme.high; radius: 12; border.color: Theme.outline }
+    Loader {
+        id: tooltipLoader
+        readonly property bool wanted: label.tooltipEnabled && label.truncated && label.visible && (hover.hovered || label.revealFocused)
+        // Keep the popup alive until its exit transition has finished.
+        active: false
+        function releaseIfIdle() { if (!wanted && (!item || !item.visible)) active=false; }
+        onWantedChanged: { if (wanted) active=true; else releaseIfIdle(); }
+        Component.onCompleted: if (wanted) active=true
+        sourceComponent: ToolTip {
+            objectName: "fullTitleTip"
+            parent: label
+            visible: tooltipLoader.wanted
+            onClosed: Qt.callLater(tooltipLoader.releaseIfIdle)
+            delay: 650; timeout: -1; width: Math.min(360,label.Window.window?label.Window.window.width-32:360); padding: 12
+            contentItem: SungText { text: label.sourceText; wrapMode: Text.Wrap; maximumLineCount: 8; font.pixelSize: 13; color: Theme.text }
+            background: Rectangle { color: Theme.high; radius: 12; border.color: Theme.outline }
+        }
     }
 }
