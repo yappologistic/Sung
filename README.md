@@ -24,10 +24,10 @@ A minimal Material 3 player built with C++ and Qt Quick, designed for CachyOS an
 
 - **YouTube Music** — search songs, albums, artists and playlists; play audio without an embedded browser or ad interface.
 - **Navidrome / Subsonic** — browse and search your server, play original or transcoded audio, edit server playlists, rate songs, sync favorites and listening history, and display server lyrics.
-- **Your music** — import FLAC, MP3 and other supported audio files or folders; search paths and group songs by folder. Mix local and YouTube songs in the same playlists.
-- **Animated artwork** — play local animated covers in the player, immersive view and mini player; lists use still covers.
+- **Your music** — import FLAC, MP3 and other supported audio files or folders; browse albums and artists, search paths and group songs by folder. Mix local and YouTube songs in the same playlists.
+- **Animated artwork** — local animated covers and automatic online covers for matching YouTube songs, shared across the player, immersive view and mini player; lists use still covers.
 - **Lyrics** — synchronized lyrics, an immersive view, timing adjustments, LRC import, seek previews and search with jump-to-line playback.
-- **Library tools** — likes, listening history, smart mixes, custom smart playlists, automatic playlist covers, playlist cleanup, multi-selection, drag reordering and Undo.
+- **Library tools** — likes, listening history, smart mixes, custom smart playlists, custom playlist covers, playlist cleanup, multi-selection, drag reordering and Undo.
 - **Playback controls** — mini player, queue editing with source headings, shuffle, repeat, sleep timer, playback speed and audio-device selection.
 - **Desktop integration** — media keys through MPRIS, optional notifications, light/dark themes and Noctalia palette support.
 
@@ -67,15 +67,45 @@ Sung uses Google Sans Flex when installed and otherwise falls back to a system f
 
 ## Getting started
 
-Search for music or paste a YouTube song or playlist link. Use **Library → Local files → +** to add files, or **Folders → Add folder…** for a whole music folder. Enter its absolute path (or `~/Music`), or use **Browse…**, then choose **Add folder**. This also works for network shares mounted as local folders and does not depend on the system folder picker. Subfolders are scanned recursively. The refresh button rescans saved folders for new and changed audio.
+### Music library
+
+Search for music or paste a YouTube song or playlist link. Use **Library → Local files → +** to add files, or **Folders → Add folder…** for a whole music folder. Enter its absolute path (or `~/Music`), or use **Browse…**, then choose **Add folder**. This also works for network shares mounted as local folders and does not depend on the system folder picker. Subfolders are scanned recursively. Saved folders update automatically while Sung is running. Settings can disable automatic updates; the refresh button also rescans them. Missing files remain listed as unavailable; files and playlist entries are never deleted by a scan. Folder monitoring uses filesystem notifications and is bounded to 4,096 directories and 10,000 audio files; use manual rescan for larger libraries or mounts that do not deliver notifications.
 
 In **Local files**, open **Find and sort songs → Folder** to group songs by their parent directory, with natural filename order inside each group. The filter also searches folder paths.
 
-For animated artwork, place a **GIF, animated WebP, MP4 or WebM** beside your music, named `cover`, `folder`, `front` or `artwork` (for example, `cover.mp4`). A matching song filename, such as `Song.gif` beside `Song.flac`, takes priority. Names are case-insensitive. JPG, PNG and static WebP sidecars also work as still covers. Import or rescan the folder after changing its artwork. Covers are limited to 128 MiB and 4096 × 4096 pixels; unreadable covers fall back to embedded artwork. Animation is silent, pauses with playback, and respects **Settings → Animations** and **Animated album artwork**. No artwork service account is needed.
-
 Create an automatic playlist from **Library → Playlists → Smart playlist**. Combine artist, title, source, liked status and last-played rules over your saved music. Use **Edit rules** to change it; matching songs update automatically.
 
-Open a song’s menu for **Track details**, or type in **Settings** to find a control.
+**Local files → Albums / Artists** groups imported music by its tags. Albums use album-artist tags when present, with disc and track order preserved. Use **Rescan** after upgrading to refresh tags on existing imports.
+
+In a playlist’s menu, choose **Change cover…** to crop a PNG, JPEG or WebP. Sung saves a 512px copy; the original stays untouched. **Restore cover collage** returns to automatic artwork.
+
+### Artwork and appearance
+
+For animated artwork, place a **GIF, animated WebP, MP4 or WebM** beside your music, named `cover`, `folder`, `front` or `artwork` (for example, `cover.mp4`). A matching song filename, such as `Song.gif` beside `Song.flac`, takes priority. Names are case-insensitive. JPG, PNG and static WebP sidecars also work as still covers. Import or rescan the folder after changing its artwork. Covers are limited to 128 MiB and 4096 × 4096 pixels; unreadable covers fall back to embedded artwork. Animation is silent, pauses with playback, and respects **Settings → Animations** and **Animated album artwork**. No artwork service account is needed.
+
+For YouTube songs, **Online animated covers** looks for a matching album on Apple Music’s public pages. This unofficial, best-effort lookup needs no account; it sends the song’s title and artist to Apple and checks the album and duration when available. Singles can use artwork from a verified original album release; missing search results are checked against the album’s track list. Many albums have no animation, and uncertain matches keep the original still cover. Temporary lookup failures get one automatic retry. Downloads are limited to 16 MiB per silent cover and 64 MiB of disk cache. Disable the lookup in Settings or remove downloaded covers with **Clear cache**.
+
+Open **Settings → Current artwork** to preview the current cover, view its source album, retry a match, disable animation for that song or choose a local GIF, WebP, MP4 or WebM. Local choices are saved per song and reference the selected file; keep it in place. **Use automatic cover** clears the override.
+
+**Settings → Use artwork accent** colors controls from the current cover. It is off by default; desktop surfaces and Noctalia integration are preserved. Monochrome or missing covers use the normal theme.
+
+The artwork controls also offer **Fit / Fill**, remembered per album where album metadata is available, otherwise per song. Immersive artwork requests a display-sized still cover up to 1600px; source quality remains the limit. Artwork accents transition smoothly when animations are enabled.
+
+### Playback and shortcuts
+
+The queue shows remaining time and a finish estimate during uninterrupted playback. Unknown durations, random shuffle, repeat, autoplay or a sleep timer can make a finish estimate unavailable.
+
+Album pages show the artist, release year when available, track count and duration, with disc headings when the source supplies disc numbers. Drag the lyrics/queue divider to resize the panel; double-click it to reset. Its width is remembered.
+
+Press **Ctrl+Shift+P** for quick actions, saved playlists and audio outputs. Type to filter, use the arrow keys, then press Enter.
+
+**Listening sessions** in Settings or Quick Actions save your queue, song position, speed, shuffle, repeat and autoplay settings. Resume asks before replacing the current queue. Sessions can be renamed, updated or deleted; up to 20 sessions of 2,000 songs each are kept locally.
+
+**Pause when audio output disconnects** is optional. Sung pauses when the selected device disappears; wired headphone-port detection uses `pactl` from `libpulse`. Reconnecting does not automatically resume playback.
+
+**Track details** shows playback codec, bitrate and decoded sample rate/channels when reported by the decoder. Local file metadata is labeled separately. Missing values are omitted.
+
+Type in **Settings** to find a control.
 
 Open a song’s menu to queue it, like it or add it to a playlist. Local playlist additions skip duplicates and can be undone. Views remember their filter, sort and scroll position during the session. Open **Clean up** in a local playlist to review duplicates and missing files; removal never deletes the original audio.
 
@@ -83,6 +113,7 @@ Open a song’s menu to queue it, like it or add it to a playlist. Local playlis
 | --- | --- |
 | Space | Play / pause |
 | Ctrl+F | Focus search |
+| Ctrl+Shift+P | Quick actions |
 | Ctrl+J | Show the playing song in the queue |
 | ? / F1 | Keyboard shortcut reference (outside text fields) |
 | Ctrl+M | Toggle mini player |
@@ -106,7 +137,7 @@ Tested against Navidrome 0.63.2. Other servers must support Subsonic 1.16.1 toke
 
 ### Accounts and saved data
 
-YouTube browsing is anonymous. YouTube likes, local playlists and local history are stored locally and **do not sync with your Google account**. Settings offers library JSON import/export; audio files and imported LRC files are not bundled into exports.
+YouTube browsing is anonymous. YouTube likes, local playlists and local history are stored locally and **do not sync with your Google account**. Settings offers library JSON import/export; audio files, custom cover images and imported LRC files are not bundled into exports.
 
 For streams requiring sign-in, Settings can import a user-selected Netscape-format cookie file. Sung does not read your browser profile. Cookies can be removed in Settings.
 
@@ -141,7 +172,7 @@ Run automated tests:
 ./scripts/verify.sh --offline
 ```
 
-The full integration suite is `./scripts/verify.sh`. It needs network access, a working audio session, Google Sans Flex, Qt Test, `qdbus6` and `dbus-run-session` (`qt6-tools` and `dbus` provide the command-line tools on Arch). It briefly plays audio at low volume and uses isolated test profiles.
+The full integration suite is `./scripts/verify.sh`. It needs network access, a working audio session, Google Sans Flex, Qt Test, `qdbus6` and `dbus-run-session` (`qt6-tools` and `dbus` provide the command-line tools on Arch). It briefly plays audio at low volume and uses isolated test profiles. The online-artwork checks compare fresh downloads and cached replay across five albums, then verify native rendering with muted YouTube playback. These live checks depend on the albums remaining available.
 
 Reports and screenshots are written to the ignored `verification/` directory. Do not attach raw logs or cookie files to issues; playback logs may contain signed media URLs. The Git allowlist keeps build outputs, runtime environments, personal media and development reports out of the repository.
 

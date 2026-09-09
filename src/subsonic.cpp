@@ -386,6 +386,8 @@ QVariantMap Subsonic::item(const QVariantMap &raw, const QString &kind) const {
       {"artist", raw.value("artist", raw.value("owner"))},
       {"album", raw.value("album")},
       {"seconds", raw.value("duration", 0)},
+      {"discNumber", raw.value("discNumber", 1)},
+      {"year", raw.value("year")},
       {"count", raw.value("songCount", raw.value("albumCount", 0))},
       {"rating", raw.value("userRating", 0)},
       {"available", true}};
@@ -632,6 +634,7 @@ void Subsonic::browse(const QVariantMap &req, Reply callback, const QString &cha
                                         rows.size() == 100}};
         if (container.contains("name"))
           result["title"] = container.value("name");
+        if (mode == "album"){result["artist"]=container.value("artist");result["year"]=container.value("year");}
         if (mode == "playlist")
           result["editable"] =
               container.value("owner").toString() == m_username;

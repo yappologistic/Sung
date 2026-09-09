@@ -1,5 +1,6 @@
 #include "backend.h"
 #include <QLocale>
+#include <QMediaMetaData>
 #include "lrc.h"
 #include <QClipboard>
 #include <QSet>
@@ -53,11 +54,14 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     emit queueInfoChanged();
   });
   connect(this,&Backend::trackChanged,this,&Backend::queueInfoChanged);
+  connect(this,&Backend::trackChanged,this,&Backend::artworkFitChanged);
   connect(this,&Backend::positionChanged,this,&Backend::queueInfoChanged);
   connect(this,&Backend::playbackChanged,this,&Backend::queueInfoChanged);
   connect(this,&Backend::settingsChanged,this,&Backend::queueInfoChanged);
-  connect(&m_devices,&QMediaDevices::audioOutputsChanged,this,[this]{applyAudioDevice();emit audioDevicesChanged();});
-  applyAudioDevice();
+  connect(&m_devices,&QMediaDevices::audioOutputsChanged,this,[this]{outputsChanged();});
+  applyAudioDevice();setupDisconnectMonitor();
+  connect(&m_media,&QMediaPlayer::metaDataChanged,this,&Backend::qualityChanged);
+  connect(&m_media,&QMediaPlayer::sourceChanged,this,[this]{m_decodeRate=0;m_decodeChannels=0;emit qualityChanged();});
   m_saveTimer.setSingleShot(true);
   m_saveTimer.setInterval(600);
   connect(&m_saveTimer, &QTimer::timeout, this, &Backend::save);
@@ -86,6 +90,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
   connect(&m_levelIdle,&QTimer::timeout,this,&Backend::resetAudioLevels);
   m_media.setAudioBufferOutput(&m_visualAudio);
   connect(&m_visualAudio,&QAudioBufferOutput::audioBufferReceived,this,[this](const QAudioBuffer &buffer){
+    if(buffer.isValid() && (m_decodeRate!=buffer.format().sampleRate() || m_decodeChannels!=buffer.format().channelCount())){m_decodeRate=buffer.format().sampleRate();m_decodeChannels=buffer.format().channelCount();emit qualityChanged();}
     if(!m_uiActive || !motion() || !playing())return;
     if(!buffer.isValid()){resetAudioLevels();return;}
     m_levelAnalyzer.process(buffer);
@@ -142,6 +147,13 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             emit playbackChanged();
             notifyError("The audio stream was interrupted. Retry to reconnect.","play");
           });
+  m_onlineArtworkTimer.setSingleShot(true);
+  m_onlineArtworkTimer.setTimerType(Qt::PreciseTimer);
+  m_onlineArtworkTimer.setInterval(1000);
+  connect(&m_onlineArtworkTimer,&QTimer::timeout,this,&Backend::fetchOnlineArtwork);
+  connect(this,&Backend::trackChanged,this,[this]{updateOnlineArtwork();emit onlineArtworkChanged();});
+  connect(this,&Backend::playbackChanged,this,&Backend::updateOnlineArtwork);
+  connect(this,&Backend::settingsChanged,this,&Backend::updateOnlineArtwork);
   m_prepareTimer.setSingleShot(true); m_prepareUpdate.setSingleShot(true);
   connect(&m_prepareTimer,&QTimer::timeout,this,&Backend::updatePreparation);
   connect(&m_prepareUpdate,&QTimer::timeout,this,&Backend::updatePreparation);
@@ -151,11 +163,14 @@ Backend::Backend(QObject *parent) : QObject(parent) {
   connect(this,&Backend::settingsChanged,this,schedule);
   connect(this,&Backend::seeked,this,schedule);
   connect(&m_queue,&Entries::countChanged,this,schedule);
+  connect(this,&Backend::libraryChanged,this,&Backend::updateLocalView);
   connect(this,&Backend::libraryChanged,this,[this]{if(m_page=="local" && !smartPlaylist(m_libraryId).isEmpty()){for(const auto &p:m_playlists)if(p.toMap().value("id")==m_libraryId){const auto rows=playlistRows(p.toMap());if(rows!=m_results.rows)m_results.assign(rows);}}if(m_page=="library"&&(m_libraryId.startsWith("mix-")||m_libraryId=="files")){const auto rows=libraryRows(m_libraryId);if(rows!=m_results.rows)m_results.assign(rows);}});
   load();
   setupServer();
+  setupFolderWatching();
 }
 Backend::~Backend() {
+  m_portMonitor.kill();m_portProbe.kill();m_portMonitor.waitForFinished(500);m_portProbe.waitForFinished(500);
   m_notifier.clear();
   save();
   for (const auto &key : m_processes.keys())
@@ -314,9 +329,10 @@ void Backend::back() {
   dismissError();
   if(m_page=="local") {
     bool found=false;
-    for(const auto &v:m_playlists)if(v.toMap().value("id")==m_libraryId){found=true;m_title=v.toMap().value("title").toString();m_results.assign(playlistRows(v.toMap()));}
+    for(const auto &v:m_playlists)if(v.toMap().value("id")==m_libraryId){found=true;m_title=v.toMap().value("title").toString();m_cover=v.toMap().value("customCover").toString();m_results.assign(playlistRows(v.toMap()));}
     if(!found)library("playlists");
   } else if(m_page=="library") m_results.assign(libraryRows(m_libraryId));
+  else if(m_page=="local-album" || m_page=="local-artist")updateLocalView();
   emit catalogChanged();
 }
 void Backend::startSearch() {
@@ -377,6 +393,7 @@ void Backend::browseRequest(QVariantMap req, bool push) {
     if (data.contains("title"))
       m_title = data.value("title").toString();
     m_cover = data.value("art").toString();
+    if(op=="album"){m_request["artist"]=data.value("artist");m_request["year"]=data.value("year");}
     const auto limit = m_request.value("limit", 30).toInt();
     m_more = (op == "search" && m_results.count() >= limit && limit < 200) ||
              (op == "playlist" &&
@@ -394,6 +411,7 @@ void Backend::more() {
   browseRequest(req, false);
 }
 void Backend::refresh() {
+  if(m_page=="local-album" || m_page=="local-artist"){updateLocalView();return;}
   if(m_page=="server"){auto req=m_request;req["offset"]=0;serverBrowseRequest(req,false);return;}
   if (!m_request.isEmpty())
     browseRequest(m_request, false);
@@ -401,6 +419,8 @@ void Backend::refresh() {
     library(m_libraryId);
 }
 void Backend::open(const QVariantMap &item) {
+  if(item.value("kind")=="local-album" || item.value("kind")=="local-artist"){openLocalGroup(item);return;}
+
   if(item.value("source")=="subsonic"){
     if(item.value("kind")=="song"){playItem(item);return;}
     if(!m_server.owns(item)){notifyError("Connect to this item’s server in Settings.");return;}
@@ -459,7 +479,7 @@ void Backend::cancelCoverPlay() {
 void Backend::playCover(const QVariantMap &item) {
   if(!playable({item}).isEmpty()){playItem(item);return;}
   const auto kind=item.value("kind").toString();
-  if(!QStringList{"album","playlist","local"}.contains(kind))return;
+  if(!QStringList{"album","playlist","local","local-album","local-artist"}.contains(kind))return;
   cancelCoverPlay();
   const auto token=m_coverPlayToken;
   m_coverPlayId=item.value("browseId",item.value("id")).toString();
@@ -473,6 +493,7 @@ void Backend::playCover(const QVariantMap &item) {
     if(songs.isEmpty()){emit toast("No playable songs in this collection");return;}
     invalidateUndo("queue");m_queue.reconcile(songs);playAt(0);
   };
+  if(kind=="local-album" || kind=="local-artist"){finish(localGroupRows(item),{});return;}
   if(kind=="local"){
     for(const auto &p:m_playlists)if(p.toMap().value("id")==item.value("id")){finish(playlistRows(p.toMap()),{});return;}
     finish({},"This playlist is no longer available.");return;
@@ -1019,6 +1040,10 @@ void Backend::clearCookies() {
   emit settingsChanged();
 }
 void Backend::clearCache() {
+  m_onlineArtworkTimer.stop();cancel("motion-artwork");++m_onlineArtworkGeneration;
+  m_onlineArtworkAttempted=true;
+  m_onlineMotionArt.clear();emit onlineArtworkChanged();
+  QDir(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/motion-art").removeRecursively();
   const auto p =
       QStandardPaths::writableLocation(QStandardPaths::CacheLocation) + "/art";
   QDir(p).removeRecursively();
@@ -1033,6 +1058,7 @@ void Backend::setUiActive(bool active) {
     emit positionChanged();
     if(playing())m_positionTick.start();
   }else {m_positionTick.stop();resetAudioLevels();}
+  updateOnlineArtwork();
 }
 void Backend::localTestSource(const QUrl &url) {
   m_stopped=false;
@@ -1056,6 +1082,7 @@ void Backend::load() {
   // Legacy history proves a play, but provides no trustworthy date.
   for(const auto &v:m_history)if(!m_lastPlayed.contains(itemId(v)))m_lastPlayed[itemId(v)]=0;
   m_playlists = d.value("playlists").toList();
+  m_sessions=d.value("sessions").toList().mid(0,20);
   m_pins = d.value("pins").toList().mid(0,24);
   m_lyricOffsets=d.value("lyricOffsets").toMap();
   m_queue.assign(playable(d.value("queue").toList()));
@@ -1073,7 +1100,7 @@ void Backend::save() {
   f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
   f.write(QJsonDocument::fromVariant(QVariantMap{{"musicFolders",m_musicFolders},{"localTracks",m_localTracks},{"favorites", m_favorites},
                                                  {"history", m_history},{"lastPlayed",m_lastPlayed},
-                                                 {"playlists", m_playlists},{"pins",m_pins},{"lyricOffsets",m_lyricOffsets},
+                                                 {"sessions",m_sessions},{"playlists", m_playlists},{"pins",m_pins},{"lyricOffsets",m_lyricOffsets},
                                                  {"queue", m_queue.rows},
                                                  {"index", m_index},{"position",position()}})
               .toJson(QJsonDocument::Compact));
@@ -1166,6 +1193,7 @@ QVariantList Backend::playlists() const {
     p["count"] = p.contains("rules") ? -1 : p.value("tracks").toList().size();
     QStringList artwork;QSet<QString> seenArt;int inspected=0;
     for(const auto &t:p.value("tracks").toList()){if(++inspected>64)break;const auto url=t.toMap().value("art").toString();if(!url.isEmpty() && !seenArt.contains(url)){artwork.append(url);seenArt.insert(url);}if(artwork.size()==4)break;}
+    if(!p.value("customCover").toString().isEmpty())artwork={p.value("customCover").toString()};
     p["artworks"]=artwork;
     p.remove("tracks");
     result.append(p);
@@ -1173,6 +1201,10 @@ QVariantList Backend::playlists() const {
   return result;
 }
 void Backend::library(const QString &kind) {
+  if(kind=="local-albums" || kind=="local-artists"){
+    navigate("library",kind=="local-albums"?"Albums":"Artists",m_page!="library","library:"+kind);
+    m_libraryId=kind;m_results.assign(localGroups(kind));emit catalogChanged();return;
+  }
   if(kind=="server"){browseServer();return;}
   navigate("library",
            kind == "files" ? "Local files" : kind == "mixes" ? "Mixes" : kind=="mix-recent" ? "Recently liked" : kind=="mix-rediscover" ? "Rediscover" : kind=="mix-unplayed" ? "Unplayed" :
@@ -1213,6 +1245,7 @@ void Backend::openPlaylist(const QString &id) {
     if (p.value("id") == id) {
       navigate("local", p.value("title").toString(),true,"local:"+id);
       m_libraryId = id;
+      m_cover=p.value("customCover").toString();
       m_results.assign(playlistRows(p));
       emit catalogChanged();
       return;
@@ -1294,7 +1327,7 @@ void Backend::undo() {
     m_playlists = m_undoRows;
     if (m_page=="local") {
       bool found=false;
-      for(const auto &v:m_playlists)if(v.toMap().value("id")==m_libraryId){found=true;m_title=v.toMap().value("title").toString();m_results.assign(playlistRows(v.toMap()));}
+      for(const auto &v:m_playlists)if(v.toMap().value("id")==m_libraryId){found=true;m_title=v.toMap().value("title").toString();m_cover=v.toMap().value("customCover").toString();m_results.assign(playlistRows(v.toMap()));}
       if(!found)library("playlists");else emit catalogChanged();
     }
   } else
@@ -1396,7 +1429,7 @@ void Backend::setAudioDeviceId(const QString &id) {
     if(!found)return;
   }
   if(audioDeviceId()==id)return;
-  m_settings.setValue("audioDevice",id);applyAudioDevice();emit audioDevicesChanged();
+  m_settings.setValue("audioDevice",id);m_outputPort.clear();applyAudioDevice();if(pauseOnDisconnect())m_portDebounce.start();emit audioDevicesChanged();
 }
 void Backend::applyAudioDevice() {
   auto chosen=QMediaDevices::defaultAudioOutput();bool found=audioDeviceId().isEmpty();
@@ -1404,6 +1437,7 @@ void Backend::applyAudioDevice() {
   // A disconnected device falls back immediately. It cannot steal playback if it reconnects.
   if(!found)m_settings.remove("audioDevice");
   if(m_audio.device()!=chosen)m_audio.setDevice(chosen);
+  m_outputId=chosen.id();m_outputDescription=chosen.description();
 }
 void Backend::playCollection(int index) {
   if(index<0||index>=m_collection.count())return;
@@ -1429,7 +1463,7 @@ QVariantList Backend::pins() const {
       for(const auto &p:m_playlists)if(itemId(p)==item.value("id").toString()){
         const auto list=p.toMap();item["title"]=list.value("title");
         const auto tracks=list.value("tracks").toList();item["art"]=tracks.isEmpty()?QString():tracks.first().toMap().value("art");
-        QStringList artwork;int inspected=0;for(const auto &t:tracks){if(++inspected>64)break;const auto url=t.toMap().value("art").toString();if(!url.isEmpty()&&!artwork.contains(url))artwork.append(url);if(artwork.size()==4)break;}item["artworks"]=artwork;
+        QStringList artwork;int inspected=0;for(const auto &t:tracks){if(++inspected>64)break;const auto url=t.toMap().value("art").toString();if(!url.isEmpty()&&!artwork.contains(url))artwork.append(url);if(artwork.size()==4)break;}if(!list.value("customCover").toString().isEmpty()){artwork={list.value("customCover").toString()};item["art"]=list.value("customCover");}item["artworks"]=artwork;
         found=true;break;
       }
       if(!found)continue;
@@ -1488,7 +1522,7 @@ QString Backend::queueTime() const {
 }
 QString Backend::queueEnd() const {
   const auto ms=queueRemainingMs();
-  if(ms<=0||!playing()||resolving()||repeat()||autoplay()||m_sleepAtEnd||m_sleepTimer.isActive())return {};
+  if(ms<=0||!playing()||resolving()||buffering()||repeat()||autoplay()||m_sleepAtEnd||m_sleepTimer.isActive())return {};
   const auto now=QDateTime::currentDateTime(),end=now.addMSecs(ms);
   return "Ends around "+end.toString(end.date()==now.date()?"h:mm AP":"ddd h:mm AP");
 }
@@ -1645,6 +1679,7 @@ void Backend::movePlaylistRows(const QString &id,const QVariantList &indices,int
 }
 
 QVariantList Backend::libraryRows(const QString &kind) const {
+  if(kind=="local-albums" || kind=="local-artists")return localGroups(kind);
   if(kind=="files")return m_localTracks;
   if(kind=="favorites")return m_favorites;
   if(kind=="history")return m_history;
@@ -1698,7 +1733,7 @@ void Backend::importLocalFiles(const QVariantList &urls) {
   if(m_importFiles.isEmpty())return;
   m_importTotal=m_importFiles.size();m_importDone=0;m_importFailed=0;emit localImportChanged();importNextLocalBatch();
 }
-void Backend::cancelLocalImport(){cancel("folder-scan");m_scanningFolders=false;m_scanLimited=false;m_scanFailed=0;cancel("local-import");m_importFiles.clear();m_importTotal=0;m_relocateId.clear();emit localImportChanged();}
+void Backend::cancelLocalImport(){m_folderDirty=false;m_quietFolderScan=false;m_folderChangeTimer.stop();cancel("folder-scan");m_scanningFolders=false;m_scanLimited=false;m_scanFailed=0;cancel("local-import");m_importFiles.clear();m_importTotal=0;m_relocateId.clear();emit localImportChanged();}
 void Backend::locateLocalFile(const QUrl &url,const QString &id){
   if(importingLocal()||!url.isLocalFile())return;
   bool found=false;for(const auto &v:m_localTracks)if(itemId(v)==id)found=true;
@@ -1714,7 +1749,7 @@ void Backend::importNextLocalBatch(){
   if(m_importFiles.isEmpty()){
     const auto message=m_scanLimited?QString("Scan limit reached. Add a smaller folder to continue.") : (m_importFailed+m_scanFailed)?QString("Import finished · %1 unreadable files or folders").arg(m_importFailed+m_scanFailed):QString("Import finished");
     m_scanLimited=false;m_scanFailed=0;
-    m_importTotal=0;m_relocateId.clear();emit localImportChanged();emit toast(message);return;
+    m_importTotal=0;m_relocateId.clear();emit localImportChanged();if(!m_quietFolderScan)emit toast(message);m_quietFolderScan=false;return;
   }
   QStringList batch;int bytes=0;
   while(!m_importFiles.isEmpty()&&batch.size()<4&&bytes<16000){batch.append(m_importFiles.takeFirst());bytes+=batch.last().toUtf8().size()*2;}
@@ -1780,7 +1815,7 @@ void Backend::importMusicFolder(const QUrl &url) {
     if(m_musicFolders.size()>=64){emit toast("You can save up to 64 music folders");return;}
     m_musicFolders.append(path);emit libraryChanged();m_saveTimer.start();
   }
-  scanMusicFolders({path});
+  scanMusicFolders(m_musicFolders);
 }
 QString Backend::musicFolderLabel(const QString &path) const {
   QString root;
@@ -1797,19 +1832,25 @@ QString Backend::musicFolderLabel(const QString &path) const {
 void Backend::rescanMusicFolders(){if(!importingLocal()&&!m_musicFolders.isEmpty())scanMusicFolders(m_musicFolders);}
 void Backend::forgetMusicFolder(const QString &path){
   if(importingLocal())return;
-  if(m_musicFolders.removeAll(path)){emit libraryChanged();m_saveTimer.start();emit toast("Folder forgotten; songs kept");}
+  if(m_musicFolders.removeAll(path)){updateFolderWatches({});m_folderDirty=true;m_folderChangeTimer.start(1500);emit libraryChanged();m_saveTimer.start();emit toast("Folder forgotten; songs kept");}
 }
 void Backend::scanMusicFolders(const QStringList &folders){
   m_scanningFolders=true;m_scanLimited=false;m_scanFailed=0;emit localImportChanged();
-  QVariantMap known;for(const auto &v:m_localTracks){const auto t=v.toMap();known[t.value("localPath").toString()]=t.value("localStamp");}
+  QVariantMap known;for(const auto &v:m_localTracks){const auto t=v.toMap();if(t.value("available",true).toBool() && t.contains("albumArtist"))known[t.value("localPath").toString()]=t.value("localStamp");}
   request("folder-scan",{{"op","scan-folders"},{"folders",folders},{"known",known}},[this](const QVariantMap &data){
     m_scanningFolders=false;
-    if(!data.value("ok").toBool()){emit localImportChanged();emit toast("Could not scan music folders. Try Rescan.");return;}
+    if(!data.value("ok").toBool()){emit localImportChanged();if(!m_quietFolderScan)emit toast("Could not scan music folders. Try Rescan.");m_quietFolderScan=false;return;}
+    if(watchMusicFolders())updateFolderWatches(data.value("watchPaths").toStringList());
+    const auto missing=data.value("missing").toStringList();
+    if(!missing.isEmpty()){
+      for(auto &v:m_localTracks){auto t=v.toMap();if(missing.contains(t.value("localPath").toString())){t["available"]=false;v=t;}}
+      emit libraryChanged();m_saveTimer.start();
+    }
     m_scanLimited=data.value("limited").toBool();m_scanFailed=data.value("failed").toInt();
     QVariantList urls;for(const auto &v:data.value("files").toList())urls.append(QUrl::fromLocalFile(v.toString()));
     if(urls.isEmpty()){
-      emit localImportChanged();emit toast(m_scanLimited?"Scan limit reached. Choose a smaller folder.":m_scanFailed?"Some folders could not be read; songs kept":"No new or changed audio files");
-      m_scanLimited=false;m_scanFailed=0;return;
+      emit localImportChanged();if(!m_quietFolderScan)emit toast(m_scanLimited?"Scan limit reached. Choose a smaller folder.":m_scanFailed?"Some folders could not be read; songs kept":"No new or changed audio files");
+      m_scanLimited=false;m_scanFailed=0;m_quietFolderScan=false;return;
     }
     importLocalFiles(urls);
   });
@@ -1904,6 +1945,15 @@ QVariantList Backend::trackDetails(const QVariantMap &track) const {
   add("Source",track.value("source")=="subsonic"?"Music server":path.isEmpty()?"YouTube Music":"Local file");
   const int seconds=track.value("seconds").toInt();if(seconds>0)add("Duration",QString("%1:%2").arg(seconds/60).arg(seconds%60,2,10,QChar('0')));
   if(!path.isEmpty()) {const QFileInfo file(path);add("File",path);add("Format",file.suffix().toUpper());add("Available",file.isFile()?"Yes":"File missing");if(file.isFile())add("Size",QLocale().formattedDataSize(file.size()));}
+  if(track.value("id")==current().value("id") && !m_media.source().isEmpty()){
+    const auto meta=m_media.metaData();add("Playback codec",meta.stringValue(QMediaMetaData::AudioCodec));
+    const auto bitrate=meta.value(QMediaMetaData::AudioBitRate).toInt();if(bitrate>0)add("Playback bitrate",QString("%1 kb/s").arg(bitrate/1000));
+    if(m_decodeRate>0)add("Decoded sample rate",QString("%1 kHz").arg(m_decodeRate/1000.0,0,'g',6));
+    if(m_decodeChannels>0)add("Decoded channels",QString::number(m_decodeChannels));
+  }
+  add("File codec",track.value("codec").toString());
+  if(track.value("sampleRate").toInt()>0)add("File sample rate",QString("%1 kHz").arg(track.value("sampleRate").toInt()/1000.0,0,'g',6));
+  if(track.value("bitrate").toInt()>0)add("File bitrate",QString("%1 kb/s").arg(track.value("bitrate").toInt()/1000));
   return result;
 }
 
@@ -1919,4 +1969,49 @@ void Backend::resetAudioLevels() {
   m_levelIdle.stop();m_levelPublish.invalidate();m_levelAnalyzer.reset();
   const QVariantList silence{0.0,0.0,0.0,0.0,0.0};
   if(m_audioLevels!=silence){m_audioLevels=silence;emit audioLevelsChanged();}
+}
+
+
+void Backend::updateOnlineArtwork() {
+  const auto song=current();const auto id=song.value("id").toString();
+  const bool changed=id!=m_onlineArtworkId || m_trackToken!=m_onlineArtworkToken;
+  const bool enabled=motion() && animatedArtwork() && onlineArtwork() && artworkChoice().isEmpty();
+  if(changed || !enabled){
+    m_onlineArtworkTimer.stop();cancel("motion-artwork");++m_onlineArtworkGeneration;
+    m_onlineArtworkId=id;m_onlineArtworkToken=m_trackToken;m_onlineArtworkAttempted=false;m_onlineArtworkRetries=0;
+    m_artworkPage.clear();m_artworkStatus.clear();m_onlineMotionArt.clear();emit onlineArtworkChanged();
+  }
+  const bool eligible=enabled && m_uiActive && playing() && !song.value("videoId").toString().isEmpty()
+      && song.value("localPath").toString().isEmpty() && song.value("source")!="subsonic"
+      && song.value("motionArt").toString().isEmpty() && !song.value("artist").toString().isEmpty();
+  if(!eligible){
+    m_onlineArtworkTimer.stop();
+    if(m_processes.contains("motion-artwork")){
+      cancel("motion-artwork");++m_onlineArtworkGeneration;m_onlineArtworkAttempted=false;
+    }
+    return;
+  }
+  if(!m_onlineArtworkAttempted && !m_onlineArtworkTimer.isActive())m_onlineArtworkTimer.start();
+}
+void Backend::fetchOnlineArtwork() {
+  m_onlineArtworkAttempted=true;m_artworkStatus="Looking for a cover…";emit onlineArtworkChanged();
+  const auto directory=audioDirectory();if(!directory || !directory->isValid())return;
+  const auto root=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/motion-art";
+  auto args=current();args["op"]="online-artwork";args["artworkCache"]=root;args["scratch"]=directory->path();args["refresh"]=m_artworkForce;m_artworkForce=false;
+  const auto generation=++m_onlineArtworkGeneration;
+  request("motion-artwork",args,[this,generation,root](const QVariantMap &data){
+    if(generation!=m_onlineArtworkGeneration || !onlineArtwork() || !animatedArtwork() || !motion() || !m_uiActive)return;
+    m_artworkStatus="No animated cover found";emit onlineArtworkChanged();
+    if((data.value("status")=="retry" || !data.value("ok").toBool()) && m_onlineArtworkRetries++<1 && playing()){
+      m_artworkStatus="Waiting to retry";emit onlineArtworkChanged();
+      m_onlineArtworkAttempted=false;
+      m_onlineArtworkTimer.start(qBound(1,data.value("retryAfter",30).toInt(),3600)*1000);
+      return;
+    }
+    const QUrl url(data.value("motionArt").toString());const QFileInfo file(url.toLocalFile());
+    if(!data.value("ok").toBool() || !url.isLocalFile() || !file.isFile() || file.isSymLink()
+        || file.suffix()!="mp4" || file.size()<=0 || file.size()>16*1024*1024
+        || file.canonicalPath()!=QFileInfo(root).canonicalFilePath())return;
+    m_onlineMotionArt=url.toString();m_artworkPage=data.value("page").toString();m_artworkStatus="Online album cover";emit onlineArtworkChanged();
+  },directory);
 }

@@ -17,6 +17,7 @@
 #include "playbacknotifier.h"
 #include "subsonic.h"
 #include <QElapsedTimer>
+#include <QFileSystemWatcher>
 
 class Entries : public QAbstractListModel {
   Q_OBJECT
@@ -30,6 +31,7 @@ public:
   QVariant data(const QModelIndex &i, int role) const override {
     if (!i.isValid() || i.row()<0 || i.row()>=rows.size()) return {};
     if(role==Qt::UserRole) return rows[i.row()];
+    if(role==Qt::UserRole+3)return QString("Disc %1").arg(qMax(1,rows[i.row()].toMap().value("discNumber",1).toInt()));
     if(role==Qt::UserRole+2) return CollectionView::folder(rows[i.row()].toMap());
     if(role==Qt::UserRole+1) {
       const auto t=rows[i.row()].toMap();
@@ -38,7 +40,7 @@ public:
     return {};
   }
   QHash<int, QByteArray> roleNames() const override {
-    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"},{Qt::UserRole+2,"musicFolder"}};
+    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"},{Qt::UserRole+2,"musicFolder"},{Qt::UserRole+3,"musicDisc"}};
   }
   void assign(const QVariantList &v) {
     beginResetModel();
@@ -120,6 +122,17 @@ class Backend : public QObject {
   Q_PROPERTY(int repeat READ repeat WRITE setRepeat NOTIFY settingsChanged)
   Q_PROPERTY(
       bool autoplay READ autoplay WRITE setAutoplay NOTIFY settingsChanged)
+  Q_PROPERTY(QVariantList sessions READ sessions NOTIFY sessionsChanged)
+  Q_PROPERTY(bool pauseOnDisconnect READ pauseOnDisconnect WRITE setPauseOnDisconnect NOTIFY settingsChanged)
+  Q_PROPERTY(bool currentArtworkFit READ currentArtworkFit WRITE setCurrentArtworkFit NOTIFY artworkFitChanged)
+  Q_PROPERTY(bool artworkAccent READ artworkAccent WRITE setArtworkAccent NOTIFY settingsChanged)
+  Q_PROPERTY(QVariantMap albumInfo READ albumInfo NOTIFY catalogChanged)
+  Q_PROPERTY(QString currentMotionArt READ currentMotionArt NOTIFY onlineArtworkChanged)
+  Q_PROPERTY(QString artworkStatus READ artworkStatus NOTIFY onlineArtworkChanged)
+  Q_PROPERTY(QString artworkPage READ artworkPage NOTIFY onlineArtworkChanged)
+  Q_PROPERTY(bool watchMusicFolders READ watchMusicFolders WRITE setWatchMusicFolders NOTIFY settingsChanged)
+  Q_PROPERTY(QString onlineMotionArt READ onlineMotionArt NOTIFY onlineArtworkChanged)
+  Q_PROPERTY(bool onlineArtwork READ onlineArtwork WRITE setOnlineArtwork NOTIFY settingsChanged)
   Q_PROPERTY(bool animatedArtwork READ animatedArtwork WRITE setAnimatedArtwork NOTIFY settingsChanged)
   Q_PROPERTY(bool motion READ motion WRITE setMotion NOTIFY settingsChanged)
   Q_PROPERTY(bool historyPaused READ historyPaused WRITE setHistoryPaused NOTIFY settingsChanged)
@@ -245,6 +258,38 @@ public:
   void setRepeat(int);
   bool autoplay() const { return m_settings.value("autoplay", true).toBool(); }
   void setAutoplay(bool);
+  QVariantList sessions() const;
+  Q_INVOKABLE bool saveSession(const QString &name,const QString &id=QString());
+  Q_INVOKABLE void renameSession(const QString &id,const QString &name);
+  Q_INVOKABLE void deleteSession(const QString &id);
+  Q_INVOKABLE bool restoreSession(const QString &id);
+  bool pauseOnDisconnect() const {return m_settings.value("pauseOnDisconnect",false).toBool();}
+  void setPauseOnDisconnect(bool enabled);
+  Q_INVOKABLE bool artworkFits(const QVariantMap &track) const;
+  bool currentArtworkFit() const {return artworkFits(current());}
+  void setCurrentArtworkFit(bool enabled);
+  bool artworkAccent() const {return m_settings.value("artworkAccent",false).toBool();}
+  void setArtworkAccent(bool enabled) {if(artworkAccent()==enabled)return;m_settings.setValue("artworkAccent",enabled);emit settingsChanged();}
+  Q_INVOKABLE QString preparePlaylistCover(const QUrl &url);
+  Q_INVOKABLE bool setPlaylistCover(const QString &id,const QString &preview,double x=0.5,double y=0.5,double zoom=1);
+  Q_INVOKABLE void resetPlaylistCover(const QString &id);
+  QVariantList localGroups(const QString &kind) const;
+  QVariantList localGroupRows(const QVariantMap &item) const;
+  void openLocalGroup(const QVariantMap &item);
+  void updateLocalView();
+  QVariantMap albumInfo() const;
+  QString currentMotionArt() const;
+  QString artworkStatus() const;
+  QString artworkPage() const { return m_artworkPage; }
+  Q_INVOKABLE void retryArtwork();
+  Q_INVOKABLE void rejectArtwork();
+  Q_INVOKABLE void resetArtworkChoice();
+  Q_INVOKABLE void chooseArtwork(const QUrl &url, const QString &songId);
+  bool watchMusicFolders() const { return m_settings.value("watchMusicFolders",true).toBool(); }
+  void setWatchMusicFolders(bool value);
+  QString onlineMotionArt() const { return m_onlineMotionArt; }
+  bool onlineArtwork() const { return m_settings.value("onlineArtwork",true).toBool(); }
+  void setOnlineArtwork(bool value) { if(onlineArtwork()==value)return;m_settings.setValue("onlineArtwork",value);emit settingsChanged(); }
   bool animatedArtwork() const { return m_settings.value("animatedArtwork",true).toBool(); }
   void setAnimatedArtwork(bool value) { if(animatedArtwork()==value)return;m_settings.setValue("animatedArtwork",value);emit settingsChanged(); }
   bool motion() const { return m_settings.value("motion", true).toBool(); }
@@ -353,6 +398,7 @@ public:
   QString trackToken() const { return QString::number(m_trackToken); }
   QMediaPlayer *media() { return &m_media; }
 signals:
+  void onlineArtworkChanged();
   void viewAboutToChange();
   void localImportChanged();
   void cleanupChanged();
@@ -369,12 +415,26 @@ signals:
   void lyricsChanged();
   void audioDevicesChanged();
   void queueInfoChanged();
+  void sessionsChanged();
+  void qualityChanged();
+  void artworkFitChanged();
   void artworkCacheCleared();
   void seeked(qint64 position);
   void toast(const QString &message);
   void raiseRequested();
 
 private:
+  void updateOnlineArtwork();
+  void fetchOnlineArtwork();
+  QString artworkChoice() const;
+  void saveArtworkChoice(const QString &value);
+  QString m_artworkPage, m_artworkStatus;
+  bool m_artworkForce=false;
+  QTimer m_onlineArtworkTimer;
+  QString m_onlineMotionArt, m_onlineArtworkId;
+  quint64 m_onlineArtworkToken=0, m_onlineArtworkGeneration=0;
+  bool m_onlineArtworkAttempted=false;
+  int m_onlineArtworkRetries=0;
   friend class BackendTest;
   friend class SubsonicTest;
   void serverBrowseRequest(QVariantMap request,bool push=true,bool append=false);
@@ -394,11 +454,28 @@ private:
   void recoverStream();
   void restorePlaybackPosition();
   void applyAudioDevice();
+  void outputsChanged();
+  void setupDisconnectMonitor();
+  void refreshOutputPort();
+  void inspectOutputPorts(const QVariantList &sinks);
+  void pauseForDisconnect();
+  QByteArray m_outputId;
+  QString m_outputDescription,m_outputPort;
+  QProcess m_portMonitor,m_portProbe;
+  QTimer m_portDebounce,m_portTimeout;
+  bool m_portDirty=false;
+  int m_decodeRate=0,m_decodeChannels=0;
+  QVariantList m_sessions;
   void request(const QString &channel, QVariantMap args, Callback done, std::shared_ptr<QTemporaryDir> lifetime = {});
   void updatePreparation();
   void importNextLocalBatch();
   void mergeLocalTrack(QVariantMap track);
   void scanMusicFolders(const QStringList &folders);
+  void setupFolderWatching();
+  void updateFolderWatches(const QStringList &paths);
+  QFileSystemWatcher m_folderWatcher;
+  QTimer m_folderChangeTimer;
+  bool m_folderDirty=false, m_quietFolderScan=false;
   QStringList m_musicFolders;
   bool m_scanningFolders=false,m_scanLimited=false,m_cleanupBusy=false;
   int m_scanFailed=0;

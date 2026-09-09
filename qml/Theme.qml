@@ -1,6 +1,20 @@
 pragma Singleton
 import QtQuick
 QtObject {
+    property color artworkSeed: "transparent"
+    Behavior on artworkSeed {enabled:app.motion && app.artworkAccent;ColorAnimation {duration:240;easing.type:Easing.InOutCubic}}
+    readonly property bool useArtwork: app.artworkAccent && artworkSeed.a > 0
+    function blend(a,b,t) {return Qt.rgba(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t,1);}
+    function luminance(c) {
+        function linear(v) {return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4);}
+        return 0.2126*linear(c.r)+0.7152*linear(c.g)+0.0722*linear(c.b);
+    }
+    function contrast(a,b) {let x=luminance(a),y=luminance(b);return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);}
+    function readable(seed,surfaces) {
+        const end=dark?Qt.rgba(1,1,1,1):Qt.rgba(0,0,0,1);
+        for(let i=0;i<=100;++i){const color=blend(seed,end,i/100);if(surfaces.every(s=>contrast(color,s)>=4.5))return color;}
+        return end;
+    }
     readonly property string fontFamily: "Google Sans Flex"
     readonly property int displaySmall: 36
     readonly property int headlineMedium: 28
@@ -23,10 +37,10 @@ QtObject {
     readonly property color outline: followDesktop ? desktopTheme.colors.outline : (dark ? "#57443b" : "#dcc5b9")
     // Controls need a stronger boundary than decorative surface dividers.
     readonly property color controlOutline: Qt.rgba(muted.r, muted.g, muted.b, dark ? 0.65 : 0.8)
-    readonly property color primary: followDesktop ? desktopTheme.colors.primary : (dark ? "#ffb596" : "#964829")
-    readonly property color primaryText: followDesktop ? desktopTheme.colors.primaryText : (dark ? "#572008" : "#ffffff")
-    readonly property color primaryContainer: followDesktop ? desktopTheme.colors.primaryContainer : (dark ? "#75351b" : "#ffdbcb")
-    readonly property color containerText: followDesktop ? desktopTheme.colors.containerText : (dark ? "#ffdbcb" : "#743419")
+    readonly property color primary: useArtwork ? readable(artworkSeed,[background,surface,container,high]) : followDesktop ? desktopTheme.colors.primary : (dark ? "#ffb596" : "#964829")
+    readonly property color primaryText: useArtwork ? (luminance(primary)>0.179?"#000000":"#ffffff") : followDesktop ? desktopTheme.colors.primaryText : (dark ? "#572008" : "#ffffff")
+    readonly property color primaryContainer: useArtwork ? blend(container,primary,0.16) : followDesktop ? desktopTheme.colors.primaryContainer : (dark ? "#75351b" : "#ffdbcb")
+    readonly property color containerText: useArtwork ? readable(primary,[primaryContainer]) : followDesktop ? desktopTheme.colors.containerText : (dark ? "#ffdbcb" : "#743419")
     readonly property color secondary: followDesktop ? desktopTheme.colors.secondary : (dark ? "#d8c4a0" : "#6c5b3b")
     readonly property color error: dark ? "#ffb4ab" : "#ba1a1a"
     readonly property int fast: app.motion ? 150 : 0

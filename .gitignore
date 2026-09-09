@@ -20,6 +20,7 @@
 !/qml/*.qml
 /helper/*
 !/helper/catalog.py
+!/helper/online_artwork.py
 !/helper/requirements.txt
 /scripts/*
 !/scripts/*.sh
@@ -29,7 +30,7 @@
 !/tests/*.py
 /assets/*
 !/assets/readme-banner.png
-!/assets/sung.svg
+!/assets/sung.png
 !/assets/sung.desktop
 !/assets/icons/
 /assets/icons/*

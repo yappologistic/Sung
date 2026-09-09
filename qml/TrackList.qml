@@ -6,6 +6,7 @@ ListView {
     id: list
     property bool queueMode: false
     property bool groupFolders: false
+    property bool groupDiscs: false
     property bool reorderEnabled: false
     property string playlistId: ""
     property string matchQuery: ""
@@ -28,7 +29,7 @@ ListView {
     } }
     add: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
     remove: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; to: 0; duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
-    section.property: queueMode ? "musicSource" : groupFolders ? "musicFolder" : ""
+    section.property: queueMode ? "musicSource" : groupFolders ? "musicFolder" : groupDiscs ? "musicDisc" : ""
     section.criteria: ViewSection.FullString
     section.delegate: Item {
         required property string section

@@ -6,7 +6,9 @@ MDialog {
     title: "Track details"; modal: true; standardButtons: Dialog.Close
     width: Math.min(520,parent.width-48); height: Math.min(560,parent.height-48)
     property var details: []
-    function inspect(track) { details=app.trackDetails(track); open(); }
+    property var inspectedTrack: ({})
+    function inspect(track) { inspectedTrack=track;details=app.trackDetails(track);open(); }
+    Connections {target:app;function onQualityChanged(){if(dialog.visible)dialog.details=app.trackDetails(dialog.inspectedTrack);}function onTrackChanged(){if(dialog.visible)dialog.details=app.trackDetails(dialog.inspectedTrack);}}
     onClosed: details=[]
     ScrollView {
         id: scroll; objectName: "detailsScroll"; anchors.fill: parent; clip: true; contentWidth: availableWidth; contentHeight: fields.implicitHeight; rightPadding: 10

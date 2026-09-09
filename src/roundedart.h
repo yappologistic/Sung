@@ -13,6 +13,7 @@ class RoundedArt : public QQuickPaintedItem {
   Q_PROPERTY(QUrl source READ source WRITE setSource NOTIFY sourceChanged)
   Q_PROPERTY(qreal radius READ radius WRITE setRadius NOTIFY radiusChanged)
   Q_PROPERTY(int pixels READ pixels WRITE setPixels NOTIFY pixelsChanged)
+  Q_PROPERTY(bool fit READ fit WRITE setFit NOTIFY fitChanged)
   Q_PROPERTY(bool ready READ ready NOTIFY readyChanged)
 public:
   explicit RoundedArt(QQuickItem *p = nullptr);
@@ -27,19 +28,22 @@ public:
     emit radiusChanged();
     update();
   }
+  bool fit() const {return m_fit;}
+  void setFit(bool value){if(m_fit==value)return;m_fit=value;emit fitChanged();update();}
   int pixels() const { return m_pixels; }
   void setPixels(int p) {
-    p = qBound(48, p, 800);
+    p = qBound(48, p, 1600);
     if (p == m_pixels)
       return;
     m_pixels = p;
     emit pixelsChanged();
-    reload();
+    reload(true);
   }
   MotionArtwork *animation() const { return m_animation; }
   void setAnimation(MotionArtwork *animation);
   bool ready() const { return (m_animation && !m_animation->frame().isNull()) || !m_image.isNull(); }
   void paint(QPainter *) override;
+  Q_INVOKABLE QColor seedColor() const;
   static void clearCaches();
   static std::function<QUrl(const QUrl &)> resolveServerArt;
 signals:
@@ -48,9 +52,11 @@ signals:
   void radiusChanged();
   void pixelsChanged();
   void readyChanged();
+  void fitChanged();
 
 private:
-  void reload();
+  void reload(bool preserve=false);
+  bool m_fit=false,m_originalSizeFallback=false;
   QUrl m_source;
   QImage m_image;
   QPointer<MotionArtwork> m_animation;

@@ -28,8 +28,131 @@ private slots:
   void initTestCase() {
     qputenv("XDG_DATA_HOME", storage.path().toUtf8());
     qputenv("XDG_CONFIG_HOME", storage.path().toUtf8());
+    qputenv("XDG_CACHE_HOME", storage.path().toUtf8());
     QCoreApplication::setApplicationName("sung-test");
     QCoreApplication::setOrganizationName("SungTests");
+  }
+  void playbackPolish() {
+    Backend b;b.setPauseOnDisconnect(false);b.setWatchMusicFolders(false);b.m_sessions.clear();b.clearQueue();b.setVolume(0);b.setAutoplay(false);b.setPrepareNext(false);
+    QTemporaryDir dir;const auto path=dir.filePath("track.wav");QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","sine=frequency=330:sample_rate=22050","-t","60",path});QVERIFY(encode.waitForFinished(10000));QCOMPARE(encode.exitCode(),0);
+    auto song=track("local_session");song.remove("videoId");song["localPath"]=path;song["seconds"]=60;song["album"]="Test album";song["artist"]="Artist";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing(),5000);b.seek(12000);b.pause();b.setPlaybackRate(1.25);
+    QVERIFY(b.saveSession("Focus"));const auto id=b.sessions().first().toMap().value("id").toString();QCOMPARE(b.sessions().size(),1);QVERIFY(!b.sessions().first().toMap().contains("queue"));
+    b.renameSession(id,"Focus renamed");QCOMPARE(b.sessions().first().toMap().value("title").toString(),QString("Focus renamed"));
+    b.setCurrentArtworkFit(true);QVERIFY(b.currentArtworkFit());auto sibling=song;sibling["id"]="local_sibling";QVERIFY(b.artworkFits(sibling));sibling["album"]="Other album";QVERIFY(!b.artworkFits(sibling));
+    b.save();{Backend copy;copy.setWatchMusicFolders(false);QCOMPARE(copy.sessions().size(),1);QVERIFY(copy.artworkFits(song));}
+    b.clearQueue();QVERIFY(b.restoreSession(id));QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&b.position()>=12000,5000);QVERIFY(b.position()<14000);QCOMPARE(b.playbackRate(),1.25);
+    b.setMotion(false);QTRY_COMPARE_WITH_TIMEOUT(b.m_decodeRate,22050,5000);QVERIFY(!b.trackDetails(song).isEmpty());
+    b.m_settings.setValue("pauseOnDisconnect",true);b.m_outputDescription="Test headphones";
+    b.inspectOutputPorts({QVariantMap{{"description","Test headphones"},{"active_port","analog-output-headphones"}}});QVERIFY(b.playing());
+    b.inspectOutputPorts({QVariantMap{{"description","Test headphones"},{"active_port","analog-output-speaker"}}});QVERIFY(!b.playing());
+    b.play();QTRY_VERIFY(b.playing());b.m_outputId="removed-device";b.outputsChanged();QVERIFY(!b.playing());
+    b.m_settings.setValue("pauseOnDisconnect",false);b.play();QTRY_VERIFY(b.playing());b.m_outputId="removed-device";b.outputsChanged();QVERIFY(b.playing());
+    auto saved=b.m_sessions.first().toMap();auto unavailable=song;unavailable["available"]=false;
+    saved["queue"]=QVariantList{song,unavailable,song};saved["index"]=2;b.m_sessions[0]=saved;
+    QVERIFY(b.restoreSession(id));QCOMPARE(b.currentIndex(),1);QTRY_VERIFY(b.playing());
+    if(!QStandardPaths::findExecutable("pactl").isEmpty()){
+      b.setPauseOnDisconnect(true);b.setPauseOnDisconnect(false);b.setPauseOnDisconnect(true);
+      QTRY_COMPARE_WITH_TIMEOUT(b.m_portMonitor.state(),QProcess::Running,4000);
+      b.setPauseOnDisconnect(false);QTRY_COMPARE(b.m_portMonitor.state(),QProcess::NotRunning);
+    }
+    b.pause();QVERIFY(b.saveSession("Updated",id));QCOMPARE(b.sessions().size(),1);QVERIFY(!b.restoreSession("missing"));b.deleteSession(id);QVERIFY(b.sessions().isEmpty());b.setCurrentArtworkFit(false);b.setMotion(true);b.clearQueue();b.save();
+  }
+  void libraryPolish() {
+    Backend b;b.setWatchMusicFolders(false);b.clearQueue();b.m_localTracks.clear();b.m_playlists.clear();
+    auto a=track("local_one"),c=track("local_two"),d=track("local_three");
+    for(auto *t:{&a,&c,&d}){t->remove("videoId");(*t)["localPath"]="/test/"+t->value("id").toString()+".flac";(*t)["album"]="Shared title";(*t)["artist"]="Artist A";(*t)["albumArtist"]="Compilation";(*t)["seconds"]=120;}
+    a["discNumber"]=2;c["discNumber"]=1;c["trackNumber"]=2;d["albumArtist"]="Other artist";
+    b.m_localTracks={a,c,d};auto albums=b.localGroups("local-albums");QCOMPARE(albums.size(),2);
+    QVariantMap compilation;for(const auto &v:albums)if(v.toMap().value("artist")=="Compilation")compilation=v.toMap();
+    QCOMPARE(compilation.value("count").toInt(),2);QCOMPARE(b.localGroupRows(compilation).first().toMap().value("id"),c.value("id"));
+    b.library("local-albums");QCOMPARE(b.results()->count(),2);QSignalSpy unchanged(&b,&Backend::catalogChanged);emit b.libraryChanged();QCOMPARE(unchanged.count(),0);b.open(compilation);QCOMPARE(b.page(),QString("local-album"));QCOMPARE(b.results()->count(),2);QVERIFY(b.albumInfo().value("multipleDiscs").toBool());
+    b.m_localTracks.removeLast();emit b.libraryChanged();b.back();QCOMPARE(b.results()->count(),1);
+    b.library("local-artists");QCOMPARE(b.results()->count(),1);b.open(b.results()->get(0));QCOMPARE(b.page(),QString("local-artist"));QCOMPARE(b.results()->count(),2);
+    auto missing=a;missing["artist"]="";missing["albumArtist"]="";missing["album"]="";b.m_localTracks={missing};
+    QCOMPARE(b.localGroups("local-albums").first().toMap().value("title").toString(),QString("Unknown album"));
+    QCOMPARE(b.localGroups("local-artists").first().toMap().value("title").toString(),QString("Unknown artist"));
+    QTemporaryDir dir;QImage image(800,400,QImage::Format_RGB32);image.fill(Qt::red);for(int y=0;y<400;++y)for(int x=400;x<800;++x)image.setPixelColor(x,y,Qt::blue);
+    const auto file=dir.filePath("cover.png");QVERIFY(image.save(file));const auto id=b.createPlaylist("Crop test");b.addItemsToPlaylist(id,{a});
+    QVERIFY(b.preparePlaylistCover(QUrl("https://example.invalid/image.png")).isEmpty());QVERIFY(b.preparePlaylistCover(QUrl::fromLocalFile(dir.filePath("missing.png"))).isEmpty());
+    const auto preview=b.preparePlaylistCover(QUrl::fromLocalFile(file));QVERIFY(!preview.isEmpty());
+    QVERIFY(!b.setPlaylistCover("missing",preview));QVERIFY(!b.setPlaylistCover(id,preview,std::numeric_limits<double>::quiet_NaN()));
+    QVERIFY(b.setPlaylistCover(id,preview,1,0.5,1));auto cover=b.playlists().first().toMap().value("customCover").toString();
+    QImage cropped(QUrl(cover).toLocalFile());QCOMPARE(cropped.size(),QSize(512,512));QVERIFY(cropped.pixelColor(256,256).blue()>240);
+    QVERIFY(QFileInfo(QUrl(cover).toLocalFile()).size()<262144);QCOMPARE(b.playlists().first().toMap().value("artworks").toStringList(),QStringList{cover});
+    b.openPlaylist(id);QCOMPARE(b.cover(),cover);b.save();
+    {Backend restored;restored.setWatchMusicFolders(false);QCOMPARE(restored.playlists().first().toMap().value("customCover").toString(),cover);}
+    b.resetPlaylistCover(id);QVERIFY(b.cover().isEmpty());QVERIFY(b.playlists().first().toMap().value("customCover").toString().isEmpty());
+    b.setArtworkAccent(true);QVERIFY(b.artworkAccent());b.setArtworkAccent(false);QVERIFY(!b.artworkAccent());
+    b.m_localTracks.clear();b.m_playlists.clear();b.save();
+  }
+  void productFeatures() {
+    const auto oldHelper=qgetenv("SUNG_HELPER"),oldPython=qgetenv("SUNG_PYTHON");
+    qputenv("SUNG_HELPER",qgetenv("SUNG_FIXTURE_HELPER"));qputenv("SUNG_PYTHON","/usr/bin/python3");
+    const auto restore=qScopeGuard([&]{qputenv("SUNG_HELPER",oldHelper);qputenv("SUNG_PYTHON",oldPython);});
+    Backend b;b.clearQueue();b.setWatchMusicFolders(false);b.m_musicFolders.clear();b.m_localTracks.clear();b.m_settings.remove("artworkChoices");
+    auto one=track("polish00001");one["seconds"]=120;one["artist"]="Album artist";one["discNumber"]=1;
+    auto two=track("polish00002");two["seconds"]=180;two["discNumber"]=2;
+    b.m_page="album";b.m_request={{"year","2026"}};b.m_results.assign({one,two});
+    QCOMPARE(b.albumInfo().value("artist").toString(),QString("Album artist"));
+    QCOMPARE(b.albumInfo().value("summary").toString(),QString("2026 · 2 tracks · 5 min"));
+    QVERIFY(b.albumInfo().value("multipleDiscs").toBool());
+    b.m_page="search";QVERIFY(b.albumInfo().isEmpty());
+    b.m_queue.assign({one,two});b.m_index=0;b.m_onlineMotionArt="file:///cached.mp4";
+    QCOMPARE(b.currentMotionArt(),QString("file:///cached.mp4"));
+    b.rejectArtwork();QVERIFY(b.currentMotionArt().isEmpty());
+    b.m_index=1;QVERIFY(b.artworkChoice().isEmpty());b.m_index=0;QCOMPARE(b.artworkChoice(),QString("disabled"));
+    b.resetArtworkChoice();QVERIFY(b.artworkChoice().isEmpty());
+    QTemporaryDir music;const auto original=music.filePath("One.wav");
+    QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","1",original});QVERIFY(encode.waitForFinished(10000));QCOMPARE(encode.exitCode(),0);
+    b.importMusicFolder(QUrl::fromLocalFile(music.path()));QTRY_VERIFY_WITH_TIMEOUT(!b.importingLocal(),10000);QCOMPARE(b.m_localTracks.size(),1);
+    b.setWatchMusicFolders(true);QTRY_VERIFY_WITH_TIMEOUT(b.m_folderWatcher.files().contains(original),5000);
+    const auto second=music.filePath("Two.wav");QVERIFY(QFile::copy(original,second));
+    QTRY_COMPARE_WITH_TIMEOUT(b.m_localTracks.size(),2,10000);
+    QVERIFY(QFile::remove(second));
+    QTRY_VERIFY_WITH_TIMEOUT(!b.m_localTracks.last().toMap().value("available",true).toBool(),10000);
+    QVERIFY(QFile::copy(original,second));
+    QTRY_VERIFY_WITH_TIMEOUT(b.m_localTracks.last().toMap().value("available").toBool(),10000);
+    QDir().mkpath(music.filePath("Nested"));QVERIFY(QFile::copy(original,music.filePath("Nested/Three.wav")));
+    QTRY_COMPARE_WITH_TIMEOUT(b.m_localTracks.size(),3,10000);
+    b.setWatchMusicFolders(false);QVERIFY(b.m_folderWatcher.files().isEmpty());QVERIFY(b.m_folderWatcher.directories().isEmpty());
+    QVERIFY(QFile::copy(original,music.filePath("Four.wav")));QTest::qWait(1800);QCOMPARE(b.m_localTracks.size(),3);
+    b.forgetMusicFolder(music.path());b.m_localTracks.clear();b.clearQueue();
+  }
+  void onlineArtworkLifecycle() {
+    const auto oldHelper=qgetenv("SUNG_HELPER"),oldPython=qgetenv("SUNG_PYTHON"),oldBuffer=qgetenv("SUNG_BUFFER_FIXTURE");
+    qputenv("SUNG_HELPER",qgetenv("SUNG_FIXTURE_HELPER"));qputenv("SUNG_PYTHON","/usr/bin/python3");qputenv("SUNG_BUFFER_FIXTURE","1");
+    const auto restore=qScopeGuard([&]{qputenv("SUNG_HELPER",oldHelper);qputenv("SUNG_PYTHON",oldPython);qputenv("SUNG_BUFFER_FIXTURE",oldBuffer);});
+    Backend b;b.clearQueue();b.setVolume(0);b.setAutoplay(false);b.setPrepareNext(false);
+    b.setMotion(true);b.setAnimatedArtwork(true);b.setOnlineArtwork(true);b.setUiActive(true);
+    auto song=track("motion00001");song["artist"]="Fixture artist";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing(),5000);
+    QTRY_VERIFY_WITH_TIMEOUT(!b.onlineMotionArt().isEmpty(),4000);
+    QVERIFY(!b.current().contains("motionArt"));QVERIFY(b.error().isEmpty());
+    const auto url=b.onlineMotionArt();b.pause();QCOMPARE(b.onlineMotionArt(),url);
+    b.setOnlineArtwork(false);QVERIFY(b.onlineMotionArt().isEmpty());
+    b.setOnlineArtwork(true);QTest::qWait(1100);QVERIFY(b.onlineMotionArt().isEmpty());
+    b.toggle();QTRY_VERIFY_WITH_TIMEOUT(!b.onlineMotionArt().isEmpty(),3000);
+    b.clearCache();QVERIFY(b.onlineMotionArt().isEmpty());QVERIFY(!QFile::exists(QUrl(url).toLocalFile()));
+    QTest::qWait(1100);QVERIFY(b.onlineMotionArt().isEmpty());QVERIFY(b.playing());
+    song["id"]="motion00002";song["videoId"]="motion00002";song["title"]="slow motion";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.m_processes.contains("motion-artwork"),4000);
+    b.setUiActive(false);QVERIFY(!b.m_processes.contains("motion-artwork"));QVERIFY(b.onlineMotionArt().isEmpty());
+    b.setUiActive(true);QTRY_VERIFY_WITH_TIMEOUT(b.m_processes.contains("motion-artwork"),3000);
+    song["id"]="motion00005";song["videoId"]="motion00005";song["title"]="missing motion";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing(),4000);QTest::qWait(2600);
+    QVERIFY(b.onlineMotionArt().isEmpty());QVERIFY(b.error().isEmpty());QVERIFY(b.playing());
+    song["id"]="motion00006";song["videoId"]="motion00006";song["title"]="slow motion";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.m_processes.contains("motion-artwork"),4000);
+    b.setAnimatedArtwork(false);QVERIFY(!b.m_processes.contains("motion-artwork"));
+    QTest::qWait(2200);QVERIFY(b.onlineMotionArt().isEmpty());QVERIFY(b.playing());
+    b.setAnimatedArtwork(true);song["id"]="motion00007";song["videoId"]="motion00007";song["title"]="retry motion";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(!b.onlineMotionArt().isEmpty(),6000);
+    QCOMPARE(b.m_onlineArtworkRetries,1);QVERIFY(b.playing());QVERIFY(b.error().isEmpty());
+    song["id"]="motion00008";song["videoId"]="motion00008";song["title"]="retry forever";
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing(),4000);QTest::qWait(4000);
+    QFile attempts(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/motion-art/attempt-count");QVERIFY(attempts.open(QIODevice::ReadOnly));QCOMPARE(attempts.readAll(),QByteArray("2"));QVERIFY(b.playing());QVERIFY(b.error().isEmpty());
+    b.stop();b.clearQueue();b.setAnimatedArtwork(true);
   }
   void measuredAudioBands() {
     const auto pcm=[](double frequency,double amplitude,QAudioFormat::SampleFormat type,bool inverseStereo=false){

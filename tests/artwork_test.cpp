@@ -18,6 +18,20 @@
 class ArtworkTest : public QObject {
   Q_OBJECT
 private slots:
+  void fitAndLargeArtwork() {
+    QTemporaryDir dir;QImage source(1600,800,QImage::Format_RGB32);source.fill(Qt::red);const auto file=dir.filePath("wide.jpg");QVERIFY(source.save(file));
+    RoundedArt art;art.setWidth(100);art.setHeight(100);art.setRadius(0);art.setPixels(1600);art.setSource(QUrl::fromLocalFile(file));QVERIFY(art.ready());QCOMPARE(art.m_image.width(),1600);
+    QImage fit(100,100,QImage::Format_ARGB32_Premultiplied);fit.fill(Qt::transparent);art.setFit(true);{QPainter painter(&fit);art.paint(&painter);}QCOMPARE(fit.pixelColor(50,0).alpha(),0);QVERIFY(fit.pixelColor(50,50).red()>240);
+    QImage fill(100,100,QImage::Format_ARGB32_Premultiplied);fill.fill(Qt::transparent);art.setFit(false);{QPainter painter(&fill);art.paint(&painter);}QVERIFY(fill.pixelColor(50,0).red()>240);
+    art.setPixels(9000);QCOMPARE(art.pixels(),1600);art.setPixels(128);QCOMPARE(art.m_image.width(),128);
+  }
+  void accentSampling() {
+    QTemporaryDir dir;RoundedArt art;QCOMPARE(art.seedColor().alpha(),0);
+    QImage picture(64,64,QImage::Format_RGB32);picture.fill(QColor("#e04466"));const auto path=dir.filePath("pink.png");QVERIFY(picture.save(path));art.setSource(QUrl::fromLocalFile(path));
+    const auto color=art.seedColor();QVERIFY(color.red()>200 && color.blue()<150);
+    picture.fill(Qt::gray);const auto gray=dir.filePath("gray.png");QVERIFY(picture.save(gray));art.setSource(QUrl::fromLocalFile(gray));QCOMPARE(art.seedColor().alpha(),0);
+    art.setSource({});QCOMPARE(art.seedColor().alpha(),0);
+  }
   void animatedCover_data() {
     QTest::addColumn<QString>("extension");
     for(const auto &format:{"gif","webp","mp4","webm"})QTest::newRow(format)<<QString(format);

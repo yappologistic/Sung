@@ -136,6 +136,7 @@ void Backend::serverBrowseRequest(QVariantMap req, bool push, bool append) {
           m_title = data.value("title").toString();
         if (data.contains("editable"))
           m_request["editable"] = data.value("editable");
+        if(m_request.value("mode")=="album"){m_request["artist"]=data.value("artist");m_request["year"]=data.value("year");}
         m_more = data.value("more").toBool();
         emit catalogChanged();
       });

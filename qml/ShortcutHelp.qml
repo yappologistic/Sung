@@ -13,6 +13,7 @@ MDialog {
         boundsBehavior: Flickable.StopAtBounds
         model: dialog.visible ? [
             ["Search music","Ctrl+K / Ctrl+F"],
+            ["Quick actions","Ctrl+Shift+P"],
             ["Show playing song","Ctrl+J"],
             ["Queue","Ctrl+L"],
             ["Lyrics","Ctrl+Y"],

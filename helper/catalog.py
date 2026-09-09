@@ -41,6 +41,7 @@ def normalize(item, kind='', parent=None):
             'album': album.get('name', ''), 'albumId': album.get('id', ''),
             'art': artwork(item) or artwork(parent), 'duration': item.get('duration') or item.get('length') or '',
             'seconds': item.get('duration_seconds') or 0,
+            'discNumber': item.get('discNumber') or item.get('disc_number') or 1,
             'explicit': bool(item.get('isExplicit')), 'available': item.get('isAvailable', True)}
 
 
@@ -139,6 +140,11 @@ def local_cover(path, directories):
             if candidate: return candidate
     return None
 
+def tag_number(value):
+    try: return max(1, min(9999, int(str(value or '1').split('/')[0])))
+    except (ValueError, TypeError): return 1
+
+
 def local_stamp(path, cover):
     st = path.stat()
     stamp = f'{st.st_mtime_ns}:{st.st_size}'
@@ -223,7 +229,16 @@ def scan_music_folders(req):
         except OSError:
             failed += 1
     for directory in req.get('folders', [])[:64]: scan(directory)
-    return {'files': files, 'failed': failed, 'limited': limited}
+    roots = [str(Path(p).resolve()) for p in req.get('folders', [])[:64]]
+    missing = [p for p in known if any(p.startswith(r+os.sep) for r in roots) and p not in seen] if not failed and not limited else []
+    watches = sorted(visited)[:4096] + sorted(seen)[:10000]
+    for root in roots:
+        if not Path(root).is_dir():
+            ancestor = Path(root).parent
+            while not ancestor.exists() and ancestor != ancestor.parent:
+                ancestor = ancestor.parent
+            watches.append(str(ancestor))
+    return {'files': files, 'failed': failed, 'limited': limited, 'missing': missing, 'watchPaths': watches}
 
 def playlist_cleanup(req):
     from pathlib import Path
@@ -260,10 +275,11 @@ def local_files(req):
         path = Path(name).resolve()
         try:
             if path.suffix.lower() not in allowed or not path.is_file(): raise ValueError('Missing or unsupported audio file')
-            probe = subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,crypto,data','-show_entries','format=duration:format_tags=title,artist,album:stream=codec_type:stream_disposition=attached_pic','-of','json',str(path)],capture_output=True,timeout=5)
+            probe = subprocess.run(['ffprobe','-v','error','-protocol_whitelist','file,crypto,data','-show_entries','format=duration:format_tags=title,artist,album,album_artist,albumartist,track,disc,date,year:stream=codec_type,codec_name,sample_rate,bit_rate:stream_disposition=attached_pic','-of','json',str(path)],capture_output=True,timeout=5)
             if probe.returncode or len(probe.stdout)>262144: raise ValueError('Could not read audio metadata')
             data = json.loads(probe.stdout)
             if not any(stream.get('codec_type')=='audio' for stream in data.get('streams',[])): raise ValueError('No audio stream')
+            audio = next(stream for stream in data['streams'] if stream.get('codec_type') == 'audio')
             info = data.get('format',{}); tags = {k.lower():v for k,v in info.get('tags',{}).items()}
             seconds = float(info.get('duration') or 0)
             if not math.isfinite(seconds) or seconds<0 or seconds>604800: seconds=0
@@ -280,7 +296,7 @@ def local_files(req):
                         elif target.exists(): target.unlink()
                     except (OSError, subprocess.TimeoutExpired):
                         if target.exists(): target.unlink()
-            items.append(dict(id=identity,kind='song',videoId='',localPath=str(path),localStamp=local_stamp(path, cover),title=str(tags.get('title') or path.stem)[:512],artist=str(tags.get('artist') or '')[:512],album=str(tags.get('album') or '')[:512],seconds=round(seconds),duration=f'{int(seconds)//60}:{int(seconds)%60:02d}' if seconds else '',art=art,motionArt=motion,available=True))
+            items.append(dict(id=identity,kind='song',videoId='',localPath=str(path),localStamp=local_stamp(path, cover),title=str(tags.get('title') or path.stem)[:512],artist=str(tags.get('artist') or '')[:512],album=str(tags.get('album') or '')[:512],albumArtist=str(tags.get('album_artist') or tags.get('albumartist') or '')[:512],trackNumber=tag_number(tags.get('track')),discNumber=tag_number(tags.get('disc')),year=str(tags.get('date') or tags.get('year') or '')[:4],seconds=round(seconds),duration=f'{int(seconds)//60}:{int(seconds)%60:02d}' if seconds else '',art=art,motionArt=motion,codec=str(audio.get('codec_name') or '').upper(),sampleRate=int(audio.get('sample_rate') or 0),bitrate=int(audio.get('bit_rate') or 0),available=True))
         except (OSError, ValueError, subprocess.TimeoutExpired):
             errors.append(path.name)
     return {'items':items,'failed':errors}
@@ -288,6 +304,16 @@ def local_files(req):
 
 def run(req):
     op = req.get('op', '')
+    if op == 'choose-artwork':
+        from pathlib import Path
+        cover = Path(req.get('path',''))
+        if not cover.is_absolute() or not cover.is_file() or cover.suffix.lower() not in ART_EXTENSIONS[:4]:
+            return {'motionArt': ''}
+        _, motion = cover_poster(cover, req['artDirectory'])
+        return {'motionArt': motion}
+    if op == 'online-artwork':
+        from online_artwork import lookup
+        return lookup(req)
     if op == 'local-files': return local_files(req)
     if op == 'scan-folders': return scan_music_folders(req)
     if op == 'playlist-cleanup': return playlist_cleanup(req)
@@ -344,7 +370,7 @@ def run(req):
     if op == 'album':
         data = api.get_album(req['id'])
         data.update(type='album', browseId=req['id'])
-        return {'title': data.get('title', ''), 'art': artwork(data), 'items': clean(data.get('tracks', []), 'song', data)}
+        return {'title': data.get('title', ''), 'artist': ', '.join(a.get('name','') for a in data.get('artists',[]) if isinstance(a,dict)), 'year': data.get('year',''), 'art': artwork(data), 'items': clean(data.get('tracks', []), 'song', data)}
     if op == 'playlist':
         data = api.get_playlist(req['id'], limit=min(int(req.get('limit', 100)), 5000))
         return {'title': data.get('title', ''), 'art': artwork(data), 'items': clean(data.get('tracks', []), 'song', data), 'total': data.get('trackCount', 0)}

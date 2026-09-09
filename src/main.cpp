@@ -171,8 +171,13 @@ int main(int argc, char **argv) {
     QTimer::singleShot(0, &app, [&] { runBenchmark(&backend, window); });
     return app.exec();
   }
+  if(args.contains("--playback-polish-test")){QTimer::singleShot(0,&app,[&]{runPlaybackPolishTests(&backend,window);});return app.exec();}
+  if(args.contains("--library-polish-test")){QTimer::singleShot(0,&app,[&]{runLibraryPolishTests(&backend,window);});return app.exec();}
+  if(args.contains("--product-polish-test")){QTimer::singleShot(0,&app,[&]{runProductPolishTests(&backend,window);});return app.exec();}
   if(args.contains("--server-remote-test")){QTimer::singleShot(0,&app,[&]{runRemoteServerTest(&backend,window);});return app.exec();}
   if(args.contains("--server-test")){QTimer::singleShot(0,&app,[&]{runServerTests(&backend,window);});return app.exec();}
+  if(args.contains("--online-artwork-live-test")){QTimer::singleShot(0,&app,[&]{runOnlineArtworkLiveTests(&backend,window);});return app.exec();}
+  if(args.contains("--online-artwork-test")){QTimer::singleShot(0,&app,[&]{runOnlineArtworkTests(&backend,window);});return app.exec();}
   if(args.contains("--local-artwork-test")){QTimer::singleShot(0,&app,[&]{runLocalArtworkTests(&backend,window);});return app.exec();}
   if(args.contains("--folder-import-test")){QTimer::singleShot(0,&app,[&]{runFolderImportTests(&backend,window);});return app.exec();}
   if(args.contains("--interaction-test")){QTimer::singleShot(0,&app,[&]{runInteractionTests(&backend,window);});return app.exec();}

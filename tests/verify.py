@@ -53,6 +53,8 @@ if ready:
     if shutil.which('dbus-run-session') and shutil.which('qdbus6'):
         stage('mpris',['dbus-run-session','--','python3',str(root/'tests/mpris_test.py'),str(build/'sung')],40,profile('mpris-profile'))
     else: rows.append(dict(stage='mpris',status='fail',detail='dbus-run-session and qdbus6 are required'))
+    e=profile("online-artwork-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"online-artwork"))
+    stage("online-artwork",[str(build/"sung"),"--isolated","--online-artwork-test"],60,e)
     e=profile("local-artwork-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"local-artwork"))
     stage("local-artwork",[str(build/"sung"),"--isolated","--local-artwork-test"],90,e)
     e=profile("folder-import-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"folder-import"))
@@ -63,6 +65,12 @@ if ready:
     stage("qol",[str(build/"sung"),"--isolated","--qol-test"],60,e)
     e=profile("interaction-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"interaction"))
     stage("interaction",[str(build/"sung"),"--isolated","--interaction-test"],90,e)
+    e=profile("product-polish-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_BUFFER_FIXTURE="1",SUNG_TEST_OUTPUT=str(out/"product-polish"))
+    stage("product-polish",[str(build/"sung"),"--isolated","--product-polish-test"],90,e)
+    e=profile("library-polish-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"library-polish"))
+    stage("library-polish",[str(build/"sung"),"--isolated","--library-polish-test"],90,e)
+    e=profile("playback-polish-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"playback-polish"))
+    stage("playback-polish",[str(build/"sung"),"--isolated","--playback-polish-test"],90,e)
     e=profile("audio-indicator-profile");e.update(SUNG_TEST_OUTPUT=str(out/"audio-indicator"))
     stage("audio-indicator",[str(build/"sung"),"--isolated","--audio-indicator-test"],40,e)
     e=profile("visual-delight-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"visual-delight"))
@@ -78,6 +86,8 @@ if ready:
         if not pathlib.Path(py).exists():
             rows.append(dict(stage='live-runtime',status='fail',detail='Run scripts/setup.sh or set SUNG_PYTHON'))
         else:
+            e=profile('online-artwork-live-profile');e.update(SUNG_PYTHON=py)
+            stage('online-artwork-live',['python3',str(root/'tests/online_artwork_live.py'),'--output',str(out/'online-artwork-live'),'--binary',str(build/'sung')],1500,e)
             for name,flag in [('native-features','--features-test'),('live-lyrics-motion','--lyrics-test'),('playback-recovery','--recovery-test'),('ui-playback','--ui-test'),('ui-audit','--audit')]:
                 e=profile(name+'-profile');e.update(SUNG_PYTHON=py,SUNG_HELPER=str(root/'helper/catalog.py'),SUNG_TEST_OUTPUT=str(out/name))
                 stage(name,[str(build/'sung'),'--isolated',flag],480,e)
