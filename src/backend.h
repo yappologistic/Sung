@@ -374,6 +374,7 @@ public:
   Q_INVOKABLE void search(const QString &query,
                           const QString &filter = "songs");
   Q_INVOKABLE void open(const QVariantMap &item);
+  Q_INVOKABLE QVariantMap relatedCollection(const QVariantMap &item, const QString &kind) const;
   Q_INVOKABLE void back();
   Q_INVOKABLE void saveQueue(const QString &name);
   Q_INVOKABLE void movePlaylistTrack(const QString &id,int from,int to);

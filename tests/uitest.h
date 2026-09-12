@@ -44,3 +44,8 @@ void runVisualRefinementTests(Backend *, QQuickWindow *);
 void runListeningRefinementTests(Backend *backend,QQuickWindow *window);
 
 void runInteractionRefinementTests(Backend*,QQuickWindow*);
+
+void runImmersivePolishTests(Backend*,QQuickWindow*);
+
+void runImmersiveEdgeTests(Backend*,QQuickWindow*);
+void runImmersivePreferencesTest(Backend*,QQuickWindow*);

@@ -20,6 +20,8 @@ MDialog {
             ["Play / pause¹","Space"],
             ["Previous / next track","Ctrl+← / →"],
             ["Seek 10 seconds¹","← / →"],
+            ["Volume¹","Ctrl+↑ / ↓"],
+            ["Mute¹","M"],
             ["Back","Alt+←"],
             ["Mini player","Ctrl+M"],
             ["Immersive player","F11"],

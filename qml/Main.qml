@@ -58,7 +58,8 @@ ApplicationWindow {
     readonly property bool serverDisconnected: app.page === "server" && !app.server.connected && !app.server.connecting
     property bool searchFocused: (window.activeFocusItem && window.activeFocusItem.handlesTextInput===true) || searchField.activeFocus || (window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField")
     readonly property bool editableLocal: {app.playlists;return !!localPlaylist && !app.smartPlaylist(localPlaylist).id;}
-    property bool modalOpen: artworkViewer.visible || (immersiveLoader.item && immersiveLoader.item.volumePopupVisible) || viewLayoutDialog.visible || volumeControl.popupVisible || homeEditor.visible || outputPicker.visible || sessionsDialog.visible || playlistCoverDialog.visible || commandPalette.visible || artworkControls.visible || smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
+    readonly property bool modalOpen: immersiveQueue.visible || otherModalOpen
+    readonly property bool otherModalOpen: artworkViewer.visible || (immersiveLoader.item && immersiveLoader.item.popupVisible) || viewLayoutDialog.visible || volumeControl.popupVisible || homeEditor.visible || outputPicker.visible || sessionsDialog.visible || playlistCoverDialog.visible || commandPalette.visible || artworkControls.visible || smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSortMenu.visible
     property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.handlesArrowKeys === true
     function selectedView() {var item=window.activeFocusItem;while(item){if(item.sourceRows!==undefined)return item;item=item.parent;}return tracks;}
     function addBatch(view) {batchItems=view.selection.items();addPlaylistDialog.open();}
@@ -82,7 +83,7 @@ ApplicationWindow {
     property bool revealPending: false
     function revealPlaying() {
         if(app.currentIndex<0)return;
-        if(immersive)toggleImmersive();
+        if(immersive){immersiveQueue.open();return;}
         revealPending=true;side="queue";
         Qt.callLater(()=>{if(sideLoader.item && sideLoader.item.revealCurrent)sideLoader.item.revealCurrent();});
     }
@@ -118,6 +119,28 @@ ApplicationWindow {
     TrackPresentation { id: nowPresentation; visible: !window.immersive && !window.compactMode }
     property real previousVolume: 0.65
     function toggleMute() { if(app.volume>0){previousVolume=app.volume;app.volume=0;}else app.volume=previousVolume; }
+    Settings { id: listeningSettings; category: "Listening"; property string layout: "split"; property bool autoHide: false }
+    property string immersiveReturnView: ""
+    function openImmersiveCollection(item) {
+        if(!item.kind)return;
+        immersiveReturnView=app.viewKey;
+        if(immersive)toggleImmersive();
+        app.open(item);
+    }
+    function showQueue() {
+        if(immersive)immersiveQueue.open();else activateSide("queue");
+    }
+    function playbackSeek(delta) {
+        if(app.currentIndex<0 || app.duration<=0)return;
+        const target=Math.max(0,Math.min(app.duration,app.position+delta));
+        app.seek(target);playbackHud.show(delta>0?"next":"previous",app.formatTime(target));
+        if(immersiveLoader.item)immersiveLoader.item.wake();
+    }
+    function playbackVolume(delta) {
+        app.volume=Math.max(0,Math.min(1,app.volume+delta*app.volumeStep/100));
+        playbackHud.show(app.volume>0?"volume":"mute",Math.round(app.volume*100)+"%");
+        if(immersiveLoader.item)immersiveLoader.item.wake();
+    }
     Settings { id: geometry; category: "Window"; property int width: 1180; property int height: 800; property real panelWidth: 360 }
     Component.onCompleted: { windowResources.manage(window);width=geometry.width;height=geometry.height;geometryReady=true;app.setUiActive(uiActive); }
     onWidthChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.width=width;}
@@ -152,6 +175,9 @@ ApplicationWindow {
         cancelAlbumFlight();
         if(canReturn){const at=collectionArtwork.mapToItem(window.contentItem,0,0);albumFly.x=at.x;albumFly.y=at.y;albumFly.width=collectionArtwork.width;albumFly.height=collectionArtwork.height;albumFly.radius=collectionArtwork.radius;albumFly.url=app.cover;albumFlying=true;albumReturning=true;}
         albumOpening=true;app.back();albumOpening=false;
+        if(immersiveReturnView && app.viewKey===immersiveReturnView){
+            immersiveReturnView="";cancelAlbumFlight();if(!immersive)toggleImmersive();return;
+        }
         if(albumFlying){albumTimeout.restart();albumSettle.restart();}
     }
     Timer {id:albumTimeout;interval:4000;onTriggered:window.cancelAlbumFlight()}
@@ -186,7 +212,7 @@ ApplicationWindow {
     function cancelCoverFlight() {coverFlightAnimation.stop();flightSettle.stop();coverFlying=false;flyingCover.url="";}
     function prepareCoverFlight(source) {
         cancelCoverFlight();
-        if(!app.motion || !source || !app.current.art || !window.visible || window.visibility===Window.Minimized)return;
+        if(!app.motion || !source || !source.visible || !app.current.art || !window.visible || window.visibility===Window.Minimized)return;
         flightGlobal=source.mapToGlobal(0,0);
         const at=source.mapToItem(window.contentItem,0,0);
         flyingCover.x=at.x;flyingCover.y=at.y;flyingCover.width=source.width;flyingCover.height=source.height;flyingCover.radius=source.radius || 12;
@@ -197,7 +223,7 @@ ApplicationWindow {
         onTriggered: {
             if(!window.coverFlying)return;
             const target=window.immersive && immersiveLoader.item?immersiveLoader.item.artwork:nowArtwork;
-            if(!target || target.width<=0){window.cancelCoverFlight();return;}
+            if(!target || !target.visible || target.width<=0){window.cancelCoverFlight();return;}
             const start=window.contentItem.mapFromGlobal(window.flightGlobal.x,window.flightGlobal.y);
             const end=target.mapToItem(window.contentItem,0,0);
             flyingCover.x=start.x;flyingCover.y=start.y;
@@ -222,6 +248,7 @@ ApplicationWindow {
     function toggleImmersive() {
         cancelAlbumFlight();
         if(immersive){
+            immersiveQueue.close();
             prepareCoverFlight(immersiveLoader.item?immersiveLoader.item.artwork:null);
             if(wasMaximized)showMaximized();else {showNormal();width=geometry.width;height=geometry.height;}
             immersive=false;content.forceActiveFocus();
@@ -303,20 +330,52 @@ ApplicationWindow {
     Shortcut { sequence: "Ctrl+M"; enabled: !window.modalOpen; onActivated: window.openMiniPlayer() }
     Shortcut { sequence: "Ctrl+K"; enabled: !window.modalOpen; onActivated: window.focusSearch() }
     Shortcut { sequence: "Ctrl+F"; enabled: !window.modalOpen; onActivated: window.focusSearch() }
-    Shortcut { sequence: "Space"; enabled: !window.searchFocused && !window.modalOpen && (!window.activeFocusItem || window.activeFocusItem===content); onActivated: app.toggle() }
+    Shortcut { sequence: "Space"; enabled: !window.searchFocused && !window.modalOpen && (!window.activeFocusItem || window.activeFocusItem===content || window.activeFocusItem===immersiveLoader.item); onActivated: app.toggle() }
     Shortcut { sequence: "Ctrl+Right"; enabled: !window.modalOpen; onActivated: app.next() }
     Shortcut { sequence: "Ctrl+Left"; enabled: !window.modalOpen; onActivated: app.previous() }
-    Shortcut { sequence: "Right"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: app.seek(app.position+10000) }
-    Shortcut { sequence: "Left"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: app.seek(app.position-10000) }
-    Shortcut { sequence: "Ctrl+L"; enabled: !window.modalOpen && !window.immersive; onActivated: window.activateSide("queue") }
+    Shortcut { sequence: "Right"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: window.playbackSeek(10000) }
+    Shortcut { sequence: "Left"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: window.playbackSeek(-10000) }
+    Shortcut { sequence: "Ctrl+L"; enabled: !window.modalOpen; onActivated: window.showQueue() }
+    Shortcut { sequence: "Ctrl+Up"; enabled: !window.modalOpen && !window.searchFocused; onActivated: window.playbackVolume(1) }
+    Shortcut { sequence: "Ctrl+Down"; enabled: !window.modalOpen && !window.searchFocused; onActivated: window.playbackVolume(-1) }
+    Shortcut { sequence: "M"; enabled: !window.modalOpen && !window.searchFocused && (window.activeFocusItem===content || window.activeFocusItem===immersiveLoader.item); onActivated: {window.toggleMute();playbackHud.show(app.volume>0?"volume":"mute",Math.round(app.volume*100)+"%");if(immersiveLoader.item)immersiveLoader.item.wake();} }
     Shortcut { sequence: "Ctrl+Y"; enabled: !window.modalOpen && !window.immersive; onActivated: window.activateSide("lyrics") }
     Shortcut { sequence: "Alt+Left"; enabled: !window.modalOpen && !window.immersive; onActivated: window.navigateBack() }
     Shortcut { sequence: "Escape"; enabled: !window.modalOpen && !(window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField"); onActivated: { if(trackDrag.owner)trackDrag.cancel();else if(window.selectedView().selection.count)window.selectedView().selection.clear();else if(window.immersive)window.toggleImmersive();else {window.side="";content.forceActiveFocus();} } }
     Shortcut { sequence: "Ctrl+Q"; onActivated: window.close() }
 
     Shortcut { sequence: "F11"; enabled: !window.modalOpen; onActivated: window.toggleImmersive() }
-    Loader { id: immersiveLoader; anchors.fill: parent; active: window.immersive; sourceComponent: Component { ImmersivePlayer { coverHidden: window.coverFlying; onExitRequested: window.toggleImmersive(); onSpeedRequested: rateDialog.open(); onArtworkRequested:artworkViewer.inspect(app.current.art)
+    Loader { id: immersiveLoader; anchors.fill: parent; active: window.immersive; sourceComponent: Component { ImmersivePlayer { coverHidden: window.coverFlying;
+                preferredLayout:listeningSettings.layout;autoHideControls:listeningSettings.autoHide;externalModalOpen:window.modalOpen
+                onAutoHideRequested:enabled=>listeningSettings.autoHide=enabled
+                onLayoutRequested:layout=>listeningSettings.layout=layout
+                onQueueRequested:window.showQueue()
+                onCollectionRequested:item=>window.openImmersiveCollection(item); onExitRequested: window.toggleImmersive(); onSpeedRequested: rateDialog.open(); onArtworkRequested:artworkViewer.inspect(app.current.art)
                 onTimingRequested: lyricTimingDialog.open() } } }
+    PlaybackHud {id:playbackHud;anchors.horizontalCenter:parent.horizontalCenter;anchors.bottom:parent.bottom;anchors.bottomMargin:window.immersive?172:128;z:90}
+    Drawer {
+        id:immersiveQueue;objectName:"immersiveQueueSheet";edge:Qt.RightEdge
+        width:Math.min(420,window.width-32);height:window.height;modal:true;dim:true;focus:true;interactive:false
+        padding:24;leftPadding:24;rightPadding:24;topPadding:24;bottomPadding:24;closePolicy:Popup.CloseOnEscape|Popup.CloseOnPressOutside
+        background:Rectangle {color:Theme.container;radius:28}
+        Overlay.modal:Rectangle {color:Qt.rgba(0,0,0,0.32)}
+        enter:Transition {NumberAnimation {property:"position";to:1;duration:app.motion?350:0;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}}
+        exit:Transition {NumberAnimation {property:"position";to:0;duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.exitCurve}}
+        onOpened:{if(immersiveQueueLoader.item)immersiveQueueLoader.item.revealCurrent();}
+        onClosed:{trackDrag.cancel();if(immersiveLoader.item){immersiveLoader.item.forceActiveFocus(Qt.PopupFocusReason);immersiveLoader.item.wake();}}
+        contentItem:ColumnLayout {spacing:16
+    Shortcut { sequence:"Escape";enabled:immersiveQueue.visible && !window.otherModalOpen;onActivated:{
+        if(trackDrag.owner)trackDrag.cancel();
+        else if(window.selectedView().selection.count)window.selectedView().selection.clear();
+        else immersiveQueue.close();
+    } }
+            RowLayout {Layout.fillWidth:true
+                SungText {text:"Queue";font.pixelSize:24;Layout.fillWidth:true}
+                MButton {objectName:"closeImmersiveQueue";symbol:"close";tip:"Close queue";onClicked:immersiveQueue.close()}
+            }
+            Loader {id:immersiveQueueLoader;Layout.fillWidth:true;Layout.fillHeight:true;active:immersiveQueue.visible;sourceComponent:queuePanel}
+        }
+    }
     RowLayout {
         visible: !window.compactMode && !window.immersive
         anchors.fill: parent; spacing: 0
@@ -768,7 +827,7 @@ ApplicationWindow {
                 id: revealSettle; interval: 32
                 property int targetIndex: -1
                 onTriggered: {
-                    if(targetIndex!==app.currentIndex || window.side!=="queue")return;
+                    if(targetIndex!==app.currentIndex || window.side!=="queue" && !immersiveQueue.visible)return;
                     // Center using actual row geometry once section headers have been laid out.
                     queueList.forceLayout();queueList.positionViewAtIndex(targetIndex,ListView.Center);queueList.forceLayout();
                     const row=queueList.itemAtIndex(targetIndex);

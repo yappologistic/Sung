@@ -129,6 +129,27 @@ QVariantList Backend::localGroupRows(const QVariantMap &item) const {
     return QString::localeAwareCompare(x.value("title").toString(),y.value("title").toString())<0;
   });return rows;
 }
+QVariantMap Backend::relatedCollection(const QVariantMap &item,const QString &kind) const {
+  if(kind!="album" && kind!="artist")return {};
+  if(!item.value("localPath").toString().isEmpty()){
+    const auto key=localGroupKey(item,kind=="album");
+    const bool album=kind=="album";
+    for(const auto &value:m_localTracks){
+      const auto track=value.toMap();
+      if(localGroupKey(track,album)!=key)continue;
+      const auto category=album?QString("local-albums"):QString("local-artists");
+      const auto title=track.value(kind).toString().trimmed();
+      return {{"id",QString("local-group:")+QString::fromLatin1(QCryptographicHash::hash((category+key).toUtf8(),QCryptographicHash::Sha256).toHex())},
+              {"kind","local-"+kind},{"groupKey",key},{"title",title.isEmpty()?(album?"Unknown album":"Unknown artist"):title},
+              {"artist",album?groupArtist(track):QString()},{"art",track.value("art")}};
+    }
+    return {};
+  }
+  const auto id=item.value(kind+"Id").toString();
+  if(id.isEmpty())return {};
+  return {{"kind",kind},{"title",item.value(kind)},{"browseId",id},{"remoteId",id},
+          {"source",item.value("source")},{"server",item.value("server")},{"art",item.value("art")}};
+}
 void Backend::openLocalGroup(const QVariantMap &item){
   navigate(item.value("kind").toString(),item.value("title").toString(),true,item.value("id").toString());
   m_request=item;m_cover=item.value("art").toString();m_libraryId=item.value("kind")=="local-album"?"local-albums":"local-artists";

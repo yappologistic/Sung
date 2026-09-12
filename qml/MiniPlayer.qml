@@ -7,9 +7,10 @@ Window {
     title: "Sung · Mini player"
     transientParent: null
     flags: Qt.Window | Qt.FramelessWindowHint
-    width: 520; height: 216
+    readonly property bool hasTimedLyrics: app.lyricLines.length>0
+    width: 520; height: hasTimedLyrics?216:188
     minimumWidth: 520; maximumWidth: 520
-    minimumHeight: 216; maximumHeight: 216
+    minimumHeight: hasTimedLyrics?216:188; maximumHeight: minimumHeight
     color: Theme.background
     TrackPresentation { id: presentation }
     signal restoreRequested()
@@ -38,11 +39,25 @@ Window {
                 MButton { objectName: "miniRestoreButton"; symbol: "expand"; tip: "Full player · Ctrl+M"; onClicked: mini.restoreRequested() }
                 MButton { symbol: "close"; tip: "Quit Sung"; onClicked: Qt.quit() }
             }
-            SungText {
-                objectName: "miniLyricLine"; Layout.fillWidth: true; Layout.preferredHeight: 24
-                text: app.lyricIndex>=0 && app.lyricLines.length>app.lyricIndex ? app.lyricLines[app.lyricIndex].text : ""
-                horizontalAlignment: Text.AlignHCenter; font.pixelSize: 13; color: Theme.primary
-                Accessible.name: text
+            Item {
+                id: lyricLine; objectName:"miniLyricContainer"
+                Layout.fillWidth:true;Layout.preferredHeight:24;visible:mini.hasTimedLyrics
+                property string incoming: app.lyricIndex>=0 && app.lyricLines.length>app.lyricIndex ? app.lyricLines[app.lyricIndex].text : ""
+                property string shown: ""
+                property string previous: ""
+                property real progress: 1
+                readonly property bool animate: app.motion && mini.visible && mini.visibility!==Window.Minimized
+                function settle(){lineFade.stop();shown=incoming;previous="";progress=1;}
+                onIncomingChanged:{
+                    lineFade.stop();
+                    if(!animate || !shown || !incoming){settle();return;}
+                    previous=shown;shown=incoming;progress=0;lineFade.start();
+                }
+                onAnimateChanged:if(!animate)settle()
+                Component.onCompleted:settle()
+                NumberAnimation {id:lineFade;target:lyricLine;property:"progress";to:1;duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve;onFinished:lyricLine.previous=""}
+                SungText {anchors.fill:parent;text:lyricLine.previous;opacity:1-lyricLine.progress;horizontalAlignment:Text.AlignHCenter;font.pixelSize:13;color:Theme.primary;Accessible.ignored:true}
+                SungText {objectName:"miniLyricLine";anchors.fill:parent;text:lyricLine.shown;opacity:lyricLine.progress;horizontalAlignment:Text.AlignHCenter;font.pixelSize:13;color:Theme.primary;Accessible.name:text}
             }
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter; spacing: 12

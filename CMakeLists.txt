@@ -24,7 +24,7 @@ set_source_files_properties(qml/FileDialogs.qml PROPERTIES QT_QML_SKIP_CACHEGEN 
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_target_properties(sung PROPERTIES QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode")
 qt_add_qml_module(sung URI SungUi VERSION 1.0 NO_PLUGIN NO_RESOURCE_TARGET_PATH RESOURCE_PREFIX "/"
- QML_FILES qml/VolumeControl.qml qml/ViewLayoutDialog.qml qml/HomeEditor.qml qml/OutputPicker.qml qml/ListeningSessions.qml qml/PlaylistCoverDialog.qml qml/CommandPalette.qml qml/ArtworkControls.qml qml/MatchText.qml qml/PlayingIndicator.qml qml/TrackPresentation.qml qml/PlaylistCover.qml qml/CatalogSkeleton.qml qml/SmartPlaylistDialog.qml qml/TrackDetailsDialog.qml qml/ShortcutHelp.qml qml/MScrollBar.qml qml/MTextField.qml qml/MSearchField.qml qml/MSegmentedControl.qml qml/ServerConnection.qml qml/ServerToolbar.qml qml/MChip.qml qml/LibraryTabs.qml qml/MBusyIndicator.qml qml/TrackList.qml qml/SelectionBar.qml qml/FileDialogs.qml qml/SettingSlider.qml qml/LyricsView.qml qml/ImmersivePlayer.qml qml/MiniPlayer.qml qml/MMenu.qml qml/MMenuItem.qml qml/MDivider.qml qml/MDialog.qml qml/MSwitch.qml qml/Main.qml qml/Theme.qml qml/Icon.qml qml/MButton.qml qml/MNavigationItem.qml qml/SungText.qml qml/ArtworkViewer.qml qml/PlaybackGlyph.qml qml/Artwork.qml qml/TrackRow.qml qml/ArtCard.qml qml/SeekBar.qml)
+ QML_FILES qml/PlaybackHud.qml qml/VolumeControl.qml qml/ViewLayoutDialog.qml qml/HomeEditor.qml qml/OutputPicker.qml qml/ListeningSessions.qml qml/PlaylistCoverDialog.qml qml/CommandPalette.qml qml/ArtworkControls.qml qml/MatchText.qml qml/PlayingIndicator.qml qml/TrackPresentation.qml qml/PlaylistCover.qml qml/CatalogSkeleton.qml qml/SmartPlaylistDialog.qml qml/TrackDetailsDialog.qml qml/ShortcutHelp.qml qml/MScrollBar.qml qml/MTextField.qml qml/MSearchField.qml qml/MSegmentedControl.qml qml/ServerConnection.qml qml/ServerToolbar.qml qml/MChip.qml qml/LibraryTabs.qml qml/MBusyIndicator.qml qml/TrackList.qml qml/SelectionBar.qml qml/FileDialogs.qml qml/SettingSlider.qml qml/LyricsView.qml qml/ImmersivePlayer.qml qml/MiniPlayer.qml qml/MMenu.qml qml/MMenuItem.qml qml/MDivider.qml qml/MDialog.qml qml/MSwitch.qml qml/Main.qml qml/Theme.qml qml/Icon.qml qml/MButton.qml qml/MNavigationItem.qml qml/SungText.qml qml/ArtworkViewer.qml qml/PlaybackGlyph.qml qml/Artwork.qml qml/TrackRow.qml qml/ArtCard.qml qml/SeekBar.qml)
 file(GLOB icons CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" assets/icons/*.svg)
 qt_add_resources(sung assets PREFIX "/" FILES ${icons}
  OPTIONS --compress 19 --threshold 0)
@@ -79,7 +79,7 @@ if(SUNG_DIAGNOSTICS)
  qt_add_executable(sung-artwork-fixture tests/artwork_fixture.cpp)
  target_link_libraries(sung-artwork-fixture PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
  find_package(Qt6 REQUIRED COMPONENTS Test GuiPrivate)
- target_sources(sung PRIVATE tests/uitest.cpp tests/uitest.h tests/benchmark.cpp)
+ target_sources(sung PRIVATE tests/uitest.cpp tests/immersive_test.cpp tests/immersive_edges.cpp tests/uitest.h tests/benchmark.cpp)
  target_include_directories(sung PRIVATE tests src)
  target_compile_definitions(sung PRIVATE SUNG_DIAGNOSTICS)
  target_link_libraries(sung PRIVATE Qt6::Test Qt6::GuiPrivate)

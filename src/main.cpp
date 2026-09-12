@@ -85,6 +85,9 @@ int main(int argc, char **argv) {
   app.setOrganizationName("Sung");
   app.setApplicationVersion("0.12.0");
   app.setDesktopFileName("sung");
+#ifdef SUNG_DIAGNOSTICS
+  if(app.arguments().contains("--immersive-polish-test"))app.setDesktopFileName("sung-immersive-test");
+#endif
   const auto args = app.arguments();
   if (args.contains("--version")) {
     fprintf(stdout, "Sung 0.12.0\n");
@@ -171,6 +174,9 @@ int main(int argc, char **argv) {
     QTimer::singleShot(0, &app, [&] { runBenchmark(&backend, window); });
     return app.exec();
   }
+  if(args.contains("--immersive-edges-test")){QTimer::singleShot(0,&app,[&]{runImmersiveEdgeTests(&backend,window);});return app.exec();}
+  if(args.contains("--immersive-preferences-test")){QTimer::singleShot(0,&app,[&]{runImmersivePreferencesTest(&backend,window);});return app.exec();}
+  if(args.contains("--immersive-polish-test")){QTimer::singleShot(0,&app,[&]{runImmersivePolishTests(&backend,window);});return app.exec();}
   if(args.contains("--interaction-refinement-test")){QTimer::singleShot(0,&app,[&]{runInteractionRefinementTests(&backend,window);});return app.exec();}
   if(args.contains("--listening-refinement-test")){QTimer::singleShot(0,&app,[&]{runListeningRefinementTests(&backend,window);});return app.exec();}
   if(args.contains("--visual-refinement-test")){QTimer::singleShot(0,&app,[&]{runVisualRefinementTests(&backend,window);});return app.exec();}

@@ -102,13 +102,15 @@ Click album or immersive artwork to inspect the full cover. Use the wheel or + /
 
 ### Playback and shortcuts
 
+Press **F11** for immersive playback. The **…** menu selects Artwork, Lyrics or Split; **Ctrl+L** opens the queue. Optional **Auto-hide controls** fades controls while idle; pointer or keyboard activity restores them. The cursor stays visible. Click an available artist or album name to browse, then use Back to return.
+
 **Settings → Playback → Fade out before sleep** lowers the audio over the last 30 seconds of a timed or end-of-track sleep timer. Your chosen volume stays saved and is restored when the timer ends or is cancelled.
 
 Queue headings distinguish songs added manually, collection tracks and autoplay recommendations when their origin is known. These labels preserve playback order, including after dragging songs. Older queues without origin information retain source headings.
 
 Hold **Shift while dragging the seek bar** for fine seeking; the new position applies when you release. **Shift+Left / Right** seeks by 100ms. Escape cancels a fine drag.
 
-Click the volume icon for a slider and an exact percentage. Enter a value from 0 to 100 and press Enter or Apply. This works in the main, mini and immersive players.
+Click the volume icon for a slider and an exact percentage. Enter a value from 0 to 100 and press Enter or Apply. This works in the main, mini and immersive players. In the main and immersive players, **Ctrl+Up / Down** adjusts volume and **M** toggles mute; shortcuts show brief playback feedback.
 
 Timed lyrics show a countdown during intros and explicit gaps of at least five seconds. Sung uses supplied line boundaries or blank timed lines; it does not infer instrumental passages from a long lyric line. Timing adjustments apply to the countdown.
 
@@ -192,6 +194,14 @@ Run automated tests:
 ./scripts/test.sh
 ./scripts/verify.sh --offline
 ```
+
+The offline suite includes immersive-player checks at normal and high DPI, plus process-restart checks for saved layout preferences. To run just these checks against a build configured with `-DSUNG_DIAGNOSTICS=ON`:
+
+```bash
+python3 tests/immersive_regression.py --binary /path/to/diagnostics/sung --output verification/immersive
+```
+
+Use a new output directory. These checks run offscreen with generated silent music and isolated settings.
 
 The full integration suite is `./scripts/verify.sh`. It needs network access, a working audio session, Google Sans Flex, Qt Test, `qdbus6` and `dbus-run-session` (`qt6-tools` and `dbus` provide the command-line tools on Arch). It briefly plays audio at low volume and uses isolated test profiles. The online-artwork checks compare fresh downloads and cached replay across five albums, then verify native rendering with muted YouTube playback. These live checks depend on the albums remaining available.
 
