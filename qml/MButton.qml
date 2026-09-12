@@ -4,10 +4,12 @@ AbstractButton {
     id: control
     property string symbol: ""
     property string tip: text
+    property real contentInset:18
     property bool leftAligned: false
     property bool filled: false
     property bool tonal: false
     property bool selected: false
+    property bool morphPlayback:false
     property bool busy: false
     property bool confirmed: false
     function confirm() {confirmed=true;confirmation.restart();}
@@ -64,17 +66,18 @@ AbstractButton {
     }
     contentItem: Item {
         Row {
-            id: contentRow; anchors.verticalCenter: parent.verticalCenter; x: control.leftAligned?18:(parent.width-width)/2; spacing: 8
+            id: contentRow; anchors.verticalCenter: parent.verticalCenter; x: control.leftAligned?control.contentInset:(parent.width-width)/2; spacing: 8
             Item {
                 width: 24; height: 24; visible: control.symbol.length > 0 || control.busy
                 anchors.verticalCenter: parent.verticalCenter
-                Icon { anchors.centerIn: parent; visible: !control.busy; name: control.confirmed?"check":control.symbol; ink: control.ink }
+                Icon { anchors.centerIn: parent; visible: !control.busy && !playbackGlyph.active; name: control.confirmed?"check":control.symbol; ink: control.ink }
+                Loader {id:playbackGlyph;anchors.centerIn:parent;active:control.morphPlayback && !control.busy && !control.confirmed && (control.symbol==="play" || control.symbol==="pause");sourceComponent:PlaybackGlyph {paused:control.symbol==="pause";ink:control.ink}}
                 Loader {
                     anchors.fill: parent; active: control.busy
                     sourceComponent: MBusyIndicator { objectName: "buttonSpinner"; running: control.busy; ink: control.ink; trackColor: "transparent"; label: "Loading"; Accessible.ignored: true }
                 }
             }
-            SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; width: control.leftAligned ? Math.max(0,control.width-(control.symbol.length || control.busy?76:36)) : implicitWidth; elide: Text.ElideRight; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
+            SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; width: control.leftAligned ? Math.max(0,control.width-(control.symbol.length || control.busy?40:0)-control.contentInset-18) : implicitWidth; elide: Text.ElideRight; font.weight: Font.Medium; anchors.verticalCenter: parent.verticalCenter }
         }
     }
     scale: down ? 0.96 : 1

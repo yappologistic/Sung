@@ -24,7 +24,9 @@ ItemDelegate {
     property bool active: queueMode ? rowIndex===app.currentIndex : app.current.id !== undefined && app.current.id === track.id
     signal menuRequested(var item, int index, var anchor)
     ListView.onReused: {motionRaised=false;opacity=Qt.binding(()=>enabled?1:0.45);}
-    implicitHeight: 72
+    Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;duration:220;easing.type:Easing.InOutCubic}}
+    Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}
+    implicitHeight: queueMode ? (app.compactDensity?56:72) : Theme.rowHeight
     width: ListView.view ? ListView.view.width : 500
     hoverEnabled: true
     enabled: track.available !== false
@@ -60,7 +62,7 @@ ItemDelegate {
     contentItem: RowLayout {
         spacing: 14
         Item {
-            Layout.preferredWidth: 48; Layout.preferredHeight: 48
+            Layout.preferredWidth: row.queueMode?(app.compactDensity?36:48):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
             Icon { anchors.centerIn: parent; name: "shuffle"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
             Artwork { visible: row.track.kind!=="smart"; anchors.fill: parent; url: row.track.art || ""; radius: 8; pixels: 112 }
             Rectangle { anchors.centerIn: parent; width: 28; height: 28; radius: 8; visible: opacity>0; opacity: row.selectionVisible?1:0; color: row.selected?Theme.primary:Theme.container; border.width: row.selected?0:2; border.color: Theme.muted

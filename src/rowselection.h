@@ -9,6 +9,7 @@ class RowSelection : public QObject {
   Q_OBJECT
   Q_PROPERTY(QAbstractItemModel* model READ model WRITE setModel NOTIFY modelChanged)
   Q_PROPERTY(QVariantList rows READ rows NOTIFY changed)
+  Q_PROPERTY(QVariantList excludedRows READ excludedRows WRITE setExcludedRows NOTIFY changed)
   Q_PROPERTY(int count READ count NOTIFY changed)
   Q_PROPERTY(int revision READ revision NOTIFY changed)
 public:
@@ -28,6 +29,8 @@ public:
     }
     emit modelChanged();
   }
+  QVariantList excludedRows() const {QVariantList result;for(int row:m_excluded)result.append(row);return result;}
+  void setExcludedRows(const QVariantList &rows){m_excluded.clear();for(const auto &row:rows)m_excluded.insert(row.toInt());clear();announce();}
   int count() const {return m_rows.size();}
   int revision() const {return m_revision;}
   QVariantList rows() const {auto sorted=m_rows.values();std::sort(sorted.begin(),sorted.end());QVariantList result;for(int i:sorted)result.append(i);return result;}
@@ -44,13 +47,13 @@ public:
   }
   Q_INVOKABLE void selectAll() {if(!m_model)return;m_rows.clear();for(int i=0;i<m_model->rowCount();++i)if(eligible(i))m_rows.insert(i);m_anchor=0;announce();}
   Q_INVOKABLE QVariantList items() const {QVariantList result;if(m_model)for(const auto &v:rows())result.append(m_model->data(m_model->index(v.toInt(),0),Qt::UserRole));return result;}
-  Q_INVOKABLE bool eligible(int row) const {if(!m_model||row<0||row>=m_model->rowCount())return false;auto item=m_model->data(m_model->index(row,0),Qt::UserRole).toMap();return (item.value("serverSong").toBool()||!item.value("videoId").toString().isEmpty()||!item.value("localPath").toString().isEmpty())&&item.value("available",true).toBool();}
+  Q_INVOKABLE bool eligible(int row) const {if(m_excluded.contains(row)||!m_model||row<0||row>=m_model->rowCount())return false;auto item=m_model->data(m_model->index(row,0),Qt::UserRole).toMap();return (item.value("serverSong").toBool()||!item.value("videoId").toString().isEmpty()||!item.value("localPath").toString().isEmpty())&&item.value("available",true).toBool();}
 signals:
   void changed();
   void modelChanged();
 private:
   QAbstractItemModel *m_model=nullptr;
-  QSet<int> m_rows;
+  QSet<int> m_rows,m_excluded;
   int m_anchor=-1, m_revision=0;
   void announce(){++m_revision;emit changed();}
 };

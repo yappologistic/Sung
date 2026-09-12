@@ -38,7 +38,7 @@ AbstractButton {
             id: label; x: control.selectable && control.selected ? 38 : (parent.width-implicitWidth)/2
             text: control.text; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium
             color: control.selected ? Theme.containerText : Theme.text; anchors.verticalCenter: parent.verticalCenter
-            Behavior on x { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+            Behavior on x { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
         }
     }
 }

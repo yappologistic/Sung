@@ -39,7 +39,8 @@ static QString itemId(const QVariant &v) {
   return v.toMap().value("id").toString();
 }
 Backend::Backend(QObject *parent) : QObject(parent) {
-  m_audio.setVolume(m_settings.value("volume", 0.65).toDouble());
+  m_userVolume=qBound(0.0,m_settings.value("volume",0.65).toDouble(),1.0);
+  m_audio.setVolume(m_userVolume);
   m_media.setAudioOutput(&m_audio);
   setPlaybackRate(m_settings.value("playbackRate",1.0).toDouble());
   setPreservePitch(m_settings.value("preservePitch",true).toBool());
@@ -65,14 +66,19 @@ Backend::Backend(QObject *parent) : QObject(parent) {
   m_saveTimer.setSingleShot(true);
   m_saveTimer.setInterval(600);
   connect(&m_saveTimer, &QTimer::timeout, this, &Backend::save);
+  m_sleepFadeStart.setSingleShot(true);
+  m_sleepFadeTick.setInterval(100);
+  connect(&m_sleepFadeStart,&QTimer::timeout,this,[this]{updateSleepGain();m_sleepFadeTick.start();});
+  connect(&m_sleepFadeTick,&QTimer::timeout,this,&Backend::updateSleepGain);
+  connect(&m_media,&QMediaPlayer::positionChanged,this,[this]{if(m_sleepAtEnd)updateSleepGain();});
+  connect(&m_media,&QMediaPlayer::playbackRateChanged,this,[this]{if(m_sleepAtEnd)updateSleepGain();});
   m_sleepTick.setInterval(60000);
   connect(&m_sleepTick, &QTimer::timeout, this, &Backend::settingsChanged);
   m_sleepTimer.setSingleShot(true);
   m_sleepTimer.setTimerType(Qt::PreciseTimer);
   connect(&m_sleepTimer, &QTimer::timeout, this, [this] {
     pause();
-    emit settingsChanged();
-    m_sleepTick.stop();
+    setSleep(0);
     emit toast("Sleep timer ended");
   });
   // Only invalidate lyric delegates at a timestamp boundary. Position still updates
@@ -110,7 +116,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
             emit positionChanged(); emit playbackChanged();
           });
   connect(&m_media,&QMediaPlayer::seekableChanged,this,[this](bool seekable){if(seekable)QTimer::singleShot(0,this,&Backend::restorePlaybackPosition);});
-  connect(&m_server,&Subsonic::accountChanged,this,&Backend::cancelCoverPlay);
+  connect(&m_server,&MusicServer::accountChanged,this,&Backend::cancelCoverPlay);
   connect(&m_media, &QMediaPlayer::mediaStatusChanged, this,
           [this](QMediaPlayer::MediaStatus s) {
             emit playbackChanged();
@@ -165,6 +171,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
   connect(&m_queue,&Entries::countChanged,this,schedule);
   connect(this,&Backend::libraryChanged,this,&Backend::updateLocalView);
   connect(this,&Backend::libraryChanged,this,[this]{if(m_page=="local" && !smartPlaylist(m_libraryId).isEmpty()){for(const auto &p:m_playlists)if(p.toMap().value("id")==m_libraryId){const auto rows=playlistRows(p.toMap());if(rows!=m_results.rows)m_results.assign(rows);}}if(m_page=="library"&&(m_libraryId.startsWith("mix-")||m_libraryId=="files")){const auto rows=libraryRows(m_libraryId);if(rows!=m_results.rows)m_results.assign(rows);}});
+  connect(this,&Backend::catalogChanged,this,&Backend::presentationChanged);
   load();
   setupServer();
   setupFolderWatching();
@@ -421,7 +428,7 @@ void Backend::refresh() {
 void Backend::open(const QVariantMap &item) {
   if(item.value("kind")=="local-album" || item.value("kind")=="local-artist"){openLocalGroup(item);return;}
 
-  if(item.value("source")=="subsonic"){
+  if(isServerSource(item.value("source"))){
     if(item.value("kind")=="song"){playItem(item);return;}
     if(!m_server.owns(item)){notifyError("Connect to this item’s server in Settings.");return;}
     serverBrowseRequest({{"mode",item.value("kind")},{"remoteId",item.value("remoteId")},{"genre",item.value("title")},{"title",item.value("title")},{"art",item.value("art")},{"editable",item.value("editable")}});return;
@@ -450,7 +457,7 @@ QVariantList Backend::playable(const QVariantList &items) {
   QVariantList r;
   for (const auto &i : items) {
     const auto t = i.toMap();
-    if (((t.value("source")=="subsonic" && t.value("kind")=="song" && !t.value("remoteId").toString().isEmpty() && !t.value("server").toString().isEmpty()) || !t.value("videoId").toString().isEmpty() || (t.value("id").toString().startsWith("local_") && QDir::isAbsolutePath(t.value("localPath").toString()))) &&
+    if (((isServerSource(t.value("source")) && t.value("kind")=="song" && !t.value("remoteId").toString().isEmpty() && !t.value("server").toString().isEmpty()) || !t.value("videoId").toString().isEmpty() || (t.value("id").toString().startsWith("local_") && QDir::isAbsolutePath(t.value("localPath").toString()))) &&
         t.value("available", true).toBool())
       r.append(t);
   }
@@ -469,7 +476,7 @@ void Backend::playResults(int index) {
       actual = i;
       break;
     }
-  m_queue.reconcile(items);
+  m_queue.reconcile(queueWithOrigin(items,"collection"));
   playAt(actual);
 }
 void Backend::cancelCoverPlay() {
@@ -491,14 +498,14 @@ void Backend::playCover(const QVariantMap &item) {
     if(!error.isEmpty()){notifyError(error);return;}
     const auto songs=playable(rows);
     if(songs.isEmpty()){emit toast("No playable songs in this collection");return;}
-    invalidateUndo("queue");m_queue.reconcile(songs);playAt(0);
+    invalidateUndo("queue");m_queue.reconcile(queueWithOrigin(songs,"collection"));playAt(0);
   };
   if(kind=="local-album" || kind=="local-artist"){finish(localGroupRows(item),{});return;}
   if(kind=="local"){
     for(const auto &p:m_playlists)if(p.toMap().value("id")==item.value("id")){finish(playlistRows(p.toMap()),{});return;}
     finish({},"This playlist is no longer available.");return;
   }
-  if(item.value("source")=="subsonic"){
+  if(isServerSource(item.value("source"))){
     if(!m_server.owns(item)){finish({},"Connect to this item’s server in Settings.");return;}
     m_server.browse({{"mode",kind},{"remoteId",item.value("remoteId")}},[finish](const QVariantMap &data,const QString &error){finish(data.value("items").toList(),error);},"coverplay");return;
   }
@@ -508,10 +515,10 @@ void Backend::playItem(const QVariantMap &item) {
   if (playable({item}).isEmpty())
     return;
   invalidateUndo("queue");
-  m_queue.reconcile({item});
+  m_queue.reconcile(queueWithOrigin({item},"manual"));
   playAt(0);
 }
-void Backend::playAt(int index) {
+void Backend::playAt(int index, int direction) {
   cancelCoverPlay();
   if (index < 0 || index >= m_queue.count())
     return;
@@ -524,6 +531,7 @@ void Backend::playAt(int index) {
   cancel("radio");
   m_media.stop();
   m_media.setSource(QUrl());
+  m_playbackDirection=direction? (direction<0?-1:1):(index<m_index?-1:1);
   m_index = index;
   dismissError();
   m_retry = false;
@@ -558,7 +566,7 @@ void Backend::recoverStream() {
   QTimer::singleShot(0,this,[this,token]{if(m_wantPlay && token==m_trackToken){m_media.stop();m_media.setSource({});resolveCurrent(true);}});
 }
 void Backend::resolveCurrent(bool retry) {
-  if(current().value("source")=="subsonic"){
+  if(isServerSource(current().value("source"))){
     cancelPreparation();cancel("play");m_recovering=false;m_resolving=true;
     if(!retry&&m_savedPosition>0)m_restorePosition=m_savedPosition;
     m_audioCache=audioDirectory();
@@ -648,7 +656,7 @@ void Backend::enqueue(const QVariantMap &item, bool next) {
     return;
   invalidateUndo("queue");
   auto q = m_queue.rows;
-  q.insert(next ? qBound(0, m_index + 1, int(q.size())) : q.size(), item);
+  q.insert(next ? qBound(0, m_index + 1, int(q.size())) : q.size(), queueWithOrigin({item},"manual").first());
   m_queue.reconcile(q);
   m_saveTimer.start();
   emit toast(next ? "Playing next" : "Added to queue");
@@ -656,7 +664,7 @@ void Backend::enqueue(const QVariantMap &item, bool next) {
 void Backend::enqueueResults() {
   invalidateUndo("queue");
   auto q = m_queue.rows;
-  q.append(playable(m_results.rows));
+  q.append(queueWithOrigin(playable(m_results.rows),"manual"));
   m_queue.reconcile(q);
   m_saveTimer.start();
   emit toast("Added to queue");
@@ -743,15 +751,15 @@ void Backend::next() {
     int i = m_index;
     while (i == m_index)
       i = QRandomGenerator::global()->bounded(m_queue.count());
-    playAt(i);
+    playAt(i,1);
     return;
   }
   if (m_index + 1 < m_queue.count()) {
-    playAt(m_index + 1);
+    playAt(m_index + 1,1);
     return;
   }
   if (repeat() == 1) {
-    playAt(0);
+    playAt(0,1);
     return;
   }
   if (autoplay() && !current().value("videoId").toString().isEmpty()) {
@@ -778,11 +786,11 @@ void Backend::next() {
                     break;
                   }
                 if (!exists)
-                  q.append(t);
+                  q.append(queueWithOrigin({t},"autoplay").first());
               }
               m_queue.reconcile(q);
               if (m_index + 1 < q.size())
-                playAt(m_index + 1);
+                playAt(m_index + 1,1);
               else
                 pause();
             });
@@ -795,7 +803,7 @@ void Backend::previous() {
     return;
   }
   if (m_index > 0)
-    playAt(m_index - 1);
+    playAt(m_index - 1,-1);
   else
     seek(0);
 }
@@ -871,7 +879,7 @@ void Backend::radio(const QVariantMap &item) {
             auto q = m_queue.rows;
             for (const auto &t : playable(data.value("items").toList()))
               if (itemId(t) != id)
-                q.append(t);
+                q.append(queueWithOrigin({t},"autoplay").first());
             m_queue.reconcile(q);
             m_saveTimer.start();
             emit toast("Radio started");
@@ -887,7 +895,7 @@ void Backend::applyLyrics(const QVariantMap &data) {
 void Backend::fetchLyrics() {
   if(current().isEmpty()||m_lyricsBusy||m_lyricsLoaded)return;
   const auto id=current().value("id").toString();
-  static const QRegularExpression valid("^(?:[A-Za-z0-9_-]{11}|(?:local_|sub_)[a-f0-9]{64})$");
+  static const QRegularExpression valid("^(?:[A-Za-z0-9_-]{11}|(?:local_|sub_|jf_)[a-f0-9]{64})$");
   if(valid.match(id).hasMatch()) {
     QFile file(dataPath()+"/lyrics/"+id+".lrc");
     if(file.size()<=262144&&file.open(QIODevice::ReadOnly)) {
@@ -901,7 +909,7 @@ void Backend::fetchLyrics() {
     if(sidecar.size()<=262144&&sidecar.open(QIODevice::ReadOnly)){const auto text=QString::fromUtf8(sidecar.read(262145));if(!Lrc::parse(text).isEmpty()){applyLyrics({{"ok",true},{"lrc",text},{"source","Local LRC"}});return;}}
   }
   m_lyricsBusy=true;emit lyricsChanged();const auto token=m_trackToken;
-  if(current().value("source")=="subsonic"){
+  if(isServerSource(current().value("source"))){
     m_server.lyrics(current(),[this,token](const QVariantMap &data,const QString &error){if(token!=m_trackToken)return;applyLyrics(data);if(!error.isEmpty())notifyError(error);});return;
   }
   request("lyrics",{{"op",local.isEmpty()?"lyrics":"local-lyrics"},{"id",id},{"title",current().value("title")},{"artist",current().value("artist")},{"album",current().value("album")},{"seconds",duration()/1000},{"fallback",lyricsFallback()},{"lyricCache",QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/lyrics"}},[this,id,token](const QVariantMap &data){
@@ -912,7 +920,7 @@ void Backend::fetchLyrics() {
 void Backend::reloadLyrics(){clearLyrics();fetchLyrics();}
 void Backend::setLyricsFallback(bool enabled){m_settings.setValue("lyricsFallback",enabled);emit settingsChanged();reloadLyrics();}
 void Backend::importLyrics(const QUrl &url,const QString &songId){
-  static const QRegularExpression valid("^(?:[A-Za-z0-9_-]{11}|(?:local_|sub_)[a-f0-9]{64})$");
+  static const QRegularExpression valid("^(?:[A-Za-z0-9_-]{11}|(?:local_|sub_|jf_)[a-f0-9]{64})$");
   if(!url.isLocalFile()||!valid.match(songId).hasMatch())return;
   QFile input(url.toLocalFile());
   if(input.size()>262144||!input.open(QIODevice::ReadOnly)){notifyError("Choose an LRC file smaller than 256 KiB.");return;}
@@ -930,13 +938,14 @@ void Backend::importLyrics(const QUrl &url,const QString &songId){
 }
 void Backend::resetLyrics(){
   const auto id=current().value("id").toString();
-  static const QRegularExpression valid("^(?:[A-Za-z0-9_-]{11}|(?:local_|sub_)[a-f0-9]{64})$");
+  static const QRegularExpression valid("^(?:[A-Za-z0-9_-]{11}|(?:local_|sub_|jf_)[a-f0-9]{64})$");
   if(valid.match(id).hasMatch()) {QFile f(dataPath()+"/lyrics/"+id+".lrc");if(f.exists()&&!f.remove()){notifyError("Could not remove imported lyrics.");return;}}
   reloadLyrics();
 }
 void Backend::setVolume(double v) {
   v = qBound(0.0, v, 1.0);
-  m_audio.setVolume(v);
+  m_userVolume=v;
+  m_audio.setVolume(v*m_sleepGain);
   m_settings.setValue("volume", v);
   emit settingsChanged();
 }
@@ -975,10 +984,14 @@ void Backend::setSleep(int minutes) {
   m_sleepAtEnd=minutes==-1 && m_index>=0;
   m_sleepTimer.stop();
   m_sleepTick.stop();
+  m_sleepFadeStart.stop();m_sleepFadeTick.stop();
+  m_sleepGain=1; m_audio.setVolume(m_userVolume);
   if (minutes > 0) {
     m_sleepTimer.start(qMin(minutes,1440) * 60000);
     m_sleepTick.start();
+    if(sleepFade())m_sleepFadeStart.start(qMax(0,m_sleepTimer.remainingTime()-30000));
   }
+  updateSleepGain();
   emit settingsChanged();
 }
 QString Backend::sleepLabel() const {
@@ -989,7 +1002,7 @@ QString Backend::sleepLabel() const {
              : "Off";
 }
 void Backend::copyLink(const QVariantMap &t) {
-  if(t.value("source")=="subsonic"){QGuiApplication::clipboard()->setText(t.value("title").toString()+" — "+t.value("artist").toString());emit toast("Song details copied");return;}
+  if(isServerSource(t.value("source"))){QGuiApplication::clipboard()->setText(t.value("title").toString()+" — "+t.value("artist").toString());emit toast("Song details copied");return;}
   if(!t.value("localPath").toString().isEmpty()){QGuiApplication::clipboard()->setText(t.value("localPath").toString());emit toast("Path copied");return;}
   QString url = "https://music.youtube.com/";
   if (!t.value("videoId").toString().isEmpty())
@@ -1155,7 +1168,7 @@ void Backend::setVolumeStep(int percent) {
   m_settings.setValue("volumeStep",percent);emit settingsChanged();
 }
 bool Backend::isLiked(const QString &id) const {
-  if(id.startsWith("sub_"))return m_server.isStarred(id);
+  if(id.startsWith("sub_") || id.startsWith("jf_"))return m_server.isStarred(id);
   for (const auto &t : m_favorites)
     if (itemId(t) == id)
       return true;
@@ -1165,7 +1178,7 @@ bool Backend::liked() const {
   return isLiked(current().value("id").toString());
 }
 void Backend::toggleLike(const QVariantMap &item) {
-  if(item.value("source")=="subsonic"){
+  if(isServerSource(item.value("source"))){
     m_server.star(item,!m_server.isStarred(item.value("id").toString()),[this](const QVariantMap &,const QString &error){if(!error.isEmpty())notifyError(error);else if(m_page=="server"&&m_request.value("mode")=="favorites")refresh();});return;
   }
   if (playable({item}).isEmpty())
@@ -1400,7 +1413,7 @@ void Backend::playLink(const QString &url) {
   request("linkplay",{{"op","link"},{"url",url}},[this](const QVariantMap &data){
     if(!data.value("ok").toBool()){notifyError(data.value("error").toString());return;}
     auto items=playable(data.value("items").toList());if(items.isEmpty())return;
-    invalidateUndo("queue");m_queue.reconcile(items);playAt(0);
+    invalidateUndo("queue");m_queue.reconcile(queueWithOrigin(items,"collection"));playAt(0);
   });
 }
 
@@ -1444,11 +1457,11 @@ void Backend::playCollection(int index) {
   const auto all=m_collection.items();const auto target=m_collection.get(index);
   if(playable({target}).isEmpty())return;
   int actual=0;for(int i=0;i<index;++i)if(!playable({all[i]}).isEmpty())++actual;
-  invalidateUndo("queue");m_queue.reconcile(playable(all));playAt(actual);
+  invalidateUndo("queue");m_queue.reconcile(queueWithOrigin(playable(all),"collection"));playAt(actual);
 }
 void Backend::enqueueCollection() {
   auto items=playable(m_collection.items());if(items.isEmpty())return;
-  invalidateUndo("queue");m_queue.append(items);m_saveTimer.start();emit toast("Added to queue");
+  invalidateUndo("queue");m_queue.append(queueWithOrigin(items,"manual"));m_saveTimer.start();emit toast("Added to queue");
 }
 
 static QString pinKey(const QVariantMap &item) {
@@ -1564,7 +1577,7 @@ void Backend::playKeepingQueue(const QVariantMap &item) {
   if(m_index>=0&&current().value("id").toString()==id){play();return;}
   auto q=m_queue.rows;const int target=qBound(0,m_index+1,int(q.size()));
   int existing=-1;for(int i=target;i<q.size();++i)if(q[i].toMap().value("id").toString()==id){existing=i;break;}
-  if(existing>=0)q.insert(target,q.takeAt(existing));else q.insert(target,item);
+  if(existing>=0)q.insert(target,queueWithOrigin({q.takeAt(existing)},"manual").first());else q.insert(target,queueWithOrigin({item},"manual").first());
   invalidateUndo("queue");m_queue.reconcile(q);playAt(target);emit toast("Playing · queue kept");
 }
 
@@ -1609,7 +1622,7 @@ static QList<int> movedOrder(int count,const QList<int> &selected,int before) {
   return order;
 }
 void Backend::enqueueItems(const QVariantList &items,bool next,int before) {
-  const auto songs=playable(items);if(songs.isEmpty())return;
+  const auto songs=queueWithOrigin(playable(items),"manual");if(songs.isEmpty())return;
   m_undoType="queue-order";m_undoRows=m_queue.rows;m_undoIndex=m_index;m_undoShuffle=shuffle();m_undoMessage="Added to queue";
   auto rows=m_queue.rows;int at=before>=0?qBound(0,before,int(rows.size())):next?qBound(0,m_index+1,int(rows.size())):int(rows.size());
   if(m_index>=at)m_index+=songs.size();
@@ -1928,9 +1941,9 @@ QVariantList Backend::playlistRows(const QVariantMap &p) const {
   const int days=rules.value("days").toInt();const auto cutoff=QDateTime::currentSecsSinceEpoch()-qint64(days)*86400;
   for(const auto &v:candidates){const auto t=v.toMap();const auto id=itemId(v);if(id.isEmpty()||seen.contains(id))continue;seen.insert(id);
     if(!t.value("artist").toString().contains(rules.value("artist").toString(),Qt::CaseInsensitive) || !t.value("title").toString().contains(rules.value("title").toString(),Qt::CaseInsensitive))continue;
-    const auto source=t.value("source")=="subsonic"?"subsonic":!t.value("localPath").toString().isEmpty()?"local":"youtube";
+    const auto source=isServerSource(t.value("source"))?"subsonic":!t.value("localPath").toString().isEmpty()?"local":"youtube";
     const auto wanted=rules.value("source","any").toString();if(wanted!="any" && wanted!=source)continue;
-    if(rules.value("likedOnly").toBool() && !(t.value("source")=="subsonic"?m_server.isStarred(id):likedIds.contains(id)))continue;
+    if(rules.value("likedOnly").toBool() && !(isServerSource(t.value("source"))?m_server.isStarred(id):likedIds.contains(id)))continue;
     const bool played=m_lastPlayed.contains(id);const auto time=m_lastPlayed.value(id).toLongLong();
     if((days==-1 && played) || (days>0 && (!played || time<=0 || time>=cutoff)))continue;
     result.append(t);
@@ -1942,7 +1955,7 @@ QVariantList Backend::trackDetails(const QVariantMap &track) const {
   const auto add=[&](const QString &label,const QString &value){if(!value.isEmpty())result.append(QVariantMap{{"label",label},{"value",value}});};
   add("Title",track.value("title").toString());add("Artist",track.value("artist").toString());add("Album",track.value("album").toString());
   const auto path=track.value("localPath").toString();
-  add("Source",track.value("source")=="subsonic"?"Music server":path.isEmpty()?"YouTube Music":"Local file");
+  add("Source",isServerSource(track.value("source"))?"Music server":path.isEmpty()?"YouTube Music":"Local file");
   const int seconds=track.value("seconds").toInt();if(seconds>0)add("Duration",QString("%1:%2").arg(seconds/60).arg(seconds%60,2,10,QChar('0')));
   if(!path.isEmpty()) {const QFileInfo file(path);add("File",path);add("Format",file.suffix().toUpper());add("Available",file.isFile()?"Yes":"File missing");if(file.isFile())add("Size",QLocale().formattedDataSize(file.size()));}
   if(track.value("id")==current().value("id") && !m_media.source().isEmpty()){
@@ -1982,7 +1995,7 @@ void Backend::updateOnlineArtwork() {
     m_artworkPage.clear();m_artworkStatus.clear();m_onlineMotionArt.clear();emit onlineArtworkChanged();
   }
   const bool eligible=enabled && m_uiActive && playing() && !song.value("videoId").toString().isEmpty()
-      && song.value("localPath").toString().isEmpty() && song.value("source")!="subsonic"
+      && song.value("localPath").toString().isEmpty() && !isServerSource(song.value("source"))
       && song.value("motionArt").toString().isEmpty() && !song.value("artist").toString().isEmpty();
   if(!eligible){
     m_onlineArtworkTimer.stop();
@@ -2014,4 +2027,30 @@ void Backend::fetchOnlineArtwork() {
         || file.canonicalPath()!=QFileInfo(root).canonicalFilePath())return;
     m_onlineMotionArt=url.toString();m_artworkPage=data.value("page").toString();m_artworkStatus="Online album cover";emit onlineArtworkChanged();
   },directory);
+}
+
+void Backend::setSleepFade(bool enabled) {
+  m_settings.setValue("sleepFade",enabled);
+  m_sleepFadeStart.stop();m_sleepFadeTick.stop();
+  if(enabled && m_sleepTimer.isActive())m_sleepFadeStart.start(qMax(0,m_sleepTimer.remainingTime()-30000));
+  updateSleepGain();emit settingsChanged();
+}
+void Backend::updateSleepGain() {
+  qint64 remaining=-1;
+  if(sleepFade()) {
+    if(m_sleepTimer.isActive())remaining=m_sleepTimer.remainingTime();
+    else if(m_sleepAtEnd && duration()>0)remaining=qMax<qint64>(0,duration()-position())/playbackRate();
+  }
+  m_sleepGain=remaining<0?1.0:qBound(0.0,remaining/30000.0,1.0);
+  m_audio.setVolume(m_userVolume*m_sleepGain);
+}
+void Backend::playGroup(const QString &key,bool folders) {
+  QVariantList songs;
+  for(const auto &v:m_collection.items()) {
+    const auto t=v.toMap();
+    const auto group=folders?CollectionView::folder(t):QString("Disc %1").arg(qMax(1,t.value("discNumber",1).toInt()));
+    if(group==key)songs.append(t);
+  }
+  songs=playable(songs);if(songs.isEmpty())return;
+  invalidateUndo("queue");m_queue.reconcile(queueWithOrigin(songs,"collection"));playAt(0);
 }

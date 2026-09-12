@@ -15,9 +15,8 @@ MDialog {
     function choose(index) {if(index>=0 && index<matches.length){const c=matches[index];close();chosen(c);}}
     contentItem: ColumnLayout {
         spacing: 12
-        MTextField {
+        MSearchField {
             id: field; objectName: "commandSearch"; Layout.fillWidth: true
-            background: Rectangle { radius: 18; color: Theme.high; border.width: field.activeFocus?2:1; border.color: field.activeFocus?Theme.primary:Theme.outline }
             placeholderText: "Find an action or playlist"; Accessible.name: "Find an action or playlist"
             onTextChanged: list.currentIndex=0
             onAccepted: dialog.choose(list.currentIndex)

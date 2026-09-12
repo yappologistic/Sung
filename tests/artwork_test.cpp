@@ -18,6 +18,22 @@
 class ArtworkTest : public QObject {
   Q_OBJECT
 private slots:
+  void coverCrossfade() {
+    QTemporaryDir dir;QStringList files;for(const auto color:{Qt::red,Qt::blue,Qt::green}){QImage image(128,128,QImage::Format_RGB32);image.fill(color);const auto path=dir.filePath(QString::number(files.size())+".png");QVERIFY(image.save(path));files<<path;}
+    RoundedArt art;art.setWidth(100);art.setHeight(100);art.setPixels(128);art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(files[0]));QVERIFY(!art.transitioning());
+    art.setSource(QUrl::fromLocalFile(files[1]));QVERIFY(art.transitioning());QVERIFY(!art.m_previous.isNull());QTest::qWait(110);
+    QImage mixed(100,100,QImage::Format_ARGB32_Premultiplied);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}
+    const auto color=mixed.pixelColor(50,50);QVERIFY(color.red()>30&&color.blue()>30);QVERIFY(color.alpha()>250);
+    QTRY_VERIFY_WITH_TIMEOUT(!art.transitioning(),1000);QVERIFY(art.m_previous.isNull());
+    art.setSource(QUrl::fromLocalFile(files[0]));QTest::qWait(40);art.setSource(QUrl::fromLocalFile(files[2]));QVERIFY(art.transitioning());
+    art.setCrossfade(false);QVERIFY(!art.transitioning());QVERIFY(art.m_previous.isNull());QVERIFY(art.m_image.pixelColor(50,50).green()>200);
+    QImage transparent(128,128,QImage::Format_ARGB32_Premultiplied);transparent.fill(Qt::transparent);const auto alphaFile=dir.filePath("transparent.png");QVERIFY(transparent.save(alphaFile));
+    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(alphaFile));QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,50).alphaF()-(1-art.m_mix))<0.02);
+    art.setCrossfade(false);art.setSource(QUrl::fromLocalFile(files[2]));QImage wide(128,64,QImage::Format_RGB32);wide.fill(Qt::blue);const auto wideFile=dir.filePath("wide.png");QVERIFY(wide.save(wideFile));
+    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(wideFile));art.setFit(true);QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,8).alphaF()-(1-art.m_mix))<0.02);QVERIFY(mixed.pixelColor(50,50).alpha()>250);
+    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(dir.filePath("missing.png")));QVERIFY(!art.ready());QVERIFY(!art.transitioning());
+    art.setSource(QUrl::fromLocalFile(files[0]));art.setSource({});QVERIFY(!art.ready());QVERIFY(art.m_previous.isNull());
+  }
   void fitAndLargeArtwork() {
     QTemporaryDir dir;QImage source(1600,800,QImage::Format_RGB32);source.fill(Qt::red);const auto file=dir.filePath("wide.jpg");QVERIFY(source.save(file));
     RoundedArt art;art.setWidth(100);art.setHeight(100);art.setRadius(0);art.setPixels(1600);art.setSource(QUrl::fromLocalFile(file));QVERIFY(art.ready());QCOMPARE(art.m_image.width(),1600);

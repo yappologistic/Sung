@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Layouts
 import Sung.Native 1.0
 
 ListView {
@@ -7,6 +8,30 @@ ListView {
     property bool queueMode: false
     property bool groupFolders: false
     property bool groupDiscs: false
+    property bool groupReady:false
+    function scheduleGroups(){if(groupReady)groupRefresh.restart();}
+    Timer {id:groupRefresh;interval:0;onTriggered:list.rebuildGroups()}
+    property var folded: ({})
+    property var groupRows: ({})
+    readonly property bool foldable: !queueMode && (groupFolders || groupDiscs)
+    function groupKey(item){return groupFolders?String(item.localPath || "").slice(0,String(item.localPath || "").lastIndexOf("/")):"Disc "+Math.max(1,item.discNumber || 1);}
+    function rebuildGroups(){
+        const groups={};
+        if(foldable && model)for(let i=0;i<model.count;++i){const key=groupKey(model.get(i));if(!groups[key])groups[key]=[];groups[key].push(i);}
+        groupRows=groups;updateExcluded();
+    }
+    function updateExcluded(){
+        let rows=[];
+        if(foldable)for(const key of Object.keys(folded))if(folded[key] && groupRows[key])rows=rows.concat(groupRows[key]);
+        selection.excludedRows=rows;
+        if(currentIndex>=0 && rowFolded(currentIndex))currentIndex=-1;
+    }
+    function rowFolded(row){return foldable && model && !!folded[groupKey(model.get(row))];}
+    function toggleGroup(key){const state=Object.assign({},folded);state[key]=!state[key];folded=state;updateExcluded();}
+    onGroupFoldersChanged:{folded={};scheduleGroups();}
+    onGroupDiscsChanged:{folded={};scheduleGroups();}
+    onModelChanged:{folded={};scheduleGroups();}
+    Component.onCompleted:{groupReady=true;rebuildGroups();}
     property bool reorderEnabled: false
     property string playlistId: ""
     property string matchQuery: ""
@@ -17,11 +42,11 @@ ListView {
     signal menuRequested(var item, int row, var anchor)
     signal removeSelected()
     signal addSelected()
-    clip: true; spacing: 4; reuseItems: true; cacheBuffer: 80
+    clip: true; spacing: foldable?0:4; reuseItems: true; cacheBuffer: 80
     boundsBehavior: Flickable.StopAtBounds
     readonly property bool animateEdits: queueMode && app.motion && visible && Window.window && Window.window.visible && Window.window.visibility!==Window.Minimized
     onAnimateEditsChanged: if(!animateEdits){for(const child of contentItem.children)if(child.motionRaised!==undefined)child.motionRaised=false;}
-    displaced: Transition { enabled: list.animateEdits; NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    displaced: Transition { enabled: list.animateEdits; NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
     move: Transition { enabled: list.animateEdits; SequentialAnimation {
         PropertyAction { property: "motionRaised"; value: true }
         NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
@@ -29,27 +54,33 @@ ListView {
     } }
     add: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
     remove: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; to: 0; duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
-    section.property: queueMode ? "musicSource" : groupFolders ? "musicFolder" : groupDiscs ? "musicDisc" : ""
+    section.property: queueMode ? "queueOrigin" : groupFolders ? "musicFolder" : groupDiscs ? "musicDisc" : ""
     section.criteria: ViewSection.FullString
     section.delegate: Item {
-        required property string section
+        id:heading;required property string section
         objectName: list.groupFolders ? "folderHeading" : "sourceHeading"
-        width: list.width; height: list.groupFolders ? 40 : 32
-        SungText { anchors.left: parent.left; anchors.leftMargin: 12; anchors.verticalCenter: parent.verticalCenter; width: parent.width-24; text: {app.musicFolders;return list.groupFolders ? app.musicFolderLabel(parent.section) : parent.section;} color: Theme.muted; font.pixelSize: list.groupFolders ? 14 : 12; elide: list.groupFolders ? Text.ElideMiddle : Text.ElideRight }
-        HoverHandler { id: headingHover }
-        ToolTip.visible: list.groupFolders && headingHover.hovered
-        ToolTip.delay: 600
-        ToolTip.text: section
+        width:list.width;height:list.foldable?48:32
+        RowLayout {anchors.fill:parent;spacing:4
+            MButton {objectName:"toggleGroup_"+heading.section;visible:list.foldable;Layout.fillWidth:true;leftAligned:true
+                text:(list.groupFolders?app.musicFolderLabel(heading.section):heading.section)+" · "+(list.groupRows[heading.section] || []).length
+                tip:(list.folded[heading.section]?"Expand ":"Collapse ")+heading.section
+                symbol:"";contentInset:34;
+                Icon {x:8;anchors.verticalCenter:parent.verticalCenter;name:"chevron";size:18;rotation:list.folded[heading.section]?0:90;Behavior on rotation {NumberAnimation {duration:app.motion?180:0}}}
+                onClicked:list.toggleGroup(heading.section)
+            }
+            SungText {visible:!list.foldable;Layout.fillWidth:true;Layout.leftMargin:12;text:heading.section;color:Theme.muted;font.pixelSize:12;elide:Text.ElideRight}
+            MButton {objectName:"playGroup_"+heading.section;visible:list.foldable;symbol:"play";tip:"Play "+heading.section;onClicked:app.playGroup(heading.section,list.groupFolders)}
+        }
     }
     RowSelection { id: selection; model: list.model }
     Connections {
         target: list.model
         function cancelDrag(){if(list.dragHub.owner===list)list.dragHub.cancel();}
-        function onModelReset(){cancelDrag();}
-        function onRowsInserted(){cancelDrag();}
-        function onRowsRemoved(){cancelDrag();}
-        function onRowsMoved(){cancelDrag();}
-        function onLayoutChanged(){cancelDrag();}
+        function onModelReset(){cancelDrag();list.folded={};list.scheduleGroups();}
+        function onRowsInserted(){cancelDrag();list.scheduleGroups();}
+        function onRowsRemoved(){cancelDrag();list.scheduleGroups();}
+        function onRowsMoved(){cancelDrag();list.scheduleGroups();}
+        function onLayoutChanged(){cancelDrag();list.scheduleGroups();}
     }
     function sourceRows() {
         return selection.rows.map(i=>list.queueMode?i:app.collection.sourceIndex(i));
@@ -80,7 +111,10 @@ ListView {
             let next=currentIndex+(event.key===Qt.Key_Down?1:event.key===Qt.Key_Up?-1:event.key===Qt.Key_PageDown?page:-page);
             if(event.key===Qt.Key_Home)next=0;
             else if(event.key===Qt.Key_End)next=count-1;
-            currentIndex=count ? Math.max(0,Math.min(count-1,next)) : -1;
+            next=Math.max(0,Math.min(count-1,next));
+            const step=(event.key===Qt.Key_Up || event.key===Qt.Key_PageUp || event.key===Qt.Key_End)?-1:1;
+            while(next>=0 && next<count && rowFolded(next))next+=step;
+            currentIndex=next>=0 && next<count?next:-1;
             if(currentIndex>=0)positionViewAtIndex(currentIndex,ListView.Contain);
             if((event.modifiers&Qt.ShiftModifier) && !selection.count && previous>=0)selection.select(previous,0);
             if(event.modifiers&Qt.ShiftModifier)selection.select(currentIndex,event.modifiers);
@@ -96,6 +130,9 @@ ListView {
     delegate: TrackRow {
         required property var entry; required property int index
         objectName: (list.queueMode?"queueRow_":"trackRow_")+index
+        property bool foldedRow:list.foldable && !!list.folded[list.groupKey(entry)]
+        height:foldedRow?0:implicitHeight
+        visible:!foldedRow
         matchQuery: list.matchQuery
         transform: Translate { y: list.dropIndex<0?0:index>=list.dropIndex?10:-10
             Behavior on y { NumberAnimation { duration: app.motion?130:0; easing.type: Easing.OutCubic } }

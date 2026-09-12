@@ -115,8 +115,8 @@ int main(int argc, char **argv) {
   MotionArtwork motionArtwork;
   qmlRegisterUncreatableType<MotionArtwork>("Sung.Native",1,0,"MotionArtwork","Shared current artwork");
   Backend backend;
-  RoundedArt::resolveServerArt=[&backend](const QUrl &url){return backend.server()->artworkUrl(url);};
-  QObject::connect(backend.server(),&Subsonic::accountChanged,&app,[]{RoundedArt::clearCaches();});
+  RoundedArt::resolveServerArt=[&backend](const QUrl &url){return backend.server()->artworkRequest(url);};
+  QObject::connect(backend.server(),&MusicServer::accountChanged,&app,[]{RoundedArt::clearCaches();});
   DesktopTheme desktopTheme;
   QObject::connect(&backend,&Backend::artworkCacheCleared,&app,[]{RoundedArt::clearCaches();});
   bool exposeMpris = !args.contains("--isolated");
@@ -171,11 +171,14 @@ int main(int argc, char **argv) {
     QTimer::singleShot(0, &app, [&] { runBenchmark(&backend, window); });
     return app.exec();
   }
+  if(args.contains("--interaction-refinement-test")){QTimer::singleShot(0,&app,[&]{runInteractionRefinementTests(&backend,window);});return app.exec();}
+  if(args.contains("--listening-refinement-test")){QTimer::singleShot(0,&app,[&]{runListeningRefinementTests(&backend,window);});return app.exec();}
+  if(args.contains("--visual-refinement-test")){QTimer::singleShot(0,&app,[&]{runVisualRefinementTests(&backend,window);});return app.exec();}
   if(args.contains("--playback-polish-test")){QTimer::singleShot(0,&app,[&]{runPlaybackPolishTests(&backend,window);});return app.exec();}
   if(args.contains("--library-polish-test")){QTimer::singleShot(0,&app,[&]{runLibraryPolishTests(&backend,window);});return app.exec();}
   if(args.contains("--product-polish-test")){QTimer::singleShot(0,&app,[&]{runProductPolishTests(&backend,window);});return app.exec();}
   if(args.contains("--server-remote-test")){QTimer::singleShot(0,&app,[&]{runRemoteServerTest(&backend,window);});return app.exec();}
-  if(args.contains("--server-test")){QTimer::singleShot(0,&app,[&]{runServerTests(&backend,window);});return app.exec();}
+  if(args.contains("--server-test") || args.contains("--jellyfin-test")){QTimer::singleShot(0,&app,[&]{runServerTests(&backend,window);});return app.exec();}
   if(args.contains("--online-artwork-live-test")){QTimer::singleShot(0,&app,[&]{runOnlineArtworkLiveTests(&backend,window);});return app.exec();}
   if(args.contains("--online-artwork-test")){QTimer::singleShot(0,&app,[&]{runOnlineArtworkTests(&backend,window);});return app.exec();}
   if(args.contains("--local-artwork-test")){QTimer::singleShot(0,&app,[&]{runLocalArtworkTests(&backend,window);});return app.exec();}
@@ -248,7 +251,7 @@ int main(int argc, char **argv) {
         break;
       }
     if (!linked)
-      QTimer::singleShot(0, &backend, &Backend::home);
+      QTimer::singleShot(0, &backend, &Backend::openStartPage);
   }
   if (args.contains("--screenshot")) {
     const int i = args.indexOf("--screenshot");

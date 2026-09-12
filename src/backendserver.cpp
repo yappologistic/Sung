@@ -5,7 +5,31 @@
 #include <algorithm>
 
 void Backend::setupServer() {
-  connect(this, &Backend::trackChanged, this, [this] {
+  auto lastTrack = std::make_shared<QVariantMap>();
+  auto lastPosition = std::make_shared<qint64>(0);
+  auto progressTick = std::make_shared<qint64>(-1);
+  connect(this, &Backend::positionChanged, this, [this,lastTrack,lastPosition,progressTick] {
+    if(m_media.playbackState()!=QMediaPlayer::StoppedState)*lastPosition=position();
+    const auto tick=position()/10000;
+    if(!historyPaused() && tick!=*progressTick && playing()) {
+      *progressTick=tick;m_server.reportPlayback(current(),position(),false,false);
+    }
+  });
+  connect(this, &Backend::playbackChanged, this, [this,lastPosition] {
+    if(!historyPaused())m_server.reportPlayback(current(),m_media.playbackState()==QMediaPlayer::StoppedState?*lastPosition:position(),!playing(),!playing()&&m_media.playbackState()==QMediaPlayer::StoppedState);
+  });
+  connect(this, &Backend::seeked, this, [this](qint64 pos) {
+    if(!historyPaused())m_server.reportPlayback(current(),pos,!playing(),false);
+  });
+  auto privateMode=std::make_shared<bool>(historyPaused());
+  connect(this,&Backend::settingsChanged,this,[this,privateMode] {
+    if(*privateMode==historyPaused())return;
+    *privateMode=historyPaused();
+    m_server.reportPlayback(current(),position(),!playing(),historyPaused());
+  });
+  connect(this, &Backend::trackChanged, this, [this,lastTrack,lastPosition,progressTick] {
+    if(!historyPaused() && !lastTrack->isEmpty())m_server.reportPlayback(*lastTrack,*lastPosition,true,true);
+    *lastTrack=current();*lastPosition=0;*progressTick=-1;
     m_server.cancel("cover");
     m_serverArtwork.clear();
     m_serverArtDirectory.reset();
@@ -30,10 +54,10 @@ void Backend::setupServer() {
         });
   });
 
-  connect(&m_server, &Subsonic::changed, this, &Backend::libraryChanged);
-  connect(&m_server, &Subsonic::message, this, &Backend::toast);
-  connect(&m_server, &Subsonic::accountChanged, this, [this] {
-    if (current().value("source") == "subsonic")
+  connect(&m_server, &MusicServer::changed, this, &Backend::libraryChanged);
+  connect(&m_server, &MusicServer::message, this, &Backend::toast);
+  connect(&m_server, &MusicServer::accountChanged, this, [this] {
+    if (isServerSource(current().value("source")))
       stop();
     m_serverArtwork.clear();
     m_serverArtDirectory.reset();
@@ -175,14 +199,16 @@ void Backend::renameServerPlaylist(const QVariantMap &playlist,
                                    const QString &name) {
   if (!m_server.owns(playlist) || name.trimmed().isEmpty())
     return;
-  m_server.editPlaylist(playlist.value("remoteId").toString(),
-                        {{"name", name.trimmed().left(120)}},
-                        [this](const QVariantMap &, const QString &e) {
-                          if (!e.isEmpty())
-                            notifyError(e);
-                          else if (m_page == "server")
-                            refresh();
-                        });
+  const auto id=playlist.value("remoteId").toString();
+  const auto title=name.trimmed().left(120);
+  m_server.editPlaylist(id,{{"name",title}},[this,id,title](const QVariantMap &,const QString &e) {
+    if(!e.isEmpty())notifyError(e);
+    else if(m_page=="server") {
+      if(m_request.value("mode")=="playlist" && m_request.value("remoteId")==id) {
+        m_title=title;m_request["title"]=title;emit catalogChanged();
+      } else refresh();
+    }
+  });
 }
 void Backend::deleteServerPlaylist(const QVariantMap &playlist) {
   if (!m_server.owns(playlist))
@@ -198,6 +224,16 @@ void Backend::deleteServerPlaylist(const QVariantMap &playlist) {
 void Backend::removeServerRows(const QVariantList &indices) {
   if (!serverPlaylistEditable() || indices.isEmpty())
     return;
+  if(m_server.provider()=="jellyfin") {
+    const auto original=m_results.rows;const auto request=m_request;
+    m_server.browse(request,[this,original,indices,request](const QVariantMap &d,const QString &e){
+      if(!e.isEmpty()){notifyError(e);return;}
+      if(d.value("items").toList()!=original){notifyError("The server playlist changed. Refresh it before removing songs.");return;}
+      Subsonic::Params params{{"playlistId",request.value("remoteId").toString()}};
+      for(int i=0;i<original.size();++i)if(!indices.contains(i))params.append(QPair<QString,QString>{"songId",original[i].toMap().value("remoteId").toString()});
+      m_server.call("createPlaylist",params,[this,request](const QVariantMap &,const QString &error){if(!error.isEmpty())notifyError(error);else if(m_page=="server"&&m_request.value("remoteId")==request.value("remoteId"))refresh();});
+    },"playlist-edit");return;
+  }
   QList<int> rows;
   for (const auto &v : indices)
     if (v.toInt() >= 0 && v.toInt() < m_results.count() &&

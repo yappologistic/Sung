@@ -15,7 +15,7 @@
 #include <QAudioDevice>
 #include "collectionview.h"
 #include "playbacknotifier.h"
-#include "subsonic.h"
+#include "musicserver.h"
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
 
@@ -31,16 +31,17 @@ public:
   QVariant data(const QModelIndex &i, int role) const override {
     if (!i.isValid() || i.row()<0 || i.row()>=rows.size()) return {};
     if(role==Qt::UserRole) return rows[i.row()];
+    if(role==Qt::UserRole+4){const auto origin=rows[i.row()].toMap().value("_queueOrigin").toString();if(origin=="manual")return "Added by you";if(origin=="autoplay")return "Autoplay";if(origin=="collection")return "Collection";return data(i,Qt::UserRole+1);}
     if(role==Qt::UserRole+3)return QString("Disc %1").arg(qMax(1,rows[i.row()].toMap().value("discNumber",1).toInt()));
     if(role==Qt::UserRole+2) return CollectionView::folder(rows[i.row()].toMap());
     if(role==Qt::UserRole+1) {
       const auto t=rows[i.row()].toMap();
-      return t.value("source")=="subsonic" ? "Music server" : !t.value("localPath").toString().isEmpty() ? "Local files" : "YouTube Music";
+      return isServerSource(t.value("source")) ? "Music server" : !t.value("localPath").toString().isEmpty() ? "Local files" : "YouTube Music";
     }
     return {};
   }
   QHash<int, QByteArray> roleNames() const override {
-    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"},{Qt::UserRole+2,"musicFolder"},{Qt::UserRole+3,"musicDisc"}};
+    return {{Qt::UserRole, "entry"},{Qt::UserRole+1,"musicSource"},{Qt::UserRole+2,"musicFolder"},{Qt::UserRole+3,"musicDisc"},{Qt::UserRole+4,"queueOrigin"}};
   }
   void assign(const QVariantList &v) {
     beginResetModel();
@@ -75,7 +76,7 @@ signals:
 
 class Backend : public QObject {
   Q_OBJECT
-  Q_PROPERTY(Subsonic *server READ server CONSTANT)
+  Q_PROPERTY(MusicServer *server READ server CONSTANT)
   Q_PROPERTY(bool serverPlaylistEditable READ serverPlaylistEditable NOTIFY catalogChanged)
   Q_PROPERTY(QVariantMap serverRequest READ serverRequest NOTIFY catalogChanged)
   Q_PROPERTY(bool importingLocal READ importingLocal NOTIFY localImportChanged)
@@ -125,6 +126,16 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantList sessions READ sessions NOTIFY sessionsChanged)
   Q_PROPERTY(bool pauseOnDisconnect READ pauseOnDisconnect WRITE setPauseOnDisconnect NOTIFY settingsChanged)
   Q_PROPERTY(bool currentArtworkFit READ currentArtworkFit WRITE setCurrentArtworkFit NOTIFY artworkFitChanged)
+  Q_PROPERTY(int playbackDirection READ playbackDirection NOTIFY trackChanged)
+  Q_PROPERTY(int lyricGapSeconds READ lyricGapSeconds NOTIFY positionChanged)
+  Q_PROPERTY(bool viewCompactDensity READ viewCompactDensity NOTIFY presentationChanged)
+  Q_PROPERTY(int viewDensity READ viewDensity WRITE setViewDensity NOTIFY presentationChanged)
+  Q_PROPERTY(QString viewMode READ viewMode WRITE setViewMode NOTIFY presentationChanged)
+  Q_PROPERTY(bool viewSupportsGrid READ viewSupportsGrid NOTIFY presentationChanged)
+  Q_PROPERTY(bool compactDensity READ compactDensity WRITE setCompactDensity NOTIFY presentationChanged)
+  Q_PROPERTY(QString startPage READ startPage WRITE setStartPage NOTIFY presentationChanged)
+  Q_PROPERTY(QStringList homeOrder READ homeOrder NOTIFY presentationChanged)
+  Q_PROPERTY(QStringList hiddenHomeSections READ hiddenHomeSections NOTIFY presentationChanged)
   Q_PROPERTY(bool artworkAccent READ artworkAccent WRITE setArtworkAccent NOTIFY settingsChanged)
   Q_PROPERTY(QVariantMap albumInfo READ albumInfo NOTIFY catalogChanged)
   Q_PROPERTY(QString currentMotionArt READ currentMotionArt NOTIFY onlineArtworkChanged)
@@ -140,6 +151,7 @@ class Backend : public QObject {
   Q_PROPERTY(bool keepCompletedLyrics READ keepCompletedLyrics WRITE setKeepCompletedLyrics NOTIFY settingsChanged)
   Q_PROPERTY(int volumeStep READ volumeStep WRITE setVolumeStep NOTIFY settingsChanged)
   Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY settingsChanged)
+  Q_PROPERTY(bool sleepFade READ sleepFade WRITE setSleepFade NOTIFY settingsChanged)
   Q_PROPERTY(QString sleepStatus READ sleepLabel NOTIFY settingsChanged)
   Q_PROPERTY(bool prepareNext READ prepareNext WRITE setPrepareNext NOTIFY settingsChanged)
   Q_PROPERTY(bool lyricsFallback READ lyricsFallback WRITE setLyricsFallback NOTIFY settingsChanged)
@@ -163,7 +175,7 @@ public:
   Q_INVOKABLE QVariantList trackDetails(const QVariantMap &track) const;
   QVariantList playlistRows(const QVariantMap &playlist) const;
   QVariantList audioLevels() const {return m_audioLevels;}
-  Subsonic *server() {return &m_server;}
+  MusicServer *server() {return &m_server;}
   QString serverArtwork() const {return m_serverArtwork;}
   bool serverPlaylistEditable() const {return m_page=="server" && m_request.value("mode")=="playlist" && m_request.value("editable").toBool();}
   QVariantMap serverRequest() const {return m_page=="server"?m_request:QVariantMap{};}
@@ -236,7 +248,9 @@ public:
                ? m_media.duration()
                : current().value("seconds").toLongLong() * 1000;
   }
-  double volume() const { return m_audio.volume(); }
+  double volume() const { return m_userVolume; }
+  bool sleepFade() const { return m_settings.value("sleepFade",true).toBool(); }
+  void setSleepFade(bool enabled);
   void setVolume(double);
   double playbackRate() const {return m_media.playbackRate();}
   void setPlaybackRate(double rate);
@@ -259,6 +273,26 @@ public:
   bool autoplay() const { return m_settings.value("autoplay", true).toBool(); }
   void setAutoplay(bool);
   QVariantList sessions() const;
+  int playbackDirection() const {return m_playbackDirection;}
+  int lyricGapSeconds() const;
+  bool viewCompactDensity() const {const int value=viewDensity();return value<0?compactDensity():value==1;}
+  int viewDensity() const;
+  void setViewDensity(int value);
+  QString viewMode() const;
+  void setViewMode(const QString &value);
+  bool viewSupportsGrid() const;
+  static QVariantList queueWithOrigin(const QVariantList &items,const QString &origin);
+  bool compactDensity() const {return m_settings.value("compactDensity",false).toBool();}
+  void setCompactDensity(bool value);
+  QString startPage() const {return m_settings.value("startPage","home").toString();}
+  void setStartPage(const QString &value);
+  QStringList homeOrder() const {return m_settings.value("homeOrder").toStringList();}
+  QStringList hiddenHomeSections() const {return m_settings.value("hiddenHomeSections").toStringList();}
+  Q_INVOKABLE QVariantList homeSections(bool includeHidden=false) const;
+  Q_INVOKABLE void moveHomeSection(const QString &title,int offset);
+  Q_INVOKABLE void showHomeSection(const QString &title,bool show);
+  Q_INVOKABLE void resetHomeLayout();
+  Q_INVOKABLE void openStartPage();
   Q_INVOKABLE bool saveSession(const QString &name,const QString &id=QString());
   Q_INVOKABLE void renameSession(const QString &id,const QString &name);
   Q_INVOKABLE void deleteSession(const QString &id);
@@ -356,7 +390,7 @@ public:
   Q_INVOKABLE void addToPlaylist(const QString &id, const QVariantMap &item);
   Q_INVOKABLE void removeFromPlaylist(const QString &id, int index);
   Q_INVOKABLE void toggleLike(const QVariantMap &item);
-  Q_INVOKABLE void playAt(int index);
+  Q_INVOKABLE void playAt(int index, int direction=0);
   Q_INVOKABLE void playResults(int index = 0);
   Q_INVOKABLE void playCollection(int index = 0);
   Q_INVOKABLE void enqueueCollection();
@@ -391,6 +425,7 @@ public:
   Q_INVOKABLE QString formatTime(qint64 ms) const;
   Q_INVOKABLE void setSleep(int minutes);
   Q_INVOKABLE QString sleepLabel() const;
+  Q_INVOKABLE void playGroup(const QString &key, bool folders);
   Q_INVOKABLE void save();
   void notifyError(const QString &message, const QString &retryTarget = {});
   void localTestSource(const QUrl &url);
@@ -416,6 +451,7 @@ signals:
   void audioDevicesChanged();
   void queueInfoChanged();
   void sessionsChanged();
+  void presentationChanged();
   void qualityChanged();
   void artworkFitChanged();
   void artworkCacheCleared();
@@ -439,7 +475,7 @@ private:
   friend class SubsonicTest;
   void serverBrowseRequest(QVariantMap request,bool push=true,bool append=false);
   void setupServer();
-  Subsonic m_server;
+  MusicServer m_server;
   QString m_serverArtwork;
   std::shared_ptr<QTemporaryDir> m_serverArtDirectory;
   QTimer m_serverListenTimer;
@@ -509,6 +545,7 @@ private:
   QMediaDevices m_devices;
   QVariantList m_lyricLines;
   QVariantList m_sections, m_favorites, m_history, m_playlists, m_back, m_pins;
+  int m_playbackDirection=1;
   QString m_viewKey = "home";
   QMap<QString,QVariantMap> m_viewOptions;
   QStringList m_viewOrder;
@@ -547,7 +584,9 @@ private:
   QAudioOutput m_audio;
   QAudioBufferOutput m_visualAudio;
   QMediaPlayer m_media;
-  QTimer m_saveTimer, m_sleepTimer, m_sleepTick;
+  QTimer m_saveTimer, m_sleepTimer, m_sleepTick, m_sleepFadeStart, m_sleepFadeTick;
+  double m_userVolume=0.65, m_sleepGain=1.0;
+  void updateSleepGain();
   QHash<QString, QProcess *> m_processes;
   QHash<QString, QVariantMap> m_streams;
   qint64 m_restorePosition = 0, m_savedPosition = 0;

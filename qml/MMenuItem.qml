@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 MenuItem {
     id: control
-    implicitHeight: 44
+    implicitHeight: 48
     height: visible ? implicitHeight : 0
     leftPadding: 14; rightPadding: 14
     palette.windowText: control.enabled ? Theme.text : Theme.muted
@@ -15,10 +15,17 @@ MenuItem {
     contentItem: SungText {
         objectName: "menuItemLabel"
         text: control.text; color: control.enabled ? Theme.text : Theme.muted
-        opacity: control.enabled ? 1 : 0.5; font.pixelSize: 14
+        opacity: control.enabled ? 1 : 0.5; font.pixelSize: Theme.bodyLarge
         readonly property real indicatorSpace: control.checkable && control.indicator ? control.indicator.width+12 : 0
         leftPadding: control.mirrored ? 0 : indicatorSpace
         rightPadding: control.mirrored ? indicatorSpace : 0
     }
-    background: Rectangle { radius: 12; color: control.highlighted || control.activeFocus ? Theme.container : "transparent"; border.color: control.activeFocus ? Theme.primary : "transparent"; border.width: 1 }
+    background: Item {
+        Rectangle {
+            anchors.fill: parent; radius: 12; color: Theme.text
+            opacity: control.down || control.visualFocus ? Theme.pressedOpacity : control.highlighted ? Theme.hoverOpacity : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+        }
+        Rectangle { anchors.fill: parent; anchors.margins: 2; radius: 10; color: "transparent"; border.color: Theme.primary; border.width: 2; visible: control.visualFocus }
+    }
 }

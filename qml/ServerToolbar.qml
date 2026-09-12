@@ -35,8 +35,8 @@ ColumnLayout {
         MMenuItem { text: "Music library"; enabled: app.server.connected && app.server.folders.length>0; onTriggered: folders.popup(serverActions,serverActions.width-folders.width,serverActions.height+4) }
         MDivider {}
         MMenuItem { text: "New server playlist"; enabled: app.server.connected; onTriggered: {name.clear();newPlaylist.open()} }
-        MMenuItem { text: "Save queue to server"; enabled: app.server.connected && app.queue.count>0; onTriggered: app.saveServerQueue() }
-        MMenuItem { text: "Restore server queue"; enabled: app.server.connected; onTriggered: restoreQueue.open() }
+        MMenuItem { text: "Save queue to server"; visible: app.server.supportsQueue; enabled: app.server.connected && app.queue.count>0; onTriggered: app.saveServerQueue() }
+        MMenuItem { text: "Restore server queue"; visible: app.server.supportsQueue; enabled: app.server.connected; onTriggered: restoreQueue.open() }
     }
     MMenu {
         id: folders

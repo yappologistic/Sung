@@ -19,11 +19,10 @@ Item {
     RowLayout {
         id: searchControls; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
         height: visible?48:0; visible: lyricPane.searchOpen; spacing: 6
-        TextField {
-            id: lyricSearch; objectName: "lyricSearchField"; Layout.fillWidth: true; Layout.minimumWidth: 0; implicitHeight: 40
+        MButton { objectName: "closeLyricSearch"; symbol: "back"; tip: "Back to lyrics"; onClicked: lyricPane.closeSearch() }
+        MSearchField {
+            id: lyricSearch; objectName: "lyricSearchField"; Layout.fillWidth: true; Layout.minimumWidth: 0; implicitHeight: 48
             placeholderText: "Find in lyrics"; selectByMouse: true; font.family: Theme.fontFamily; font.pixelSize: 14; color: Theme.text; placeholderTextColor: Theme.muted
-            background: Rectangle { radius: 20; color: Theme.high; border.width: lyricSearch.activeFocus?1:0; border.color: Theme.primary }
-            leftPadding: 14; rightPadding: 10
             Accessible.name: "Find in lyrics"
             onTextChanged: searchDelay.restart()
             Keys.onDownPressed: {lyricResults.currentIndex=Math.min(lyricPane.matches.length-1,lyricResults.currentIndex+1);}
@@ -32,14 +31,13 @@ Item {
             Keys.onEscapePressed: lyricPane.closeSearch()
         }
         SungText { text: lyricPane.matches.length; visible: lyricSearch.text.length>0; color: Theme.muted; font.pixelSize: 12 }
-        MButton { objectName: "closeLyricSearch"; symbol: "close"; tip: "Close lyric search"; onClicked: lyricPane.closeSearch() }
     }
     Timer { id: searchDelay; interval: 90; onTriggered: lyricPane.refreshSearch() }
     ListView {
         id: lyricResults; objectName: "lyricSearchResults"; anchors.fill: parent; anchors.topMargin: searchControls.height+8; clip: true
         visible: lyricPane.searchOpen && lyricSearch.text.length>0; model: lyricPane.matches; reuseItems: true; spacing: 8
         currentIndex: -1; highlightMoveDuration: app.motion?Theme.fast:0
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: MScrollBar {}
         delegate: AbstractButton {
             required property var modelData; required property int index; objectName: "lyricSearchResult_"+index
             width: lyricResults.width; implicitHeight: matchText.implicitHeight+24; enabled: modelData.start>=0
@@ -51,6 +49,8 @@ Item {
         }
         SungText { anchors.centerIn: parent; visible: lyricPane.matches.length===0; text: "No matches"; color: Theme.muted }
     }
+    readonly property int gapSeconds: {app.position;app.lyricLines;app.lyricOffset;return visible && following && !searchOpen && !app.lyricsBusy ? app.lyricGapSeconds : 0;}
+    SungText {id:gapCue;objectName:"lyricGapCue";anchors.horizontalCenter:parent.horizontalCenter;anchors.bottom:parent.bottom;height:visible?36:0;visible:lyricPane.gapSeconds>0;text:"Lyrics in "+lyricPane.gapSeconds+" s";color:Theme.muted;font.pixelSize:14;verticalAlignment:Text.AlignVCenter;Accessible.name:text}
     property bool expanded: false
     property bool following: true
     onFollowingChanged: { if(following)liveLyrics.centerCurrent(); }
@@ -60,7 +60,7 @@ Item {
     MBusyIndicator { objectName: "lyricsSpinner"; anchors.centerIn: parent; running: app.lyricsBusy; label: "Loading lyrics" }
     ListView {
         id: liveLyrics; objectName: "liveLyrics"
-        anchors.fill: parent; anchors.topMargin: searchControls.height; clip: true; spacing: 12
+        anchors.fill: parent; anchors.topMargin: searchControls.height; anchors.bottomMargin:gapCue.visible?44:0; clip: true; spacing: 12
         visible: !app.lyricsBusy && app.lyricLines.length>0 && !(lyricPane.searchOpen && lyricSearch.text.length>0)
         model: app.lyricLines; reuseItems: true; cacheBuffer: 100
         function centerCurrent() {
@@ -76,7 +76,7 @@ Item {
         highlightMoveDuration: app.motion ? 350 : 0
         highlight: Item {}
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: ScrollBar {}
+        ScrollBar.vertical: MScrollBar {}
         onMovementStarted: { lyricPane.following=false; resumeFollow.restart(); }
         delegate: AbstractButton {
             id: lyricLine; objectName: "lyricLine"

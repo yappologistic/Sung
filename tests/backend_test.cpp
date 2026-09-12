@@ -32,6 +32,59 @@ private slots:
     QCoreApplication::setApplicationName("sung-test");
     QCoreApplication::setOrganizationName("SungTests");
   }
+  void sleepFadeRestoresUserVolume() {
+    Backend b;b.setSleepFade(true);b.setVolume(.6);b.setSleep(15);
+    QVERIFY(b.m_sleepFadeStart.isActive());QVERIFY(!b.m_sleepFadeTick.isActive());
+    b.m_sleepTimer.start(15000);b.updateSleepGain();
+    QVERIFY(qAbs(b.m_audio.volume()-.3)<.02);QCOMPARE(b.volume(),.6);
+    QCOMPARE(b.m_settings.value("volume").toDouble(),.6);
+    b.setVolume(.4);QVERIFY(qAbs(b.m_audio.volume()-.2)<.02);QCOMPARE(b.volume(),.4);
+    b.setSleepFade(false);QVERIFY(qAbs(b.m_audio.volume()-.4)<.001);QVERIFY(!b.m_sleepFadeStart.isActive());
+    b.setSleepFade(true);b.m_sleepTimer.start(500);b.updateSleepGain();QVERIFY(b.m_audio.volume()<.01);
+    QTRY_COMPARE_WITH_TIMEOUT(b.sleepLabel(),QString("Off"),2000);
+    QVERIFY(qAbs(b.m_audio.volume()-.4)<.001);QCOMPARE(b.volume(),.4);QVERIFY(!b.m_sleepFadeTick.isActive());
+    b.setSleep(15);b.m_sleepTimer.start(5000);b.updateSleepGain();b.setSleep(0);
+    QVERIFY(qAbs(b.m_audio.volume()-.4)<.001);QVERIFY(!b.m_sleepFadeStart.isActive());
+    {Backend restored;QCOMPARE(restored.volume(),.4);QVERIFY(restored.sleepFade());}
+  }
+  void collapsedSelectionExcludesRanges() {
+    Entries model;model.reconcile({track("fold0000001"),track("fold0000002"),track("fold0000003"),track("fold0000004")});
+    RowSelection selected;selected.setModel(&model);selected.setExcludedRows({1,2});
+    selected.selectAll();QCOMPARE(selected.rows(),QVariantList({0,3}));
+    selected.clear();selected.select(0);selected.select(3,Qt::ShiftModifier);QCOMPARE(selected.rows(),QVariantList({0,3}));
+    selected.setExcludedRows({});selected.selectAll();QCOMPARE(selected.count(),4);
+  }
+  void listeningRefinements() {
+    Backend b;b.clearQueue();b.m_settings.remove("viewLayouts");b.setCompactDensity(false);b.library("local-albums");
+    QVERIFY(b.viewSupportsGrid());QCOMPARE(b.viewMode(),"grid");b.setViewMode("list");b.setViewDensity(1);QVERIFY(b.viewCompactDensity());
+    b.library("files");QCOMPARE(b.viewDensity(),-1);QVERIFY(!b.viewCompactDensity());QVERIFY(!b.viewSupportsGrid());b.setViewMode("grid");QCOMPARE(b.viewMode(),"list");b.setViewDensity(0);
+    b.library("local-albums");QCOMPARE(b.viewMode(),"list");QVERIFY(b.viewCompactDensity());b.setViewDensity(12);QCOMPARE(b.viewDensity(),1);
+    {Backend restored;restored.library("local-albums");QCOMPARE(restored.viewMode(),"list");QCOMPARE(restored.viewDensity(),1);}
+    b.enqueue(track("origin00001"));QCOMPARE(b.queue()->data(b.queue()->index(0),Qt::UserRole+4).toString(),"Added by you");
+    b.m_queue.append(Backend::queueWithOrigin({track("origin00002")},"collection"));b.m_queue.append(Backend::queueWithOrigin({track("origin00003")},"autoplay"));
+    QCOMPARE(b.queue()->data(b.queue()->index(1),Qt::UserRole+4).toString(),"Collection");QCOMPARE(b.queue()->data(b.queue()->index(2),Qt::UserRole+4).toString(),"Autoplay");
+    b.moveQueue(2,0);QCOMPARE(b.queue()->data(b.queue()->index(0),Qt::UserRole+4).toString(),"Autoplay");b.removeQueue(0);b.undo();QCOMPARE(b.queue()->data(b.queue()->index(0),Qt::UserRole+4).toString(),"Autoplay");b.save();
+    {Backend restored;QCOMPARE(restored.queue()->get(0).value("_queueOrigin").toString(),"autoplay");}
+    b.m_media.setSource({});b.m_savedPosition=0;
+    b.m_lyricLines={QVariantMap{{"start",10000},{"end",15000},{"text","First"}},QVariantMap{{"start",25000},{"end",30000},{"text","Second"}}};
+    QCOMPARE(b.lyricGapSeconds(),10);b.m_savedPosition=12000;QCOMPARE(b.lyricGapSeconds(),0);b.m_savedPosition=17000;QCOMPARE(b.lyricGapSeconds(),8);b.m_savedPosition=25000;QCOMPARE(b.lyricGapSeconds(),0);b.m_savedPosition=31000;QCOMPARE(b.lyricGapSeconds(),0);
+    b.m_lyricLines[0]=QVariantMap{{"start",0},{"end",0},{"text","Long line without end"}};b.m_savedPosition=10000;QCOMPARE(b.lyricGapSeconds(),0);
+    b.m_lyricLines[0]=QVariantMap{{"start",0},{"end",25000},{"text",""}};QCOMPARE(b.lyricGapSeconds(),15);
+    b.m_settings.remove("viewLayouts");b.clearQueue();b.setCompactDensity(false);
+  }
+  void presentationPreferences() {
+    Backend b;b.setWatchMusicFolders(false);b.m_pins.clear();b.m_page="home";
+    b.m_sections={QVariantMap{{"title","One"},{"items",QVariantList{track("11111111111")}}},QVariantMap{{"title","Two"}},QVariantMap{{"title","Three"}}};
+    b.resetHomeLayout();b.setCompactDensity(true);b.setStartPage("files");QVERIFY(b.compactDensity());QCOMPARE(b.startPage(),QString("files"));
+    b.setStartPage("invalid");QCOMPARE(b.startPage(),QString("files"));
+    b.showHomeSection("One",false);QCOMPARE(b.homeSections().size(),2);QCOMPARE(b.homeSections(true).size(),3);
+    b.moveHomeSection("Three",-1);QCOMPARE(b.homeSections()[0].toMap().value("title").toString(),QString("Three"));
+    b.showHomeSection("unknown",false);QCOMPARE(b.hiddenHomeSections(),QStringList{"One"});
+    {Backend restored;restored.setWatchMusicFolders(false);QVERIFY(restored.compactDensity());QCOMPARE(restored.startPage(),QString("files"));QCOMPARE(restored.homeOrder(),b.homeOrder());QCOMPARE(restored.hiddenHomeSections(),b.hiddenHomeSections());}
+    b.openStartPage();QCOMPARE(b.page(),QString("library"));QCOMPARE(b.libraryId(),QString("files"));
+    b.setStartPage("server");b.openStartPage();QCOMPARE(b.page(),QString("server"));
+    b.setStartPage("home");b.setCompactDensity(false);b.resetHomeLayout();QVERIFY(b.hiddenHomeSections().isEmpty());QVERIFY(b.homeOrder().isEmpty());
+  }
   void playbackPolish() {
     Backend b;b.setPauseOnDisconnect(false);b.setWatchMusicFolders(false);b.m_sessions.clear();b.clearQueue();b.setVolume(0);b.setAutoplay(false);b.setPrepareNext(false);
     QTemporaryDir dir;const auto path=dir.filePath("track.wav");QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","sine=frequency=330:sample_rate=22050","-t","60",path});QVERIFY(encode.waitForFinished(10000));QCOMPARE(encode.exitCode(),0);
@@ -371,12 +424,13 @@ private slots:
     for(int i=0;i<20;++i)b.rememberSearch(QString::number(i));QCOMPARE(b.recentSearches().size(),12);
     b.removeRecentSearch("19");QCOMPARE(b.recentSearches().first(),"18");
     QVariantList songs;for(int i=0;i<6;++i){auto t=track(QString("bulk%1").arg(i,7,10,QChar('0')));t["title"]=QString("Nebula %1").arg(i);t["seconds"]=120;songs.append(t);}
+    const auto queuedSongs=Backend::queueWithOrigin(songs,"manual");
     const auto id=b.createPlaylist("Nebula collection");b.addItemsToPlaylist(id,songs);b.addItemsToPlaylist(id,songs);b.openPlaylist(id);QCOMPARE(b.results()->count(),6);
     b.enqueueItems(songs);b.playAt(2);b.pause();b.seek(23000);const auto current=b.current();const auto token=b.trackToken();
     b.moveQueueRows({0,2,2,-1,999},6);QCOMPARE(b.currentIndex(),5);QCOMPARE(b.current(),current);QCOMPARE(b.position(),23000);QCOMPARE(b.trackToken(),token);
-    b.undo();QCOMPARE(b.queue()->rows,songs);QCOMPARE(b.currentIndex(),2);QCOMPARE(b.position(),23000);
-    b.removeQueueRows({0,4});QCOMPARE(b.currentIndex(),1);QCOMPARE(b.current(),current);b.undo();QCOMPARE(b.currentIndex(),2);QCOMPARE(b.queue()->rows,songs);
-    b.enqueueItems({songs[0],songs[1]},true);QCOMPARE(b.queue()->get(3),songs[0].toMap());QCOMPARE(b.queue()->get(4),songs[1].toMap());QCOMPARE(b.current(),current);b.undo();QCOMPARE(b.queue()->rows,songs);
+    b.undo();QCOMPARE(b.queue()->rows,queuedSongs);QCOMPARE(b.currentIndex(),2);QCOMPARE(b.position(),23000);
+    b.removeQueueRows({0,4});QCOMPARE(b.currentIndex(),1);QCOMPARE(b.current(),current);b.undo();QCOMPARE(b.currentIndex(),2);QCOMPARE(b.queue()->rows,queuedSongs);
+    b.enqueueItems({songs[0],songs[1]},true);QCOMPARE(b.queue()->get(3),queuedSongs[0].toMap());QCOMPARE(b.queue()->get(4),queuedSongs[1].toMap());QCOMPARE(b.current(),current);b.undo();QCOMPARE(b.queue()->rows,queuedSongs);
     b.movePlaylistRows(id,{1,3},6);QCOMPARE(b.results()->get(4),songs[1].toMap());QCOMPARE(b.results()->get(5),songs[3].toMap());b.undo();QCOMPARE(b.results()->rows,songs);
     b.collection()->setSortKey("title");b.movePlaylistRows(id,{0},5);QCOMPARE(b.results()->rows,songs);
     b.collection()->setQuery("Nebula 4");const int source=b.collection()->sourceIndex(0);b.removePlaylistRows(id,{source});QCOMPARE(b.results()->count(),5);b.undo();QCOMPARE(b.results()->rows,songs);
@@ -384,7 +438,7 @@ private slots:
     auto matches=b.localMatches("nebula");QVERIFY(matches.size()<=8);QCOMPARE(matches.first().toMap().value("kind").toString(),"local");
     auto exact=b.localMatches("nebula 2");QCOMPARE(exact.size(),1);QCOMPARE(exact.first().toMap().value("queueIndex").toInt(),2);
     QVERIFY(b.localMatches("zz-no-match").isEmpty());QVERIFY(b.localMatches("").isEmpty());
-    b.removeQueueRows({0,1,2,3,4,5});QCOMPARE(b.currentIndex(),-1);QCOMPARE(b.queue()->count(),0);b.undo();QCOMPARE(b.queue()->rows,songs);
+    b.removeQueueRows({0,1,2,3,4,5});QCOMPARE(b.currentIndex(),-1);QCOMPARE(b.queue()->count(),0);b.undo();QCOMPARE(b.queue()->rows,queuedSongs);
     b.deletePlaylist(id);b.clearQueue();
   }
   void selectionTracksModelChanges() {

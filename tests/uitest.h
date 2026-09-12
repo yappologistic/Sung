@@ -38,3 +38,9 @@ void runProductPolishTests(Backend *, QQuickWindow *);
 void runLibraryPolishTests(Backend *, QQuickWindow *);
 
 void runPlaybackPolishTests(Backend *, QQuickWindow *);
+
+void runVisualRefinementTests(Backend *, QQuickWindow *);
+
+void runListeningRefinementTests(Backend *backend,QQuickWindow *window);
+
+void runInteractionRefinementTests(Backend*,QQuickWindow*);

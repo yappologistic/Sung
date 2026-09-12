@@ -53,6 +53,12 @@ if ready:
     if shutil.which('dbus-run-session') and shutil.which('qdbus6'):
         stage('mpris',['dbus-run-session','--','python3',str(root/'tests/mpris_test.py'),str(build/'sung')],40,profile('mpris-profile'))
     else: rows.append(dict(stage='mpris',status='fail',detail='dbus-run-session and qdbus6 are required'))
+    e=profile("interaction-refinement-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"interaction-refinement"))
+    stage("interaction-refinement",[str(build/"sung"),"--isolated","--interaction-refinement-test"],120,e)
+    e=profile("listening-refinement-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"listening-refinement"))
+    stage("listening-refinement",[str(build/"sung"),"--isolated","--listening-refinement-test"],90,e)
+    e=profile("visual-refinement-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"visual-refinement"))
+    stage("visual-refinement",[str(build/"sung"),"--isolated","--visual-refinement-test"],90,e)
     e=profile("online-artwork-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"online-artwork"))
     stage("online-artwork",[str(build/"sung"),"--isolated","--online-artwork-test"],60,e)
     e=profile("local-artwork-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"local-artwork"))

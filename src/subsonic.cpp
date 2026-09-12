@@ -37,7 +37,8 @@ static QString apiError(const QVariantMap &data) {
     return "The server could not complete this action.";
   }
 }
-Subsonic::Subsonic(QObject *parent) : QObject(parent) {
+Subsonic::Subsonic(QObject *parent, bool restore) : QObject(parent) {
+  if (!restore) return;
   m_address = m_settings.value("subsonic/address").toString();
   m_username = m_settings.value("subsonic/username").toString();
   if (!m_address.isEmpty() && !m_username.isEmpty()) {

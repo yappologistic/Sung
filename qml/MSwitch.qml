@@ -2,12 +2,12 @@ import QtQuick
 import QtQuick.Controls
 Switch {
     id: control
-    implicitHeight: 48
+    implicitHeight: Math.max(48, label.implicitHeight+16)
     hoverEnabled: true
     opacity: enabled ? 1 : 0.38
     indicator: Rectangle {
         implicitWidth: 52; implicitHeight: 32
-        x: control.leftPadding; y: (control.height-height)/2
+        x: control.width-control.rightPadding-width; y: (control.height-height)/2
         radius: 16
         color: control.checked ? Theme.primary : Theme.high
         border.width: control.checked ? 0 : 2; border.color: Theme.controlOutline
@@ -34,5 +34,5 @@ Switch {
             Behavior on width { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
     }
-    contentItem: SungText { text: control.text; leftPadding: 64; font.pixelSize: Theme.bodyLarge }
+    contentItem: SungText { id:label;text: control.text;rightPadding:68;verticalAlignment:Text.AlignVCenter;wrapMode:Text.Wrap;font.pixelSize:Theme.bodyLarge }
 }

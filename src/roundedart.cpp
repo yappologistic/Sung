@@ -12,7 +12,7 @@
 #include <utility>
 #include <QRegularExpression>
 
-std::function<QUrl(const QUrl &)> RoundedArt::resolveServerArt;
+std::function<QNetworkRequest(const QUrl &)> RoundedArt::resolveServerArt;
 static QCache<QString, QImage> cache(8 * 1024 * 1024);
 static QNetworkAccessManager *manager() {
   static QNetworkAccessManager *n = nullptr;
@@ -45,10 +45,30 @@ void RoundedArt::setAnimation(MotionArtwork *animation) {
   if(animation)connect(animation,&MotionArtwork::frameChanged,this,[this]{emit readyChanged();update();});
   emit animationChanged();emit readyChanged();update();
 }
+void RoundedArt::finishTransition(){
+  if(m_fade)m_fade->stop();
+  m_previous={};m_mix=1;emit transitionChanged();emit readyChanged();update();
+}
+void RoundedArt::setCrossfade(bool value){if(value==m_crossfade)return;m_crossfade=value;if(!value)finishTransition();emit crossfadeChanged();}
+void RoundedArt::imageReady(){
+  if(m_crossfade && !m_previous.isNull() && !m_image.isNull()){
+    if(!m_fade){m_fade=std::make_unique<QVariantAnimation>();m_fade->setDuration(220);m_fade->setStartValue(0.0);m_fade->setEndValue(1.0);m_fade->setEasingCurve(QEasingCurve::InOutCubic);
+      connect(m_fade.get(),&QVariantAnimation::valueChanged,this,[this](const QVariant &value){m_mix=value.toReal();update();});
+      connect(m_fade.get(),&QVariantAnimation::finished,this,&RoundedArt::finishTransition);
+    }
+    m_fade->stop();m_mix=0;m_fade->start();emit transitionChanged();
+  }else finishTransition();
+  emit readyChanged();update();
+}
 void RoundedArt::setSource(const QUrl &v) {
   if (m_source == v)
     return;
-  m_source = v;m_originalSizeFallback=false;
+  if(m_fade)m_fade->stop();
+  if(m_crossfade && !v.isEmpty()){
+    if(!m_image.isNull()){m_previous=m_image;m_previousFit=m_fit;}
+    m_mix=0;
+  }else {m_previous={};m_mix=1;}
+  m_source = v;m_originalSizeFallback=false;emit transitionChanged();
   emit sourceChanged();
   reload();
 }
@@ -67,28 +87,28 @@ void RoundedArt::reload(bool preserve) {
   const auto key = m_source.toString() + QLatin1Char('|') + QString::number(m_pixels);
   if (auto img = cache.object(key)) {
     m_image = *img;
-    emit readyChanged();
-    update();
+    imageReady();
     return;
   }
   if(m_source.isLocalFile()) {
-    const QFileInfo file(m_source.toLocalFile());if(file.size()>2*1024*1024)return;
+    const QFileInfo file(m_source.toLocalFile());if(file.size()>2*1024*1024){finishTransition();return;}
     QImageReader reader(file.absoluteFilePath());reader.setAutoTransform(true);const auto size=reader.size();
-    if(!size.isValid()||size.width()>4096||size.height()>4096)return;
+    if(!size.isValid()||size.width()>4096||size.height()>4096){finishTransition();return;}
     reader.setScaledSize(size.scaled(m_pixels,m_pixels,Qt::KeepAspectRatio));m_image=reader.read();
     if(m_image.format()==QImage::Format_RGB32)m_image=std::move(m_image).convertToFormat(QImage::Format_RGB888);
     if(!m_image.isNull())cache.insert(key,new QImage(m_image),m_image.sizeInBytes());
-    emit readyChanged();update();return;
+    imageReady();return;
   }
   const bool server=m_source.scheme()=="sungcover";
-  QUrl url=server&&resolveServerArt?resolveServerArt(m_source):m_source;
+  QNetworkRequest serverRequest=server&&resolveServerArt?resolveServerArt(m_source):QNetworkRequest();
+  QUrl url=server?serverRequest.url():m_source;
   // Only resize known Google thumbnail transforms; other artwork URLs are untouched.
   if(!m_originalSizeFallback && !server && (url.host()=="lh3.googleusercontent.com" || url.host()=="lh3.ggpht.com" || url.host()=="yt3.googleusercontent.com" || url.host()=="yt3.ggpht.com")){
     auto path=url.path();static const QRegularExpression dimensions("=w(\\d+)-h(\\d+)");const auto match=dimensions.match(path);
     if(match.hasMatch()){const int size=qMax(qMax(match.captured(1).toInt(),match.captured(2).toInt()),m_pixels);path.replace(match.capturedStart(),match.capturedLength(),QString("=w%1-h%1").arg(qMin(1600,size)));url.setPath(path);}
   }
-  if(url.isEmpty() || (url.scheme()!="https" && !(server&&url.scheme()=="http")))return;
-  QNetworkRequest req(url);
+  if(url.isEmpty() || (url.scheme()!="https" && !(server&&url.scheme()=="http"))){finishTransition();return;}
+  QNetworkRequest req=server?serverRequest:QNetworkRequest(url);
   if(server){req.setAttribute(QNetworkRequest::RedirectPolicyAttribute,QNetworkRequest::ManualRedirectPolicy);req.setAttribute(QNetworkRequest::CacheSaveControlAttribute,false);}
   req.setAttribute(QNetworkRequest::CacheLoadControlAttribute,
                    server?QNetworkRequest::AlwaysNetwork:QNetworkRequest::PreferCache);
@@ -132,24 +152,27 @@ void RoundedArt::reload(bool preserve) {
     }
     r->deleteLater();
     if(m_image.isNull() && resized && !m_originalSizeFallback){m_originalSizeFallback=true;reload();return;}
-    emit readyChanged();
-    update();
+    imageReady();
   });
 }
 void RoundedArt::paint(QPainter *p) {
   const auto &image=m_animation && !m_animation->frame().isNull()?m_animation->frame():m_image;
-  if (image.isNull())
-    return;
-  QPainterPath path;
-  path.addRoundedRect(boundingRect(), m_radius, m_radius);
-  p->setClipPath(path);
-  p->setRenderHint(QPainter::SmoothPixmapTransform);
-  const auto s =
-      QSizeF(image.size())
-          .scaled(boundingRect().size(), m_fit?Qt::KeepAspectRatio:Qt::KeepAspectRatioByExpanding);
-  p->drawImage(QRectF((width() - s.width()) / 2, (height() - s.height()) / 2,
-                      s.width(), s.height()),
-               image);
+  if(image.isNull() && m_previous.isNull())return;
+  p->save();QPainterPath path;path.addRoundedRect(boundingRect(),m_radius,m_radius);p->setClipPath(path);p->setRenderHint(QPainter::SmoothPixmapTransform);
+  const auto draw=[&](const QImage &art,bool fit,qreal opacity){if(art.isNull())return;const auto s=QSizeF(art.size()).scaled(boundingRect().size(),fit?Qt::KeepAspectRatio:Qt::KeepAspectRatioByExpanding);p->setOpacity(opacity);p->drawImage(QRectF((width()-s.width())/2,(height()-s.height())/2,s.width(),s.height()),art);};
+  if(!m_previous.isNull()){
+    draw(m_previous,m_previousFit,1);
+    // Source with fractional coverage interpolates premultiplied color and alpha.
+    // Plus with painter opacity does not preserve alpha in Qt's raster backend.
+    p->setCompositionMode(QPainter::CompositionMode_Source);
+    if(!image.isNull() && m_fit){
+      const auto s=QSizeF(image.size()).scaled(boundingRect().size(),Qt::KeepAspectRatio);
+      QPainterPath outside,inside;outside.addRect(boundingRect());inside.addRect(QRectF((width()-s.width())/2,(height()-s.height())/2,s.width(),s.height()));
+      p->setCompositionMode(QPainter::CompositionMode_DestinationOut);p->setOpacity(m_mix);p->fillPath(outside.subtracted(inside),Qt::black);p->setCompositionMode(QPainter::CompositionMode_Source);
+    }
+    draw(image,m_fit,m_mix);
+  }else draw(image,m_fit,1);
+  p->restore();
 }
 
 void RoundedArt::clearCaches() { cache.clear(); if(manager()->cache())manager()->cache()->clear(); }

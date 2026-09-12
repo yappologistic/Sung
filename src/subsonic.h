@@ -27,7 +27,7 @@ class Subsonic : public QObject {
 public:
   using Reply = std::function<void(const QVariantMap &, const QString &)>;
   using Params = QList<QPair<QString, QString>>;
-  explicit Subsonic(QObject *parent = nullptr);
+  explicit Subsonic(QObject *parent = nullptr, bool restore = true);
   ~Subsonic() override;
   bool connected() const { return m_connected; }
   bool connecting() const { return m_connecting; }
@@ -79,8 +79,10 @@ signals:
 
 private:
   QUrl url(const QString &method, const Params &params) const;
+protected:
   void secret(const QStringList &arguments, const QByteArray &input,
               std::function<void(bool, QByteArray)> callback);
+private:
   void discover();
   QVariantList items(const QVariant &rows, const QString &kind) const;
   void stopRequests();

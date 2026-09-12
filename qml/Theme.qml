@@ -20,6 +20,9 @@ QtObject {
     readonly property int headlineMedium: 28
     readonly property int headlineSmall: 24
     readonly property int titleLarge: 22
+    readonly property int rowHeight: app.viewCompactDensity ? 56 : 72
+    readonly property int rowArtwork: app.viewCompactDensity ? 36 : 48
+    readonly property int gridCell: app.viewCompactDensity ? 148 : 180
     readonly property int bodyLarge: 16
     readonly property int bodyMedium: 14
     readonly property int labelLarge: 14
