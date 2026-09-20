@@ -362,6 +362,7 @@ public:
   void setViewMode(const QString &value);
   bool viewSupportsGrid() const;
   static QVariantList queueWithOrigin(const QVariantList &items,const QString &origin);
+  static bool sameAlbum(const QVariantMap &a,const QVariantMap &b);
   bool compactDensity() const {return m_settings.value("compactDensity",false).toBool();}
   void setCompactDensity(bool value);
   QString startPage() const {return m_settings.value("startPage","home").toString();}
@@ -785,7 +786,7 @@ private:
   double m_fadeGain = 1.0;
   quint64 m_crossfadeToken = 0;
   void considerCrossfade();
-  void beginCrossfade(int milliseconds);
+  void beginCrossfade(int milliseconds,int target);
   void stepCrossfade();
   void endCrossfade(bool completed);
   void clearSpare();
@@ -793,8 +794,10 @@ private:
   int m_handoffIndex = -1;
   bool m_handoffPrepared = false;
   int handoffTarget();
+  // Whether an overlap belongs between the song playing and the one at target.
+  bool overlapSuits(int target) const;
   QUrl readySource(const QVariantMap &track) const;
-  bool armHandoff(bool playImmediately);
+  bool armHandoff(bool playImmediately,int target=-1);
   void adoptHandoff(int index);
   bool finishGapless();
   QTimer m_saveTimer, m_sleepTimer, m_sleepTick, m_sleepFadeStart, m_sleepFadeTick;

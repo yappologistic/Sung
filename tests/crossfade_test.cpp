@@ -20,7 +20,11 @@ class CrossfadeTest : public QObject {
 
   // Short recordings, so a transition arrives inside a test's patience. A tone
   // rather than silence where the meters have to see something.
-  bool encode(const QString &name, const QString &title, int seconds, int hertz = 0) {
+  //
+  // Each fixture names its own album, because the transition rules read the
+  // album: songs meant to be blended have to come from separate records.
+  bool encode(const QString &name, const QString &title, int seconds, int hertz = 0,
+              const QString &album = QString()) {
     const QString source = hertz > 0
                                ? QString("sine=frequency=%1:sample_rate=44100:duration=%2").arg(hertz).arg(seconds)
                                : "anullsrc=r=44100:cl=mono";
@@ -28,7 +32,8 @@ class CrossfadeTest : public QObject {
     if (hertz <= 0)
       arguments << "-t" << QString::number(seconds);
     arguments << "-metadata" << ("title=" + title) << "-metadata" << "artist=Fixture artist"
-              << "-metadata" << "album=Handover" << music.filePath(name);
+              << "-metadata" << ("album=" + (album.isEmpty() ? title + " single" : album))
+              << music.filePath(name);
     QProcess run;
     run.start("ffmpeg", arguments);
     return run.waitForFinished(20000) && run.exitCode() == 0;
@@ -69,6 +74,9 @@ private slots:
     QVERIFY(encode("01 first.flac", "First", 4));
     QVERIFY(encode("02 second.flac", "Second", 6));
     QVERIFY(encode("03 third.flac", "Third", 6));
+    // Two sides of one record, for the transition that must not blend.
+    QVERIFY(encode("04 side a.flac", "Side A", 6, 0, "One record"));
+    QVERIFY(encode("05 side b.flac", "Side B", 6, 0, "One record"));
     for (const auto &name : {"01 first.flac", "02 second.flac", "03 third.flac"})
       files << music.filePath(name);
   }
@@ -447,6 +455,154 @@ private slots:
     // History records the song that is now playing.
     b->library("history");
     QVERIFY2(b->results()->count() >= 1, "the change was recorded in history");
+    b->stop();
+  }
+
+  // --- Which transitions an overlap belongs in ---
+  //
+  // These run last: they import fixtures of their own, and the cases above
+  // count the songs in the library.
+
+  // What counts as one album, stated directly rather than inferred from a
+  // transition that did or did not happen.
+  void whatCountsAsOneAlbum() {
+    const QVariantMap side{{"localPath", "/music/a.flac"}, {"album", "One record"}, {"artist", "A"}};
+    const QVariantMap otherSide{{"localPath", "/music/b.flac"}, {"album", "one record"}, {"artist", "A"}};
+    const QVariantMap someoneElse{{"localPath", "/music/c.flac"}, {"album", "One record"}, {"artist", "B"}};
+    const QVariantMap looseOne{{"localPath", "/music/x.flac"}, {"artist", ""}};
+    const QVariantMap looseTwo{{"localPath", "/music/y.flac"}, {"artist", ""}};
+    QVERIFY2(Backend::sameAlbum(side, otherSide), "an album name matches whatever its case");
+    QVERIFY2(!Backend::sameAlbum(side, someoneElse), "two artists' records of one name stay apart");
+    QVERIFY2(!Backend::sameAlbum(looseOne, looseTwo), "untagged files are not a record");
+
+    const QVariantMap track{{"albumId", "MPREb_one"}, {"source", "youtube"}};
+    const QVariantMap sameRecord{{"albumId", "MPREb_one"}, {"source", "youtube"}};
+    const QVariantMap another{{"albumId", "MPREb_two"}, {"source", "youtube"}};
+    const QVariantMap onAServer{{"albumId", "MPREb_one"}, {"source", "subsonic"}, {"server", "https://s"}};
+    QVERIFY(Backend::sameAlbum(track, sameRecord));
+    QVERIFY(!Backend::sameAlbum(track, another));
+    QVERIFY2(!Backend::sameAlbum(track, onAServer), "one id on two services is not one record");
+    QVERIFY2(!Backend::sameAlbum(side, track), "a file and a catalogue track are never paired");
+  }
+
+  // Two tracks of one album are one piece of music cut in two, so the change
+  // between them is handed over rather than blended. It still has no gap.
+  void oneAlbumIsHandedOverRatherThanBlended() {
+    auto b = std::make_unique<Backend>();
+    b->setVolume(0.8);
+    b->setLyricsFallback(false);
+    b->setAutoplay(false);
+    b->setWatchMusicFolders(false);
+    b->setOnlineArtwork(false);
+    b->setPrepareNext(false);
+    b->setRepeat(0);
+    b->setShuffle(false);
+    b->setGapless(true);
+    b->clearQueue();
+    b->importLocalFiles({QUrl::fromLocalFile(music.filePath("04 side a.flac")),
+                         QUrl::fromLocalFile(music.filePath("05 side b.flac"))});
+    QTRY_VERIFY_WITH_TIMEOUT(!b->importingLocal(), 20000);
+    b->library("files");
+    QVariantList sides;
+    for (const auto &row : b->results()->rows)
+      if (row.toMap().value("album").toString() == "One record")
+        sides.append(row);
+    QCOMPARE(sides.size(), 2);
+    b->setCrossfadeSeconds(2);
+    b->enqueueItems(sides);
+    QCOMPARE(b->queue()->count(), 2);
+    b->playAt(0);
+    QTRY_VERIFY_WITH_TIMEOUT(b->playing() && b->duration() > 0, 10000);
+    QVERIFY2(b->duration() > 2000 * 2, "the fixture is long enough to hold an overlap");
+    QVERIFY2(Backend::sameAlbum(b->queue()->get(0), b->queue()->get(1)),
+             "the fixture really is one record");
+
+    const bool deckBefore = b->m_usingB;
+    int silent = 0, samples = 0;
+    QElapsedTimer watch;
+    watch.start();
+    while (b->currentIndex() == 0 && watch.elapsed() < 20000) {
+      QVERIFY2(!b->crossfading(), "an album must not be cross-faded with itself");
+      QTest::qWait(10);
+      if (b->position() > 500 || b->currentIndex() > 0) {
+        ++samples;
+        if (!b->playing())
+          ++silent;
+      }
+    }
+    QCOMPARE(b->currentIndex(), 1);
+    QVERIFY2(samples > 20, "the join was actually observed");
+    QVERIFY2(silent <= 1,
+             qPrintable(QString("the seam left %1 of %2 samples silent").arg(silent).arg(samples)));
+    QCOMPARE(b->current().value("title").toString(), QString("Side B"));
+    QVERIFY(b->playing());
+    QVERIFY2(b->m_usingB != deckBefore, "the waiting deck took over rather than the audio reloading");
+    b->stop();
+  }
+
+  // A song the queue rolled into on its own is not a transition the listener
+  // arranged, so it is joined rather than mixed into.
+  void autoplayContinuationIsJoinedRatherThanBlended() {
+    auto b = loaded();
+    QTRY_VERIFY_WITH_TIMEOUT(!b->importingLocal(), 20000);
+    b->library("files");
+    QVariantList songs;
+    for (const auto &row : b->results()->rows) {
+      const auto title = row.toMap().value("title").toString();
+      if (title == "Second" || title == "Third")
+        songs.append(row);
+    }
+    QCOMPARE(songs.size(), 2);
+    b->setCrossfadeSeconds(2);
+    b->setRepeat(0);
+    b->setShuffle(false);
+    b->setGapless(true);
+    b->enqueueItems(songs);
+    QCOMPARE(b->queue()->count(), 2);
+    // The second song arrived the way the queue delivers a recommendation.
+    auto rows = b->queue()->rows;
+    auto rolled = rows[1].toMap();
+    rolled["_queueOrigin"] = "autoplay";
+    rows[1] = rolled;
+    b->m_queue.reconcile(rows);
+    QCOMPARE(b->queue()->get(1).value("_queueOrigin").toString(), QString("autoplay"));
+    QVERIFY2(!Backend::sameAlbum(b->queue()->get(0), b->queue()->get(1)),
+             "only the origin, not the album, keeps this pair apart");
+    b->playAt(0);
+    QTRY_VERIFY_WITH_TIMEOUT(b->playing() && b->duration() > 0, 10000);
+    QElapsedTimer watch;
+    watch.start();
+    while (b->currentIndex() == 0 && watch.elapsed() < 20000) {
+      QVERIFY2(!b->crossfading(), "autoplay is joined, not mixed into");
+      QTest::qWait(10);
+    }
+    QCOMPARE(b->currentIndex(), 1);
+    QVERIFY(b->playing());
+    b->stop();
+  }
+
+  // The same two songs, arrived at the way the listener queued them, do blend:
+  // the rules above exclude pairs, not the feature.
+  void thePairsOutsideThoseRulesStillBlend() {
+    auto b = loaded();
+    QTRY_VERIFY_WITH_TIMEOUT(!b->importingLocal(), 20000);
+    b->library("files");
+    QVariantList songs;
+    for (const auto &row : b->results()->rows) {
+      const auto title = row.toMap().value("title").toString();
+      if (title == "Second" || title == "Third")
+        songs.append(row);
+    }
+    QCOMPARE(songs.size(), 2);
+    b->setCrossfadeSeconds(2);
+    b->setRepeat(0);
+    b->setShuffle(false);
+    b->setGapless(true);
+    b->enqueueItems(songs);
+    b->playAt(0);
+    QTRY_VERIFY_WITH_TIMEOUT(b->playing() && b->duration() > 0, 10000);
+    QTRY_VERIFY_WITH_TIMEOUT(b->crossfading(), 20000);
+    QTRY_COMPARE_WITH_TIMEOUT(b->currentIndex(), 1, 10000);
     b->stop();
   }
 };

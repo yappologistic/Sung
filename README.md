@@ -124,6 +124,8 @@ Press **F11** for immersive playback. The **…** menu selects Artwork, Lyrics o
 
 The same **…** menu offers **Up next covers**: a carousel of the queue below the player, with the playing track centered and large and the rest peeking either side. Scrolling snaps to a cover and plays it as soon as it settles; clicking a cover plays it directly. The choice is remembered. **Show all** opens the full queue for anything the strip cannot reach. The carousel shrinks the main cover to make room, so it is off by default.
 
+**Settings → Playback → Crossfade** overlaps the end of one song with the beginning of the next, by up to twelve seconds. Two pairs are joined rather than blended: two tracks of the same album, because a record that runs its songs together puts the seam exactly where the recording says, and a song autoplay rolled into on its own, which is not a transition you arranged. Neither of those falls back to a silence. **Gapless playback** hands the next song to the output as the current one ends, and that is what carries the joined pairs too. A recording shorter than two overlaps is played in full instead. The head start a transition needs is prepared while the current song plays, so turning off **Prepare the next song** leaves the ordinary transition in charge.
+
 The sleep timer can stop at the **end of the queue** as well as after a set time or the current track. It is offered only when the queue can actually finish, so it is unavailable while shuffle or repeat is on.
 
 **Settings → Playback → Resume long recordings** returns to where you left a recording of 20 minutes or more: mixes, sets and live shows. The mark is written when you pause or move on, dropped once the recording finishes or if you stop near either end, and up to 400 are kept locally.
@@ -201,7 +203,7 @@ Library data is stored in `~/.local/share/Sung/sung/`, settings in `~/.config/Su
 
 ### Troubleshooting
 
-Playback depends on YouTube availability, region and network conditions. Sung buffers audio before playing, so starting a song can take a moment. It does not remove sponsor segments embedded in recordings or promise gapless playback.
+Playback depends on YouTube availability, region and network conditions. Sung buffers audio before playing, so starting a song can take a moment. It does not remove sponsor segments embedded in recordings.
 
 If YouTube playback stops working after an upstream change, update the resolver:
 

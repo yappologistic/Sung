@@ -160,6 +160,26 @@ static QString localGroupKey(const QVariantMap &t,bool album) {
   const auto artist=album?groupArtist(t):t.value("artist").toString().trimmed();
   return artist.toCaseFolded()+QChar(0x1f)+(album?t.value("album").toString().trimmed().toCaseFolded():QString());
 }
+// Whether two tracks are parts of one album, which is what a transition has to
+// know before it blends them. The library's own grouping answers it: a
+// catalogue or server track by its album id, an imported file by the key the
+// local album browser files it under, so two records called "Greatest Hits" by
+// different artists stay apart.
+//
+// An imported file needs a named album to count. A folder of untagged files
+// groups under "Unknown album" in the browser, but it is not a record, and
+// treating it as one would quietly drop the overlap between unrelated songs.
+bool Backend::sameAlbum(const QVariantMap &a,const QVariantMap &b) {
+  const bool localA=!a.value("localPath").toString().isEmpty();
+  const bool localB=!b.value("localPath").toString().isEmpty();
+  if(localA || localB){
+    if(localA!=localB || a.value("album").toString().trimmed().isEmpty())return false;
+    return localGroupKey(a,true)==localGroupKey(b,true);
+  }
+  const auto id=a.value("albumId").toString();
+  return !id.isEmpty() && id==b.value("albumId").toString()
+      && a.value("source")==b.value("source") && a.value("server")==b.value("server");
+}
 QVariantList Backend::localGroups(const QString &kind) const {
   const bool album=kind=="local-albums";QMap<QString,QVariantMap> groups;
   for(const auto &v:m_localTracks){const auto t=v.toMap();const auto key=localGroupKey(t,album);

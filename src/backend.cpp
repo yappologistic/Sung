@@ -2510,8 +2510,8 @@ QUrl Backend::readySource(const QVariantMap &track) const {
   return url.scheme()=="https" ? url : QUrl();
 }
 
-bool Backend::armHandoff(bool playImmediately) {
-  const int target=handoffTarget();
+bool Backend::armHandoff(bool playImmediately,int target) {
+  if(target<0)target=handoffTarget();
   if(target<0)return false;
   const auto track=m_queue.get(target);
   const auto source=readySource(track);
@@ -2537,6 +2537,28 @@ void Backend::clearSpare() {
   m_handoffPrepared=false;
 }
 
+// An overlap is a transition between two separate pieces of music, so two
+// pairs are left alone.
+//
+// Two tracks of one album are a single piece cut in two. A record that runs
+// its songs together, a live set and a continuous mix all put the seam exactly
+// where the recording says, and blending across it is heard as damage rather
+// than as a transition. Second, a song the queue rolled into on its own is not
+// a transition the listener arranged, so autoplay is joined rather than mixed
+// into.
+//
+// Neither case falls back to a gap: the seamless handover below carries them,
+// which is the same change without the blend. This is the choice Material
+// leaves to the product, and it needs no setting because there is no listener
+// who wants an album cross-faded with itself.
+bool Backend::overlapSuits(int target) const {
+  if(target<0 || target>=m_queue.count())return false;
+  const auto next=m_queue.get(target);
+  if(next.value("_queueOrigin").toString()=="autoplay")return false;
+  if(m_index<0 || m_index>=m_queue.count())return true;
+  return !sameAlbum(m_queue.get(m_index),next);
+}
+
 void Backend::considerCrossfade() {
   if(!playing() || m_resolving)return;
   const auto total=m_media().duration();
@@ -2544,20 +2566,21 @@ void Backend::considerCrossfade() {
   const qint64 remaining=total-m_media().position();
   if(remaining<0)return;
   const int seconds=crossfadeSeconds();
-  if(seconds>0){
-    const qint64 window=qint64(seconds)*1000;
-    // A recording shorter than two overlaps would be mostly overlap.
-    if(total<window*2 || m_crossfading || remaining>window)return;
-    beginCrossfade(int(window));
-    return;
+  const qint64 window=qint64(seconds)*1000;
+  // A recording shorter than two overlaps would be mostly overlap.
+  if(seconds>0 && !m_crossfading && total>=window*2 && remaining<=window){
+    // The destination is settled once, here, so the pair that is judged is the
+    // pair that plays. Asking twice would let shuffle answer differently.
+    const int target=m_handoffIndex>=0?m_handoffIndex:handoffTarget();
+    if(target>=0 && overlapSuits(target)){beginCrossfade(int(window),target);return;}
   }
   // No overlap: the spare still warms up, so the change is not a pause.
   if(!gapless() || m_handoffIndex>=0 || remaining>2500)return;
   armHandoff(false);
 }
 
-void Backend::beginCrossfade(int milliseconds) {
-  if(!armHandoff(true))return;
+void Backend::beginCrossfade(int milliseconds,int target) {
+  if(!armHandoff(true,target))return;
   m_crossfading=true;
   m_crossfadeMs=qMax(200,milliseconds);
   m_crossfadeClock.restart();
@@ -2643,10 +2666,16 @@ void Backend::adoptHandoff(int index) {
   m_saveTimer.start();
 }
 
-// Called when a song ends with no overlap configured. Returns true when the
-// waiting deck took over, so the ordinary advance is not also run.
+// Called when a song ends and a deck is waiting behind it. Returns true when
+// that deck took over, so the ordinary advance is not also run.
+//
+// An overlap that was running has already been settled by the time this is
+// reached, so what arrives here is always a handover: either no overlap was
+// configured, or the pair was one an overlap does not suit. Reading the
+// crossfade setting here instead would drop the second case back onto the
+// ordinary transition, which is the pause the waiting deck exists to avoid.
 bool Backend::finishGapless() {
-  if(m_handoffIndex<0 || !gapless() || crossfadeSeconds()>0)return false;
+  if(m_handoffIndex<0 || !gapless() || m_crossfading)return false;
   const int target=m_handoffIndex;
   if(target<0 || target>=m_queue.count()){clearSpare();return false;}
   auto &deck=spareDeck();

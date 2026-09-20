@@ -1960,7 +1960,7 @@ ApplicationWindow {
                         value: app.crossfadeSeconds; onMoved: app.crossfadeSeconds=value
                         Accessible.name: "Crossfade seconds"
                     }
-                    SungText { text: "Songs overlap as one ends and the next begins."; color: Theme.muted; font.pixelSize: Theme.bodyMedium; Layout.fillWidth: true; wrapMode: Text.Wrap; visible: app.crossfadeSeconds>0 }
+                    SungText { text: "Songs overlap as one ends and the next begins, except inside an album and into an autoplay suggestion, which are joined instead."; color: Theme.muted; font.pixelSize: Theme.bodyMedium; Layout.fillWidth: true; wrapMode: Text.Wrap; visible: app.crossfadeSeconds>0 }
                 }
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Prepare next track"); text: "Prepare next track"; hint: "Resolves and buffers the next song while the current one plays, which is what makes the join between them immediate."; checked: app.prepareNext; onToggled: app.prepareNext=checked }
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Find missing lyrics on LRCLIB"); text: "Find missing lyrics on LRCLIB"; hint: "Songs with no lyrics of their own are looked up on LRCLIB, which sends the title and artist to that service."; checked: app.lyricsFallback; onToggled: app.lyricsFallback=checked }
