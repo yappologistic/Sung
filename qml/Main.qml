@@ -40,13 +40,26 @@ ApplicationWindow {
     Binding { target: motionArtwork; property: "source"; value: window.uiActive && app.motion && app.animatedArtwork ? (app.currentMotionArt || "") : "" }
     Binding { target: motionArtwork; property: "running"; value: window.uiActive && app.playing && app.motion && app.animatedArtwork }
     property var fileDialogs: null
+    property bool folderPickerPending: false
     function openFileDialog(kind) {
         if(!fileDialogs) {
             const component=Qt.createComponent("FileDialogs.qml");
+            if(component.status===Component.Error){console.error(component.errorString());app.toast("Could not open the file picker.");if(kind==="folder")window.returnToFolderEntry();return;}
             fileDialogs=component.createObject(window,{ownerWindow:window});
-            if(!fileDialogs){console.error(component.errorString());return;}
+            if(!fileDialogs){console.error(component.errorString());app.toast("Could not open the file picker.");if(kind==="folder")window.returnToFolderEntry();return;}
         }
         fileDialogs.open(kind);
+        if(kind!=="folder")return;
+        folderPickerPending=true;
+        Qt.callLater(function(){
+            if(!window.folderPickerPending)return;
+            if(fileDialogs && fileDialogs.folderPicker.visible){window.folderPickerPending=false;return;}
+            window.folderPickerPending=false;
+            const message="Could not open the folder picker. Enter the path instead.";
+            if(window.folderPickForOnboarding)onboarding.folderError=message;
+            else musicFolderEntry.pathError=message;
+            window.returnToFolderEntry();
+        });
     }
     property bool compactMode: false
     property bool immersive: false
@@ -1377,7 +1390,7 @@ ApplicationWindow {
                 visible: window.compactWindow
                 // A window with little height to spare takes Material's short
                 // bar, which sets each label beside its icon instead of under.
-                short: window.height < 700
+                shortBar: window.height < 700
                 destinations: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library",badged:app.importingLocal}]
                 current: window.destination
                 onChosen: key => {
@@ -1492,7 +1505,7 @@ ApplicationWindow {
                     MButton { symbol: "radio"; tip: "Start radio"; enabled: !!app.current.videoId; onClicked: app.radio(app.current) }
                     MButton { symbol: "more"; tip: "Track actions"; enabled: app.currentIndex>=0; onClicked: window.trackMenu(app.current,app.currentIndex,this,true) }
                 }
-                RowLayout { Layout.fillWidth: true; MButton { symbol: app.volume>0?"volume":"mute"; tip: app.volume>0?"Mute":"Unmute"; onClicked: window.toggleMute() } SeekBar { volumeMode: true; Layout.fillWidth: true } }
+                RowLayout { Layout.fillWidth: true; MButton { symbol: app.volume>0?"volume":"mute"; tip: app.volume>0?"Mute":"Unmute"; onClicked: window.toggleMute() } MWavySlider { Layout.fillWidth: true } }
             }
         }
     }
@@ -1659,17 +1672,23 @@ ApplicationWindow {
         }
     }
     property bool folderPickForOnboarding: false
+    function restoreOnboarding() {
+        onboarding.preserveStep=true;
+        onboarding.open();
+    }
     function finishFolderPick(url) {
-        if(folderPickForOnboarding){folderPickForOnboarding=false;onboarding.setFolderPath(url.toString());return;}
+        folderPickerPending=false;
+        if(folderPickForOnboarding){folderPickForOnboarding=false;onboarding.setFolderPath(url.toString());restoreOnboarding();return;}
         musicFolderPath.text=url.toString();musicFolderEntry.pathError="";musicFolderEntry.open();
     }
     function returnToFolderEntry() {
-        if(folderPickForOnboarding){folderPickForOnboarding=false;return;}
+        folderPickerPending=false;
+        if(folderPickForOnboarding){folderPickForOnboarding=false;restoreOnboarding();return;}
         musicFolderEntry.open();
     }
     Onboarding {
         id: onboarding; objectName: "onboarding"
-        onBrowseRequested: {window.folderPickForOnboarding=true;window.openFileDialog("folder");}
+        onBrowseRequested: {window.folderPickForOnboarding=true;onboarding.preserveStep=true;onboarding.close();window.openFileDialog("folder");}
         onServerRequested: serverConnection.open()
     }
     MDialog {
@@ -2011,12 +2030,29 @@ ApplicationWindow {
                 ColumnLayout {
                     id: settingsGroup4; objectName:"settingsGroup4"
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
-                    property bool hasMatches: settingsDialog.matches("Pause history this session privacy") || settingsDialog.matches("Clear artwork cache") || settingsDialog.matches("Clear history") || settingsDialog.matches("Export library backup") || settingsDialog.matches("Import library restore") || settingsDialog.matches("Sung version")
+                    property bool hasMatches: settingsDialog.matches("Pause history this session privacy") || settingsDialog.matches("Remember streamed audio cache YouTube server") || settingsDialog.matches("Streamed audio cache size megabytes") || settingsDialog.matches("Clear cache artwork audio") || settingsDialog.matches("Clear history") || settingsDialog.matches("Export library backup") || settingsDialog.matches("Import library restore") || settingsDialog.matches("Sung version")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===4
                     SungText {heading: true;text:"Privacy & data";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
                     ColumnLayout {id:options4;objectName:"settingsRows4";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Pause history this session privacy"); objectName: "historyPauseSwitch"; text: "Pause history this session"; checked: app.historyPaused; onToggled: app.historyPaused=checked }
-                MSettingRow {objectName:"clearCacheButton";text:"Clear artwork cache";visible:settingsDialog.matches("Clear artwork cache");onClicked:app.clearCache()}
+                MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; objectName:"rememberStreamedAudioSwitch"; visible: settingsDialog.matches("Remember streamed audio cache YouTube server"); text: "Remember streamed audio"; hint: "Keeps the file Sung already buffers for a YouTube or server song, so playing it again does not download it twice. It is not added to Local files."; checked: app.rememberStreamedAudio; onToggled: app.rememberStreamedAudio=checked }
+                ColumnLayout {
+                    objectName: "streamedAudioCacheSetting"
+                    visible: settingsDialog.matches("Streamed audio cache size megabytes") && app.rememberStreamedAudio; Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 2
+                    RowLayout {
+                        Layout.fillWidth: true
+                        SungText { text: "Streamed audio cache"; font.pixelSize: Theme.bodyLarge; Layout.fillWidth: true }
+                        SungText { objectName: "streamedAudioCacheValue"; text: app.streamedAudioCacheMb+" MB"; color: Theme.muted; font.pixelSize: Theme.bodyMedium }
+                    }
+                    SettingSlider {
+                        objectName: "streamedAudioCacheSlider"; Layout.fillWidth: true
+                        valueLabel: value+" MB"
+                        from: 64; to: 4096; stepSize: 64; snapMode: Slider.SnapAlways
+                        value: app.streamedAudioCacheMb; onMoved: app.streamedAudioCacheMb=value
+                        Accessible.name: "Streamed audio cache size"
+                    }
+                }
+                MSettingRow {objectName:"clearCacheButton";text:"Clear cache";visible:settingsDialog.matches("Clear cache artwork audio");onClicked:app.clearCache()}
                 MSettingRow {objectName:"clearHistoryButton";text:"Clear history";visible:settingsDialog.matches("Clear history");onClicked:app.clearHistory()}
                 MSettingRow {opens:true;objectName:"exportLibraryButton";text:"Export library";visible:settingsDialog.matches("Export library backup");onClicked:window.openFileDialog("export")}
                 MSettingRow {opens:true;objectName:"importLibraryButton";text:"Import library";visible:settingsDialog.matches("Import library restore");onClicked:window.openFileDialog("import")}

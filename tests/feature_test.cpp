@@ -3549,14 +3549,14 @@ void runMaterialSchemeTests(Backend *b, QQuickWindow *w) {
   w->resize(520, 640);
   QTest::qWait(800);
   auto bar = shownItem(w->contentItem(), "navigationBar");
-  c.check(bar && bar->property("short").toBool(),
+  c.check(bar && bar->property("shortBar").toBool(),
           "a window with little height takes Material's short bar");
   c.check(bar && qAbs(bar->height() - 64) < 0.5,
           QString("which is 64dp rather than 80 (%1)").arg(bar ? bar->height() : 0, 0, 'f', 0));
   c.shot("05-short-navigation-bar");
   w->resize(520, 900);
   QTest::qWait(800);
-  c.check(bar && !bar->property("short").toBool(), "and the full bar comes back with the room");
+  c.check(bar && !bar->property("shortBar").toBool(), "and the full bar comes back with the room");
   c.shot("06-navigation-bar");
 
   // --- The expanded rail takes the width Material allows it ---
@@ -4551,11 +4551,12 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
   auto seek = shownItem(w->contentItem(), "seekBar");
   c.check(seek, "the seek bar is on screen");
   if (seek) {
-    auto inactive = anyItem(seek, "seekInactiveTrack");
+    auto bars = anyItem(seek, "seekBars");
+    auto muted = seek->findChild<QObject*>("seekBarsPath");
     auto handle = anyItem(seek, "seekHandle");
-    c.check(inactive && qAbs(inactive->height() - 16) < 0.5,
-            QString("its track is drawn at that height (%1)").arg(inactive ? inactive->height() : 0));
-    c.check(inactive && inactive->property("color").value<QColor>() == c.themeColor("secondaryContainer"),
+    c.check(bars && qAbs(bars->height() - 16) < 0.5,
+            QString("its track is drawn at that height (%1)").arg(bars ? bars->height() : 0));
+    c.check(muted && muted->property("fillColor").value<QColor>() == c.themeColor("secondaryContainer"),
             "in the secondaryContainer Material names for it");
     c.check(handle && qAbs(handle->width() - 4) < 0.5 && qAbs(handle->height() - 44) < 0.5,
             QString("and its handle is the bar, not a dot (%1 by %2)")
@@ -4661,9 +4662,12 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
             "a selected row is the secondary container");
     c.check(c.themeColor("secondaryContainer") != c.themeColor("primaryContainer"),
             "which is not the container an action is offered in");
-    c.check(title && title->property("color").value<QColor>() ==
-                c.themeColor("secondaryContainerText"),
-            "and what it carries is drawn in that container's ink");
+    c.check(title && title->property("color").value<QColor>().name(QColor::HexArgb) ==
+                c.themeColor("secondaryContainerText").name(QColor::HexArgb),
+            QString("and what it carries is drawn in that container's ink (actual %1 expected %2 selected %3)")
+                .arg(title ? title->property("color").value<QColor>().name(QColor::HexArgb) : QStringLiteral("?"),
+                     c.themeColor("secondaryContainerText").name(QColor::HexArgb),
+                     row->property("selected").toBool() ? QStringLiteral("yes") : QStringLiteral("no")));
   }
 
   // --- The docked toolbar that selection brings up ---

@@ -237,6 +237,7 @@ int main(int argc, char **argv) {
   if(args.contains("--folder-import-test")){QTimer::singleShot(0,&app,[&]{runFolderImportTests(&backend,window);});return app.exec();}
   if(args.contains("--interaction-test")){QTimer::singleShot(0,&app,[&]{runInteractionTests(&backend,window);});return app.exec();}
   if(args.contains("--audio-indicator-test")){QTimer::singleShot(0,&app,[&]{runAudioIndicatorTests(&backend,window);});return app.exec();}
+  if(args.contains("--waveform-test")){QTimer::singleShot(0,&app,[&]{runWaveformTests(&backend,window);});return app.exec();}
   if(args.contains("--visual-delight-test")){QTimer::singleShot(0,&app,[&]{runVisualDelightTests(&backend,window);});return app.exec();}
   if(args.contains("--library-qol-test")){QTimer::singleShot(0,&app,[&]{runLibraryQolTests(&backend,window);});return app.exec();}
   if(args.contains("--qol-test")){QTimer::singleShot(0,&app,[&]{runQolTests(&backend,window);});return app.exec();}

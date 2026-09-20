@@ -25,6 +25,8 @@ void runVisualDelightTests(Backend*,QQuickWindow*);
 
 void runAudioIndicatorTests(Backend*,QQuickWindow*);
 
+void runWaveformTests(Backend*,QQuickWindow*);
+
 void runInteractionTests(Backend *b, QQuickWindow *w);
 void runFolderImportTests(Backend *b, QQuickWindow *w);
 

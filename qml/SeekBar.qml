@@ -5,7 +5,7 @@ Slider {
     id: s
     readonly property bool handlesArrowKeys: true
     objectName: "seekBar"
-    stepSize: volumeMode ? app.volumeStep/100 : 5000
+    stepSize: 5000
     // Material's expressive slider: a 16dp track, a handle that is a 4dp bar
     // as tall as the touch target, and a 6dp gap held open on either side of
     // it so the handle never sits on the position it is reporting.
@@ -14,39 +14,55 @@ Slider {
     // as the mini player does, gets the handle its room allows rather than one
     // that hangs out of it.
     readonly property real handleHeight: Math.min(Theme.sliderHandleHeight.xsmall, height)
-    property bool volumeMode: false
     property color inactiveColor:Theme.secondaryContainer
     readonly property real thumbWidth: Theme.sliderHandle
     readonly property real thumbCenter: visualPosition * (availableWidth - thumbWidth) + thumbWidth/2
     readonly property real trackGap: Theme.sliderGap
     readonly property real trackHeight: Theme.sliderTrack.xsmall
-    wheelEnabled: volumeMode
-    from: 0; to: volumeMode ? 1 : Math.max(1,app.duration)
-    value: volumeMode ? app.volume : fineSeeking ? fineValue : app.position
-    enabled: volumeMode || app.duration>0
-    onMoved: { if(volumeMode) app.volume=value; else app.seek(value); }
-    Accessible.name: volumeMode ? "Volume" : "Playback position"
+    // One rectangle per bar of the song's peaks, voice-note style: the muted
+    // layer is the whole recording, and the ink copy inside the played clip is
+    // what fills as the track plays. Heights pool the backend's peak buckets
+    // into as many bars as the width fits, and before any audio is known every
+    // bar rests at the minimum height.
+    readonly property var seekBars: {
+        const peaks=app.waveform,width=track.width,mid=trackHeight/2
+        const bars=Math.max(24,Math.min(120,Math.floor((width+2)/5)))
+        const shapes=[]
+        if(width<=0)return shapes
+        for(let bar=0;bar<bars;++bar){
+            let level=0
+            const first=Math.floor(bar*peaks.length/bars),last=Math.floor((bar+1)*peaks.length/bars)
+            for(let index=first;index<last;++index)level=Math.max(level,peaks[index]||0)
+            const height=2+level*(trackHeight-4),x=bar*5
+            shapes.push([Qt.point(x,mid-height/2),Qt.point(x+3,mid-height/2),Qt.point(x+3,mid+height/2),Qt.point(x,mid+height/2)])
+        }
+        return shapes
+    }
+    from: 0; to: Math.max(1,app.duration)
+    value: fineSeeking ? fineValue : app.position
+    enabled: app.duration>0
+    onMoved: app.seek(value)
+    Accessible.name: "Playback position"
     property bool fineSeeking:false
     property real fineValue:0
     readonly property bool interacting:pressed || fineSeeking
-    Accessible.description: volumeMode?"Volume":"Hold Shift and drag for precise seeking. Shift and arrow keys seek by 100 milliseconds."
-    Keys.onLeftPressed:event=>{if(!volumeMode && (event.modifiers&Qt.ShiftModifier)){app.seek(app.position-100);event.accepted=true;}else event.accepted=false;}
-    Keys.onRightPressed:event=>{if(!volumeMode && (event.modifiers&Qt.ShiftModifier)){app.seek(app.position+100);event.accepted=true;}else event.accepted=false;}
+    Accessible.description:"Hold Shift and drag for precise seeking. Shift and arrow keys seek by 100 milliseconds."
+    Keys.onLeftPressed:event=>{if(event.modifiers&Qt.ShiftModifier){app.seek(app.position-100);event.accepted=true;}else event.accepted=false;}
+    Keys.onRightPressed:event=>{if(event.modifiers&Qt.ShiftModifier){app.seek(app.position+100);event.accepted=true;}else event.accepted=false;}
     Keys.onEscapePressed:event=>{if(fineSeeking){fineSeeking=false;event.accepted=true;}else event.accepted=false;}
-    MouseArea {anchors.fill:parent;enabled:!s.volumeMode && s.enabled;acceptedButtons:Qt.LeftButton
+    MouseArea {anchors.fill:parent;enabled:s.enabled;acceptedButtons:Qt.LeftButton
         property real anchorX:0;property real anchorValue:0
         onPressed:mouse=>{if(!(mouse.modifiers&Qt.ShiftModifier)){mouse.accepted=false;return;}anchorX=mouse.x;anchorValue=app.position;s.fineValue=anchorValue;s.fineSeeking=true;s.forceActiveFocus();}
         onPositionChanged:mouse=>{if(s.fineSeeking)s.fineValue=Math.max(s.from,Math.min(s.to,anchorValue+(mouse.x-anchorX)*(s.to-s.from)/Math.max(1,s.availableWidth)*0.1));}
         onReleased:{if(s.fineSeeking){app.seek(Math.round(s.fineValue));s.fineSeeking=false;}}
         onCanceled:s.fineSeeking=false
     }
-    ToolTip {visible:s.volumeMode&&s.hovered;text:Math.round(app.volume*100)+"%";delay:180}
     hoverEnabled: true
     HoverHandler { id: seekHover }
     // Seeking by wheel goes straight to playback: assigning the slider's value
     // here would replace the binding that keeps it following the track.
     WheelHandler {
-        enabled: !s.volumeMode && s.enabled && app.duration>0
+        enabled: s.enabled && app.duration>0
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
         property real carried: 0
         onWheel: event=>{
@@ -59,9 +75,9 @@ Slider {
         }
     }
     readonly property real previewValue: (interacting || (visualFocus && !seekHover.hovered)) ? value : from+(to-from)*Math.max(0,Math.min(1,(seekHover.point.position.x-leftPadding-thumbWidth/2)/Math.max(1,availableWidth-thumbWidth)))
-    readonly property string previewLine: {app.lyricLines;app.lyricOffset;return !volumeMode && (seekHover.hovered || interacting || visualFocus)?app.previewLyric(previewValue):"";}
+    readonly property string previewLine: {app.lyricLines;app.lyricOffset;return seekHover.hovered || interacting || visualFocus?app.previewLyric(previewValue):"";}
     ToolTip {
-        objectName: "seekPreview"; visible: !s.volumeMode && s.enabled && s.visible && (seekHover.hovered || s.interacting || s.visualFocus)
+        objectName: "seekPreview"; visible: s.enabled && s.visible && (seekHover.hovered || s.interacting || s.visualFocus)
         delay: s.interacting || s.visualFocus ? 0 : 180; timeout: -1
         x: Math.max(0,Math.min(s.width-width, ((s.interacting || (s.visualFocus && !seekHover.hovered))?s.thumbCenter:seekHover.point.position.x)-width/2))
         // This is a slider's value indicator, not a tooltip and not a card.
@@ -80,24 +96,27 @@ Slider {
         id: track
         x: s.leftPadding; y: s.topPadding+(s.availableHeight-height)/2
         width: s.availableWidth; height: s.trackHeight
-        Rectangle { objectName: "seekInactiveTrack"; x: Math.min(parent.width,s.thumbCenter+s.thumbWidth/2+s.trackGap); width: parent.width-x; height: parent.height; radius: Theme.shapeFull(height); color: s.enabled ? s.inactiveColor : Theme.sliderQuiet(Theme.disabledTrackOpacity) }
-        Rectangle { objectName: "seekActiveTrack"; visible: s.volumeMode; width: Math.max(0,s.thumbCenter-s.thumbWidth/2-s.trackGap); height: parent.height; radius: Theme.shapeFull(height); color: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity) }
+        Shape {
+            objectName: "seekBars"
+            width: track.width; height: track.height
+            preferredRendererType: Shape.CurveRenderer
+            ShapePath {
+                objectName: "seekBarsPath"
+                fillColor: s.enabled ? s.inactiveColor : Theme.sliderQuiet(Theme.disabledTrackOpacity); strokeColor: "transparent"
+                PathMultiline { paths: s.seekBars }
+            }
+        }
         Item {
             id: played; objectName: "playedWave"
-            visible: !s.volumeMode
             width: Math.max(0,s.thumbCenter-s.thumbWidth/2-s.trackGap); height: track.height; clip: true; layer.enabled: true; layer.smooth: true
             Shape {
-                id: wave; objectName: "seekWave"
-                width: track.width+28; height: track.height
+                objectName: "seekBarsInk"
+                width: track.width; height: track.height
                 preferredRendererType: Shape.CurveRenderer
-                property real amplitude: app.playing ? 3 : 1
-                Behavior on amplitude { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
                 ShapePath {
-                    strokeColor: Theme.primary; strokeWidth: 3; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathPolyline { path: {if(s.volumeMode)return [];const mid=s.trackHeight/2;let points=[];for(let x=0;x<=wave.width+3;x+=3)points.push(Qt.point(x,mid+wave.amplitude*Math.sin(x*Math.PI/14)));return points;} }
+                    fillColor: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity); strokeColor: "transparent"
+                    PathMultiline { paths: s.seekBars }
                 }
-                // A render-thread transform moves static geometry; no per-frame JS painting.
-                XAnimator { target: wave; from: 0; to: -28; duration: 1400; loops: Animation.Infinite; running: !s.volumeMode && app.playing && app.motion && s.visible && played.width>0 && s.Window.window && s.Window.window.visible && s.Window.window.visibility!==Window.Minimized }
             }
         }
         // Material marks where the track ends, so a position short of the end

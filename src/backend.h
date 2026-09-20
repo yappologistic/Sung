@@ -2,7 +2,9 @@
 #include <QAbstractListModel>
 #include <QAudioOutput>
 #include <QAudioBufferOutput>
+#include <QAudioDecoder>
 #include "audiolevels.h"
+#include "peaks.h"
 #include <QMediaPlayer>
 #include <QProcess>
 #include <QSettings>
@@ -121,6 +123,7 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantMap current READ current NOTIFY trackChanged)
   Q_PROPERTY(int currentIndex READ currentIndex NOTIFY trackChanged)
   Q_PROPERTY(QVariantList audioLevels READ audioLevels NOTIFY audioLevelsChanged)
+  Q_PROPERTY(QVariantList waveform READ waveform NOTIFY waveformChanged)
   Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
   Q_PROPERTY(bool resolving READ resolving NOTIFY playbackChanged)
   Q_PROPERTY(bool buffering READ buffering NOTIFY playbackChanged)
@@ -210,6 +213,8 @@ class Backend : public QObject {
   Q_PROPERTY(bool liked READ liked NOTIFY libraryChanged)
   Q_PROPERTY(QString cookies READ cookies NOTIFY settingsChanged)
   Q_PROPERTY(QString streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY settingsChanged)
+  Q_PROPERTY(bool rememberStreamedAudio READ rememberStreamedAudio WRITE setRememberStreamedAudio NOTIFY settingsChanged)
+  Q_PROPERTY(int streamedAudioCacheMb READ streamedAudioCacheMb WRITE setStreamedAudioCacheMb NOTIFY settingsChanged)
   Q_PROPERTY(QStringList musicFolders READ musicFolders NOTIFY libraryChanged)
   Q_PROPERTY(bool cleanupBusy READ cleanupBusy NOTIFY cleanupChanged)
   Q_PROPERTY(QVariantList cleanupItems READ cleanupItems NOTIFY cleanupChanged)
@@ -230,6 +235,7 @@ public:
   Q_INVOKABLE void clearPlaylistVersions(const QString &id);
   QVariantList playlistRows(const QVariantMap &playlist) const;
   QVariantList audioLevels() const {return m_audioLevels;}
+  QVariantList waveform() const {return m_waveform;}
   MusicServer *server() {return &m_server;}
   QString serverArtwork() const {return m_serverArtwork;}
   bool serverPlaylistEditable() const {return m_page=="server" && m_request.value("mode")=="playlist" && m_request.value("editable").toBool();}
@@ -465,6 +471,12 @@ public:
   // song is buffered before it plays, so this is the download either way.
   QString streamingQuality() const { const auto v=m_settings.value("streamingQuality","standard").toString();return v=="saver"?v:"standard"; }
   void setStreamingQuality(const QString &value) { if(streamingQuality()==value || (value!="saver" && value!="standard"))return;m_settings.setValue("streamingQuality",value);emit settingsChanged(); }
+  // Keep the file already buffered for a YouTube or server song and play it
+  // again from disk, up to streamedAudioCacheMb. This is not a library copy.
+  bool rememberStreamedAudio() const { return m_settings.value("rememberStreamedAudio", true).toBool(); }
+  void setRememberStreamedAudio(bool enabled);
+  int streamedAudioCacheMb() const { return qBound(64, m_settings.value("streamedAudioCacheMb", 512).toInt(), 4096); }
+  void setStreamedAudioCacheMb(int megabytes);
   // Overlap between one song and the next, in seconds. Zero plays them in turn.
   int crossfadeSeconds() const {return qBound(0,m_settings.value("crossfadeSeconds",0).toInt(),12);}
   void setCrossfadeSeconds(int seconds);
@@ -587,6 +599,7 @@ signals:
   void trackChanged();
   void playbackChanged();
   void audioLevelsChanged();
+  void waveformChanged();
   void normalizationChanged();
   void positionChanged();
   void lyricIndexChanged();
@@ -733,6 +746,14 @@ private:
   bool m_recovering = false;
   bool m_sleepAtEnd = false;
   std::shared_ptr<QTemporaryDir> m_audioCache, m_preparedDirectory;
+  QString streamedAudioKey(const QVariantMap &track) const;
+  QString streamedAudioDir(const QString &key) const;
+  QString lookupStreamedAudio(const QString &key) const;
+  QString storeStreamedAudio(const QString &file, const QString &key);
+  QString playableAudioFile(const QString &file, const QString &key);
+  void touchStreamedAudio(const QString &path) const;
+  void pruneStreamedAudio(const QString &keep = {});
+  quint64 m_audioStoreGeneration=0;
   QVariantMap m_preparedData;
   QString m_preparedId, m_preparationAttempt;
   quint64 m_preparationGeneration=0;
@@ -752,6 +773,22 @@ private:
   QVariantList m_audioLevels{0.0,0.0,0.0,0.0,0.0};
   QElapsedTimer m_levelPublish;
   QTimer m_levelIdle;
+  // Peak bars for the seek waveform: played audio fills them live, a file on
+  // disk decodes in a moment instead, and finished shapes persist per track
+  // like lyrics do.
+  void beginWaveform();
+  void startWaveformDecode(const QString &file);
+  void publishWaveform();
+  void storeWaveform();
+  WaveformPeaks m_peaks;
+  QVariantList m_waveform;
+  QString m_waveformId;
+  bool m_waveformDecoding=false;
+  // True when m_waveform was loaded whole from the store; it must never be
+  // replaced by a partial collector snapshot.
+  bool m_waveformStored=false;
+  QElapsedTimer m_waveformPublish;
+  QAudioDecoder m_peakDecoder;
   // Playback runs on two interchangeable decks. One carries the song being
   // heard; the other holds the next one, already decoded and waiting. During a
   // crossfade both sound at once while their volumes trade places, and at the

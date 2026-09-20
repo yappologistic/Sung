@@ -104,6 +104,7 @@ if ready:
                       ("artist-hero","--artist-hero-test"),("singalong","--singalong-test"),
                       ("crossfade-ui","--crossfade-ui-test"),("track-details","--track-details-test"),
                       ("queue-history","--queue-history-test"),
+                      ("waveform","--waveform-test"),
                       ("window-wash","--window-wash-test"),
                       ("material-foundations","--material-foundations-test"),
                       ("material-components","--material-components-test"),

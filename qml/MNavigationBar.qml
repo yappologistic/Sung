@@ -21,11 +21,11 @@ Rectangle {
     property var destinations: []
     // Material's short bar sets the label beside the icon in a 64dp container
     // rather than under it, for a window with height to spare but not much.
-    property bool short: false
+    property bool shortBar: false
     property string current: ""
     signal chosen(string key)
 
-    implicitHeight: short ? 64 : 80
+    implicitHeight: shortBar ? 64 : 80
     color: Theme.container
     Accessible.role: Accessible.PageTabList
     Accessible.name: "Navigation"
@@ -43,7 +43,7 @@ Rectangle {
                 objectName: "navBar_" + modelData.key
                 readonly property bool active: bar.current === modelData.key
                 Layout.fillWidth: true
-                Layout.preferredHeight: bar.short ? 56 : 64
+                Layout.preferredHeight: bar.shortBar ? 56 : 64
                 Layout.alignment: Qt.AlignVCenter
                 hoverEnabled: true
                 focusPolicy: Qt.StrongFocus
@@ -55,13 +55,13 @@ Rectangle {
                 GridLayout {
                     anchors.centerIn: parent
                     // The short bar lays the same two pieces out side by side.
-                    flow: bar.short ? GridLayout.LeftToRight : GridLayout.TopToBottom
+                    flow: bar.shortBar ? GridLayout.LeftToRight : GridLayout.TopToBottom
                     columnSpacing: 8; rowSpacing: 4
                     // The active indicator marks one destination, and only one.
                     Rectangle {
                         objectName: "navBarIndicator_" + destination.modelData.key
                         Layout.alignment: Qt.AlignHCenter
-                        implicitWidth: bar.short ? 56 : 64; implicitHeight: 32
+                        implicitWidth: bar.shortBar ? 56 : 64; implicitHeight: 32
                         radius: Theme.shapeFull(implicitHeight)
                         // Material paints navigation in the secondary pair, not
                         // the primary one. Where you are is not an action, and

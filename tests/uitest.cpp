@@ -1295,6 +1295,53 @@ void runAudioIndicatorTests(Backend *b,QQuickWindow *w) {
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
 
+void runWaveformTests(Backend *b,QQuickWindow *w) {
+  int failures=0;auto check=[&](bool ok,const char *s){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",s);fflush(stdout);if(!ok)++failures;};
+  const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
+  auto until=[](const std::function<bool()> &p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<8000)QTest::qWait(20);return p();};
+  const auto path=dir+"/wave.wav";QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","sine=frequency=220:sample_rate=48000:duration=12,volume=volume=0.08:enable='between(t,6,9)'","-c:a","pcm_s16le",path});check(encode.waitForFinished(10000)&&encode.exitCode()==0,"waveform tone generated");
+  QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setMotion(true);b->setUiActive(true);b->setAutoplay(false);b->setPrepareNext(false);b->clearQueue();
+  // The id follows the local-file shape (local_ plus a digest), which is what
+  // keys the waveform store. The tone goes quiet from second six to nine, so
+  // the shape must show it: bars are the song, not one flat height.
+  const QString waveId="local_"+QString(64,'a');
+  b->playItem({{"id",waveId},{"localPath",path},{"kind","song"},{"title","Waveform fixture"},{"artist","220 Hz"},{"seconds",12}});w->setProperty("side","queue");
+  check(until([&]{return b->playing();}),"waveform fixture plays");
+  auto ink=findItem(w->contentItem(),"seekBarsInk");check(ink,"waveform bars exist");
+  check(until([&]{return b->waveform().size()==400&&b->waveform()[200].toDouble()>0;}),"offline decode fills the whole waveform");
+  check(b->waveform().size()>250&&b->waveform()[100].toDouble()-b->waveform()[250].toDouble()>0.3,"loud slices stand tall and quiet ones stay low");
+  const auto played=findItem(w->contentItem(),"playedWave");
+  check(until([&]{return b->position()>1500&&played&&played->width()>0;}),"played fill opens with playback");
+  const double filled=played?played->width():0;
+  check(w->grabWindow().save(dir+"/01-waveform.png"),"waveform screenshot");
+  check(until([&]{return b->position()>2500&&(!played||played->width()>filled);}),"played fill follows playback");
+  b->pause();check(until([&]{QFile stored(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)+"/waveforms/"+waveId+".wave");return stored.size()>400;}),"waveform persists for replay");
+  b->stop();b->clearQueue();QTest::qWait(150);
+  b->playItem({{"id",waveId},{"localPath",path},{"kind","song"},{"title","Waveform fixture"},{"artist","220 Hz"},{"seconds",12}});
+  check(until([&]{return b->waveform().size()==400&&b->waveform()[399].toDouble()>0;}),"replay loads the stored waveform");
+  b->stop();b->clearQueue();
+  // The wavy volume slider: a drag sets the volume, and reduced motion lays it flat.
+  b->setVolume(0.5);
+  const auto button=findItem(w->contentItem(),"exactVolumeButton");check(button,"exact volume button exists");
+  if(button){const auto spot=button->mapToScene(QPointF(button->width()/2,button->height()/2)).toPoint();QTest::mouseMove(w,spot);QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,spot);QTest::qWait(320);}
+  auto popupSlider=findItem(w->contentItem(),"popupVolumeSlider");check(popupSlider,"volume popup opens with the wavy slider");
+  if(popupSlider){
+    const auto center=popupSlider->mapToScene(QPointF(popupSlider->width()/2,popupSlider->height()/2)).toPoint();
+    QTest::mousePress(w,Qt::LeftButton,Qt::NoModifier,center);
+    QTest::mouseMove(w,center+QPoint(popupSlider->width()/3,0));QTest::qWait(80);
+    QTest::mouseRelease(w,Qt::LeftButton,Qt::NoModifier,center+QPoint(popupSlider->width()/3,0));QTest::qWait(250);
+  }
+  check(b->volume()>0.6,"dragging the wavy slider sets volume");
+  auto inlineSlider=findItem(w->contentItem(),"inlineVolumeSlider");check(inlineSlider,"inline volume strip exists");
+  b->setVolume(0.5);QTest::qWait(150);
+  if(inlineSlider){const auto p=inlineSlider->mapToScene(QPointF(inlineSlider->width()/2,inlineSlider->height()/2));QWheelEvent wheel(p,w->mapToGlobal(p.toPoint()),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QCoreApplication::sendEvent(w,&wheel);check(qAbs(b->volume()-0.55)<0.01,"volume wheel steps the inline wave");}
+  b->setMotion(false);QTest::qWait(150);
+  check(inlineSlider&&qAbs(inlineSlider->property("amplitude").toDouble())<0.001,"reduced motion lays the volume wave flat");
+  check(w->grabWindow().save(dir+"/02-wavy-volume.png"),"wavy volume screenshot");
+  b->setMotion(true);
+  fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
+}
+
 void runInteractionTests(Backend *b,QQuickWindow *w) {
   int failures=0;auto check=[&](bool ok,const char *s){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",s);fflush(stdout);if(!ok)++failures;};
   auto until=[](const std::function<bool()> &p){QElapsedTimer t;t.start();while(!p()&&t.elapsed()<8000)QTest::qWait(25);return p();};
