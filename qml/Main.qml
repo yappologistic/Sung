@@ -797,6 +797,7 @@ ApplicationWindow {
                             cellWidth: width/Math.max(1,Math.floor(width/140))
                             cellHeight: cellWidth+52
                             ScrollBar.vertical: MScrollBar {}
+                            MSmoothWheel { flick: listPaneGrid }
                             delegate: ArtCard {
                                 // A delegate that requires one property requires
                                 // them all: index stops being handed over.
@@ -1139,6 +1140,7 @@ ApplicationWindow {
                                 clip: true; spacing: window.paneGutter+2; reuseItems: true; cacheBuffer: 0
                                 model: window.homeSections; boundsBehavior: Flickable.StopAtBounds
                                 ScrollBar.vertical: ScrollBar {}
+                                MSmoothWheel { flick: shelves }
                                 delegate: ColumnLayout {
                                     required property var modelData
                                     width: shelves.width; height: implicitHeight; spacing: 12
@@ -1168,6 +1170,7 @@ ApplicationWindow {
                                 cellHeight: coverExtent+64
                                 readonly property real coverExtent:Math.min(cellWidth-16,Math.max(96,height-64))
                                 ScrollBar.vertical: ScrollBar {}
+                                MSmoothWheel { flick: localGroups }
                                 delegate: ArtCard {required property var entry; width: localGroups.coverExtent; track: entry;openHandler:window.openCollection}
                                 SungText {anchors.centerIn: parent; visible: localGroups.count===0; text:app.collection.query?"No matches":"Import music to browse here"; color:Theme.muted}
                             }
@@ -1208,6 +1211,7 @@ ApplicationWindow {
                                 Behavior on cellWidth {enabled:app.motion && playlistGrid.visible;NumberAnimation {duration:260;easing.type:Easing.InOutCubic}}
                                 cellHeight:cellWidth+56
                                 ScrollBar.vertical:MScrollBar {}
+                                MSmoothWheel { flick: playlistGrid }
                                 delegate:ArtCard {required property var modelData;width:playlistGrid.cellWidth-16
                                     track:Object.assign({},modelData,{kind:"local",art:modelData.customCover||"",artworks:modelData.customCover?[]:modelData.artworks})
                                     openHandler:window.openCollection
@@ -1219,6 +1223,7 @@ ApplicationWindow {
                                 id: localPlaylists; anchors.fill: parent; clip: true; spacing: 8
                                 visible: window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist&&app.viewMode!=="grid"
                                 model: app.playlists
+                                MSmoothWheel { flick: localPlaylists }
                                 delegate: Rectangle {
                                     required property var modelData; width: localPlaylists.width; height:app.viewCompactDensity?64:76; radius: Theme.shapeLarge; color: Theme.container
                                     RowLayout {
@@ -1862,6 +1867,9 @@ ApplicationWindow {
                 y: settingsScrollView.topPadding; height: settingsScrollView.availableHeight
                 orientation: Qt.Vertical
             }
+            // A ScrollView's own Flickable is its contentItem, so that is what
+            // the wheel has to drive.
+            MSmoothWheel { flick: settingsScrollView.contentItem }
             ColumnLayout {
                 id: settingsOptions; objectName: "settingsOptions"
                 width: settingsScrollView.availableWidth; spacing: 28
