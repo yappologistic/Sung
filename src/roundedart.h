@@ -1,4 +1,5 @@
 #pragma once
+#include <QFutureWatcher>
 #include <QImage>
 #include <QNetworkReply>
 #include <QPointer>
@@ -105,6 +106,9 @@ private:
   QImage m_image;
   QPointer<MotionArtwork> m_animation;
   QPointer<QNetworkReply> m_reply;
+  // Identifies the newest decode asked for. A result carrying anything else
+  // belongs to a cover this surface has already moved on from.
+  quint64 m_decode=0;
   QString m_shape;
   qreal m_radius = 16;
   int m_pixels = 360;
