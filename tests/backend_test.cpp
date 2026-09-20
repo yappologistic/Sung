@@ -465,6 +465,58 @@ private slots:
     b.setHistoryPaused(true);b.playAt(2);QTRY_VERIFY(b.playing()&&!b.resolving());QVERIFY(!b.m_lastPlayed.contains(slow.value("id").toString()));b.setHistoryPaused(false);
     b.stop();b.m_favorites.clear();b.m_playlists.clear();b.m_lastPlayed.clear();b.clearQueue();b.setPrepareNext(true);b.setAutoplay(true);
   }
+  void streamedAudioReplay() {
+    const auto oldHelper=qgetenv("SUNG_HELPER"),oldPython=qgetenv("SUNG_PYTHON"),oldBuffer=qgetenv("SUNG_BUFFER_FIXTURE"),oldLog=qgetenv("SUNG_REQUEST_LOG");
+    qputenv("SUNG_HELPER",qgetenv("SUNG_FIXTURE_HELPER"));qputenv("SUNG_PYTHON","/usr/bin/python3");qputenv("SUNG_BUFFER_FIXTURE","1");
+    QTemporaryDir requests;const auto log=requests.filePath("requests.jsonl");qputenv("SUNG_REQUEST_LOG",log.toUtf8());
+    const auto restore=qScopeGuard([&]{qputenv("SUNG_HELPER",oldHelper);qputenv("SUNG_PYTHON",oldPython);qputenv("SUNG_BUFFER_FIXTURE",oldBuffer);if(oldLog.isEmpty())qunsetenv("SUNG_REQUEST_LOG");else qputenv("SUNG_REQUEST_LOG",oldLog);});
+    auto buffers=[&]{
+      QFile f(log);if(!f.open(QIODevice::ReadOnly))return 0;int n=0;while(!f.atEnd())if(f.readLine().contains("\"op\": \"buffer\""))++n;return n;
+    };
+    Backend b;b.clearQueue();b.setVolume(0);b.setAutoplay(false);b.setPrepareNext(false);
+    QVERIFY(b.rememberStreamedAudio());QCOMPARE(b.streamedAudioCacheMb(),512);
+    b.setStreamedAudioCacheMb(10);QCOMPARE(b.streamedAudioCacheMb(),64);
+    b.setStreamedAudioCacheMb(9000);QCOMPARE(b.streamedAudioCacheMb(),4096);
+    b.setStreamedAudioCacheMb(512);QCOMPARE(b.streamedAudioCacheMb(),512);
+    auto song=track("cache000001");
+    b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),10000);
+    const auto first=b.media()->source();QVERIFY(first.isLocalFile());
+    QVERIFY(QFileInfo(first.toLocalFile()).canonicalFilePath().contains("/audio-store/"));
+    QCOMPARE(buffers(),1);
+    b.stop();b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),10000);
+    QCOMPARE(buffers(),1);QCOMPARE(b.media()->source(),first);
+    b.setRememberStreamedAudio(false);QVERIFY(!b.rememberStreamedAudio());
+    b.stop();b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),10000);
+    QCOMPARE(buffers(),2);
+    QVERIFY(!QFileInfo(b.media()->source().toLocalFile()).canonicalFilePath().contains("/audio-store/"));
+    b.setRememberStreamedAudio(true);
+    b.clearCache();QVERIFY(!QFile::exists(first.toLocalFile()));
+    b.stop();b.playItem(song);QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),10000);
+    QCOMPARE(buffers(),3);
+    b.setStreamedAudioCacheMb(64);
+    const auto store=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/audio-store";
+    QVERIFY(QDir().mkpath(store+"/pad"));
+    QFile pad(store+"/pad/old.bin");QVERIFY(pad.open(QIODevice::ReadWrite));QCOMPARE(pad.write(QByteArray(70*1024*1024,'x')),qint64(70*1024*1024));
+    QVERIFY(pad.setFileTime(QDateTime::currentDateTimeUtc().addYears(-1),QFileDevice::FileModificationTime));pad.close();
+    auto other=track("cache000002");
+    b.stop();b.playItem(other);QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),10000);
+    QVERIFY(!QFile::exists(pad.fileName()));
+    QTemporaryDir scratch;
+    QFile escape(scratch.filePath("song"));QVERIFY(escape.open(QIODevice::WriteOnly));QCOMPARE(escape.write("ok"),qint64(2));escape.close();
+    const auto escaped=b.storeStreamedAudio(escape.fileName(),"jellyfin/acct/../../../evil/raw");
+    QVERIFY(!escaped.isEmpty());
+    const auto storeRoot=QFileInfo(QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/audio-store").canonicalFilePath();
+    QVERIFY(QFileInfo(escaped).canonicalFilePath().startsWith(storeRoot+'/'));
+    QVERIFY(!QFileInfo(escaped).canonicalFilePath().contains("/evil/"));
+    QFile oversized(scratch.filePath("huge.bin"));QVERIFY(oversized.open(QIODevice::WriteOnly));QCOMPARE(oversized.write(QByteArray(70*1024*1024,'y')),qint64(70*1024*1024));oversized.close();
+    QCOMPARE(b.storeStreamedAudio(oversized.fileName(),"yt/cache000099/standard"),QString());
+    QVERIFY(QFile::exists(oversized.fileName()));
+    b.stop();b.m_savedPosition=12000;b.m_media().setSource({});b.m_wantPlay=true;
+    b.resolveCurrent(false);QCOMPARE(b.m_restorePosition,qint64(12000));
+    b.m_preparedData={{"ok",true},{"file",first.toLocalFile()}};b.m_preparedId="cache000001";
+    b.clearCache();QVERIFY(b.m_preparedData.isEmpty());QVERIFY(b.m_preparedId.isEmpty());
+    b.stop();b.clearQueue();b.setStreamedAudioCacheMb(512);
+  }
   void searchAndBulkOperations() {
     Backend b;b.clearQueue();for(const auto &q:b.recentSearches())b.removeRecentSearch(q);
     b.rememberSearch("  Blue   sky ");b.rememberSearch("blue sky");QCOMPARE(b.recentSearches().size(),1);

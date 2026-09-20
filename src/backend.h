@@ -210,6 +210,8 @@ class Backend : public QObject {
   Q_PROPERTY(bool liked READ liked NOTIFY libraryChanged)
   Q_PROPERTY(QString cookies READ cookies NOTIFY settingsChanged)
   Q_PROPERTY(QString streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY settingsChanged)
+  Q_PROPERTY(bool rememberStreamedAudio READ rememberStreamedAudio WRITE setRememberStreamedAudio NOTIFY settingsChanged)
+  Q_PROPERTY(int streamedAudioCacheMb READ streamedAudioCacheMb WRITE setStreamedAudioCacheMb NOTIFY settingsChanged)
   Q_PROPERTY(QStringList musicFolders READ musicFolders NOTIFY libraryChanged)
   Q_PROPERTY(bool cleanupBusy READ cleanupBusy NOTIFY cleanupChanged)
   Q_PROPERTY(QVariantList cleanupItems READ cleanupItems NOTIFY cleanupChanged)
@@ -465,6 +467,12 @@ public:
   // song is buffered before it plays, so this is the download either way.
   QString streamingQuality() const { const auto v=m_settings.value("streamingQuality","standard").toString();return v=="saver"?v:"standard"; }
   void setStreamingQuality(const QString &value) { if(streamingQuality()==value || (value!="saver" && value!="standard"))return;m_settings.setValue("streamingQuality",value);emit settingsChanged(); }
+  // Keep the file already buffered for a YouTube or server song and play it
+  // again from disk, up to streamedAudioCacheMb. This is not a library copy.
+  bool rememberStreamedAudio() const { return m_settings.value("rememberStreamedAudio", true).toBool(); }
+  void setRememberStreamedAudio(bool enabled);
+  int streamedAudioCacheMb() const { return qBound(64, m_settings.value("streamedAudioCacheMb", 512).toInt(), 4096); }
+  void setStreamedAudioCacheMb(int megabytes);
   // Overlap between one song and the next, in seconds. Zero plays them in turn.
   int crossfadeSeconds() const {return qBound(0,m_settings.value("crossfadeSeconds",0).toInt(),12);}
   void setCrossfadeSeconds(int seconds);
@@ -733,6 +741,14 @@ private:
   bool m_recovering = false;
   bool m_sleepAtEnd = false;
   std::shared_ptr<QTemporaryDir> m_audioCache, m_preparedDirectory;
+  QString streamedAudioKey(const QVariantMap &track) const;
+  QString streamedAudioDir(const QString &key) const;
+  QString lookupStreamedAudio(const QString &key) const;
+  QString storeStreamedAudio(const QString &file, const QString &key);
+  QString playableAudioFile(const QString &file, const QString &key);
+  void touchStreamedAudio(const QString &path) const;
+  void pruneStreamedAudio(const QString &keep = {});
+  quint64 m_audioStoreGeneration=0;
   QVariantMap m_preparedData;
   QString m_preparedId, m_preparationAttempt;
   quint64 m_preparationGeneration=0;

@@ -2011,12 +2011,29 @@ ApplicationWindow {
                 ColumnLayout {
                     id: settingsGroup4; objectName:"settingsGroup4"
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
-                    property bool hasMatches: settingsDialog.matches("Pause history this session privacy") || settingsDialog.matches("Clear artwork cache") || settingsDialog.matches("Clear history") || settingsDialog.matches("Export library backup") || settingsDialog.matches("Import library restore") || settingsDialog.matches("Sung version")
+                    property bool hasMatches: settingsDialog.matches("Pause history this session privacy") || settingsDialog.matches("Remember streamed audio cache YouTube server") || settingsDialog.matches("Streamed audio cache size megabytes") || settingsDialog.matches("Clear cache artwork audio") || settingsDialog.matches("Clear history") || settingsDialog.matches("Export library backup") || settingsDialog.matches("Import library restore") || settingsDialog.matches("Sung version")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===4
                     SungText {heading: true;text:"Privacy & data";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
                     ColumnLayout {id:options4;objectName:"settingsRows4";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Pause history this session privacy"); objectName: "historyPauseSwitch"; text: "Pause history this session"; checked: app.historyPaused; onToggled: app.historyPaused=checked }
-                MSettingRow {objectName:"clearCacheButton";text:"Clear artwork cache";visible:settingsDialog.matches("Clear artwork cache");onClicked:app.clearCache()}
+                MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; objectName:"rememberStreamedAudioSwitch"; visible: settingsDialog.matches("Remember streamed audio cache YouTube server"); text: "Remember streamed audio"; hint: "Keeps the file Sung already buffers for a YouTube or server song, so playing it again does not download it twice. It is not added to Local files."; checked: app.rememberStreamedAudio; onToggled: app.rememberStreamedAudio=checked }
+                ColumnLayout {
+                    objectName: "streamedAudioCacheSetting"
+                    visible: settingsDialog.matches("Streamed audio cache size megabytes") && app.rememberStreamedAudio; Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 2
+                    RowLayout {
+                        Layout.fillWidth: true
+                        SungText { text: "Streamed audio cache"; font.pixelSize: Theme.bodyLarge; Layout.fillWidth: true }
+                        SungText { objectName: "streamedAudioCacheValue"; text: app.streamedAudioCacheMb+" MB"; color: Theme.muted; font.pixelSize: Theme.bodyMedium }
+                    }
+                    SettingSlider {
+                        objectName: "streamedAudioCacheSlider"; Layout.fillWidth: true
+                        valueLabel: value+" MB"
+                        from: 64; to: 4096; stepSize: 64; snapMode: Slider.SnapAlways
+                        value: app.streamedAudioCacheMb; onMoved: app.streamedAudioCacheMb=value
+                        Accessible.name: "Streamed audio cache size"
+                    }
+                }
+                MSettingRow {objectName:"clearCacheButton";text:"Clear cache";visible:settingsDialog.matches("Clear cache artwork audio");onClicked:app.clearCache()}
                 MSettingRow {objectName:"clearHistoryButton";text:"Clear history";visible:settingsDialog.matches("Clear history");onClicked:app.clearHistory()}
                 MSettingRow {opens:true;objectName:"exportLibraryButton";text:"Export library";visible:settingsDialog.matches("Export library backup");onClicked:window.openFileDialog("export")}
                 MSettingRow {opens:true;objectName:"importLibraryButton";text:"Import library";visible:settingsDialog.matches("Import library restore");onClicked:window.openFileDialog("import")}

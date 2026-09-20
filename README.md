@@ -187,17 +187,17 @@ Local playlists can mix YouTube, local files and server songs. Server playlists 
 
 Connection settings include audio quality and server listening history. Original audio is buffered on disk before playback, with a 512 MiB limit per song; choose a lower bitrate for very large files. Server transcoding must be available for the selected bitrate. Subsonic listening history is submitted after half a song or four minutes of playback, whichever comes first. Jellyfin receives playback status and progress and manages its own play counts. Private listening disables these reports.
 
-Tested against Navidrome 0.63.2 and Jellyfin 10.11.11 / 12.0. Other servers must support Subsonic 1.16.1 token authentication and JSON responses. OpenSubsonic lyrics and form POST are detected when available. Jellyfin 10.11 removes duplicate playlist additions on the server; 12.0 preserves them. Jellyfin collections are paginated; a single opened collection is limited to 20,000 items. Server administration, video, podcasts, remote-device control and permanent offline downloads are outside this music integration.
+Tested against Navidrome 0.63.2 and Jellyfin 10.11.11 / 12.0. Other servers must support Subsonic 1.16.1 token authentication and JSON responses. OpenSubsonic lyrics and form POST are detected when available. Jellyfin 10.11 removes duplicate playlist additions on the server; 12.0 preserves them. Jellyfin collections are paginated; a single opened collection is limited to 20,000 items. Server administration, video, podcasts, remote-device control and saving streamed songs into Local files are outside this music integration.
 
 ### Accounts and saved data
 
-**Settings → Connections → YouTube → Streaming quality** chooses what a song costs to download. Standard takes the best stream YouTube offers, which is Opus at about 130 kbps. Data saver caps it, which lands on Opus at about 67 kbps and a little over half the bytes. Sung buffers the whole song before playing it, so this is the download either way. No account or sign-in is involved, and neither setting is a lossless one; for lossless audio use local files or a music server set to Original.
+**Settings → Connections → YouTube → Streaming quality** chooses what a song costs to download. Standard takes the best stream YouTube offers, which is Opus at about 130 kbps. Data saver caps it, which lands on Opus at about 67 kbps and a little over half the bytes. Sung buffers the whole song before playing it, so this is the download either way. **Settings → Privacy & data → Remember streamed audio** keeps that file (and the same buffer for a music server song) up to a size cap so the next play does not download it again. **Clear cache** removes it. The file is not added to Local files. No account or sign-in is involved, and neither quality setting is a lossless one; for lossless audio use local files or a music server set to Original.
 
 YouTube browsing is anonymous. YouTube likes, local playlists and local history are stored locally and **do not sync with your Google account**. Settings offers library JSON import/export; audio files, custom cover images and imported LRC files are not bundled into exports.
 
 For streams requiring sign-in, Settings can import a user-selected Netscape-format cookie file. Sung does not read your browser profile. Cookies can be removed in Settings.
 
-Library data is stored in `~/.local/share/Sung/sung/`, settings in `~/.config/Sung/`, and cache in `~/.cache/Sung/sung/`. Standard XDG directory overrides are respected. Sung has no analytics or telemetry. Optional LRCLIB lyric lookups send the song’s title, artist and duration; they can be disabled in Settings.
+Library data is stored in `~/.local/share/Sung/sung/`, settings in `~/.config/Sung/`, and cache in `~/.cache/Sung/sung/` (artwork, and streamed audio when that setting is on). Standard XDG directory overrides are respected. Sung has no analytics or telemetry. Optional LRCLIB lyric lookups send the song’s title, artist and duration; they can be disabled in Settings.
 
 ### Troubleshooting
 
