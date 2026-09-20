@@ -90,16 +90,14 @@ Slider {
                 id: wave; objectName: "seekWave"
                 width: track.width+28; height: track.height
                 preferredRendererType: Shape.CurveRenderer
-                // Geometry stays a 3dp sine. Pulse only scales it in Y, so the
-                // render thread can keep sliding the same path. The range never
-                // goes above 1, so the stroke is not fatter than Material's 3dp.
-                readonly property real bass: Math.max(app.audioLevels[0] || 0, app.audioLevels[1] || 0)
-                property real pulse: (!s.volumeMode && app.playing && app.motion) ? (0.45 + 0.55 * bass) : 0.45
-                Behavior on pulse { enabled: app.motion; NumberAnimation { duration: 65; easing.type: Easing.OutCubic } }
-                transform: Scale { origin.y: s.trackHeight/2; yScale: wave.pulse }
+                // Quiet playing is Material's 3dp sine. Bass lifts amplitude
+                // only; scaling the Shape would squash the 3dp round stroke.
+                readonly property real bass: Math.max(0, Math.min(1, Math.max(app.audioLevels[0] || 0, app.audioLevels[1] || 0)))
+                property real amplitude: (s.volumeMode || !app.playing) ? 1 : 3 + (app.motion ? 3 * bass : 0)
+                Behavior on amplitude { enabled: app.motion && !s.volumeMode; NumberAnimation { duration: 65; easing.type: Easing.OutCubic } }
                 ShapePath {
-                    strokeColor: Theme.primary; strokeWidth: 3; fillColor: "transparent"; capStyle: ShapePath.RoundCap
-                    PathPolyline { path: {if(s.volumeMode)return [];const mid=s.trackHeight/2;let points=[];for(let x=0;x<=wave.width+3;x+=3)points.push(Qt.point(x,mid+3*Math.sin(x*Math.PI/14)));return points;} }
+                    strokeColor: Theme.primary; strokeWidth: 3; fillColor: "transparent"; capStyle: ShapePath.RoundCap; joinStyle: ShapePath.RoundJoin
+                    PathPolyline { path: {if(s.volumeMode)return [];const mid=s.trackHeight/2;const amplitude=wave.amplitude;let points=[];for(let x=0;x<=wave.width+3;x+=3)points.push(Qt.point(x,mid+amplitude*Math.sin(x*Math.PI/14)));return points;} }
                 }
                 // A render-thread transform moves static geometry; no per-frame JS painting.
                 XAnimator { target: wave; from: 0; to: -28; duration: 1400; loops: Animation.Infinite; running: !s.volumeMode && app.playing && app.motion && s.visible && played.width>0 && s.Window.window && s.Window.window.visible && s.Window.window.visibility!==Window.Minimized }

@@ -1290,8 +1290,19 @@ void runAudioIndicatorTests(Backend *b,QQuickWindow *w) {
   auto indicator=findItem(w->contentItem(),"playingIndicator");check(indicator,"playing indicator exists");
   for(int i=0;i<5;++i)check(indicator&&findItem(indicator,QString("audioBar_%1").arg(i)),qPrintable(QString("bar %1 exists").arg(i+1)));
   check(b->audioLevels()[1].toDouble()>b->audioLevels()[4].toDouble(),"bass-mid tone is stronger than treble");check(w->grabWindow().save(dir+"/01-playing.png"),"playing screenshot");
+  QQuickItem *wave=nullptr;
+  const auto findPositionWave=[&](auto &&self,QQuickItem *item)->void{
+    if(wave)return;
+    if(item->objectName()=="seekBar"&&!item->property("volumeMode").toBool())wave=findItem(item,"seekWave");
+    for(auto child:item->childItems())self(self,child);
+  };
+  findPositionWave(findPositionWave,w->contentItem());
+  check(wave,"position seek wave exists");
+  check(wave&&wave->property("amplitude").toDouble()>3,"seek wave grows past Material's 3dp on a bass-mid tone");
   b->pause();QTest::qWait(100);check(b->audioLevels()==QVariantList({0.,0.,0.,0.,0.}),"pause clears measured levels");check(w->grabWindow().save(dir+"/02-paused.png"),"paused screenshot");
-  b->toggle();check(until([&]{return b->audioLevels()[1].toDouble()>.2;}),"resume restores audio response");b->setMotion(false);QTest::qWait(100);check(b->audioLevels()==QVariantList({0.,0.,0.,0.,0.})&&indicator&&!indicator->property("animating").toBool(),"reduced motion disables analyzer and bars");b->setMotion(true);
+  check(wave&&qAbs(wave->property("amplitude").toDouble()-1)<.05,"paused seek wave settles at 1dp");
+  b->toggle();check(until([&]{return b->audioLevels()[1].toDouble()>.2;}),"resume restores audio response");b->setMotion(false);QTest::qWait(100);check(b->audioLevels()==QVariantList({0.,0.,0.,0.,0.})&&indicator&&!indicator->property("animating").toBool(),"reduced motion disables analyzer and bars");
+  check(wave&&qAbs(wave->property("amplitude").toDouble()-3)<.05,"reduced motion keeps Material's 3dp seek wave");b->setMotion(true);
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
 
