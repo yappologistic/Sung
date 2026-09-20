@@ -182,6 +182,7 @@ ListView {
         else if(list.typeAheadKey(event))event.accepted=true;
     }
     ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    MSmoothWheel { flick: list }
     delegate: TrackRow {
         required property var entry; required property int index
         objectName: (list.queueMode?"queueRow_":"trackRow_")+index
