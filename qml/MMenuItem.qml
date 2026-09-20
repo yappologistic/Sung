@@ -24,8 +24,15 @@ MenuItem {
     // Material's menu marks a chosen item with the tertiary container, not the
     // secondary one that marks a chosen anything else, and a vibrant menu,
     // already tertiary, deepens to the tertiary role itself.
+    //
+    // That deepening is the item's own container, and only a segmented menu
+    // draws one. Asking for on-tertiary ink without it put the dark ink meant
+    // for a light fill straight onto the tertiary container the menu already
+    // sits on: 1.54:1 in the dark scheme, so the chosen row was the one nobody
+    // could read. Without the fill the row keeps the container's own ink and
+    // the tick alone marks the choice.
     readonly property color ink: !control.enabled ? Theme.muted
-                               : control.vibrant ? (control.checked ? Theme.tertiaryText : Theme.tertiaryContainerText)
+                               : control.vibrant ? (control.checked && control.segmented ? Theme.tertiaryText : Theme.tertiaryContainerText)
                                : control.checked ? Theme.tertiaryContainerText : Theme.text
     // The leading icon is the variant ink until the item is chosen, when it
     // takes the ink of the container it has been given.

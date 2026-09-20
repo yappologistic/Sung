@@ -70,4 +70,9 @@ QVariantMap scheme(const QColor &source, bool dark, Variant variant = Variant::T
 // L* of a color, on the same 0-100 scale as tone.
 double toneOf(const QColor &color);
 
+// WCAG contrast between two colors, which is the measure Material's own
+// accessible-colour guidance is written against and the one Sung solves its
+// accent against. 4.5:1 is the floor for body text.
+double contrastRatio(const QColor &a, const QColor &b);
+
 } // namespace m3

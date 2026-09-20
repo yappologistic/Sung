@@ -255,7 +255,6 @@ Palettes palettesFor(const QColor &source, Variant variant) {
           TonalPalette{hue, 8.0}};
 }
 
-namespace {
 double contrastRatio(const QColor &a, const QColor &b) {
   const double x = 0.2126 * linearized(a.redF()) + 0.7152 * linearized(a.greenF()) +
                    0.0722 * linearized(a.blueF());
@@ -264,6 +263,7 @@ double contrastRatio(const QColor &a, const QColor &b) {
   return (std::max(x, y) / 100.0 + 0.05) / (std::min(x, y) / 100.0 + 0.05);
 }
 
+namespace {
 // Material shifts a role's tone away from its backgrounds when a scheme asks
 // for more contrast than the standard tones carry. Sung sets text on its accent
 // colour, so primary holds the 4.5:1 text floor against every surface it can

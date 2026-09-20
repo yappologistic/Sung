@@ -1,6 +1,8 @@
 #include "uitest.h"
 #include "backend.h"
+#include "m3color.h"
 #include "rowselection.h"
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -23,6 +25,11 @@ bool waitFor(const std::function<bool()> &predicate) {
   QElapsedTimer timer;timer.start();
   while(!predicate() && timer.elapsed()<8000)QTest::qWait(25);
   return predicate();
+}
+void collectItems(QQuickItem *root,const QString &name,QList<QQuickItem*> &found) {
+  if(!root)return;
+  if(root->objectName()==name)found.append(root);
+  for(auto child:root->childItems())collectItems(child,name,found);
 }
 }
 
@@ -64,8 +71,38 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(!player->property("autoHideControls").toBool()&&player->property("controlsShown").toBool(),"controls remain visible by default");
   click("immersiveLayoutButton");click("immersiveAutoHide");
   check(player->property("autoHideControls").toBool(),"idle hiding can be enabled explicitly");
+  // The layout menu is the only vibrant menu in the application, and a
+  // vibrant menu is not segmented, so its rows have no container of their own.
+  // Ink that assumed one left the chosen row at 1.5:1 against the menu it sits
+  // on, which put the rows that were switched on out of reach of the people
+  // most likely to be reading them.
+  auto menuInkIsReadable=[&]{
+    auto menu=w->findChild<QObject*>("immersiveLayoutMenu");
+    check(menu,"immersive layout menu");
+    if(!menu)return;
+    check(!menu->property("segmented").toBool() && menu->property("vibrant").toBool(),
+          "the layout menu is vibrant and draws no container per row");
+    auto frame=menu->property("background").value<QQuickItem*>();
+    const auto surface=frame?frame->property("color").value<QColor>():QColor();
+    QList<QQuickItem*> inked;
+    collectItems(menu->property("contentItem").value<QQuickItem*>(),"menuItemLabel",inked);
+    collectItems(menu->property("contentItem").value<QQuickItem*>(),"menuItemLeading",inked);
+    check(inked.size()>=6,"the menu shows its rows and their ticks");
+    double worst=99;QString worstOn;
+    for(auto item:inked){
+      if(!item->isVisible())continue;
+      const auto ink=item->property("color").isValid()?item->property("color").value<QColor>()
+                                                      :item->property("ink").value<QColor>();
+      const double ratio=m3::contrastRatio(ink,surface);
+      if(ratio<worst){worst=ratio;worstOn=item->property("text").toString();}
+    }
+    const auto verdict=QString("every row of the vibrant menu clears 4.5:1 (worst %1:1%2)")
+                           .arg(worst,0,'f',2)
+                           .arg(worstOn.isEmpty()?QString():" on "+worstOn);
+    check(worst>=4.5,qPrintable(verdict));
+  };
   auto choose=[&](const QString &layout){click("immersiveLayoutButton");
-    if(layout=="lyrics")shot("layout-menu");
+    if(layout=="lyrics"){menuInkIsReadable();shot("layout-menu");}
     click("immersiveLayout_"+layout);QTest::qWait(100);
   };
   choose("lyrics");check(player->property("preferredLayout")=="lyrics"&&player->property("displayedLayout")=="artwork","missing lyrics falls back without losing preference");
