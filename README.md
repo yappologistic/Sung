@@ -29,6 +29,7 @@ A minimal Material 3 player built with C++ and Qt Quick, designed for CachyOS an
 - **Animated artwork**: local animated covers and automatic online covers for matching YouTube songs, shared across the player, immersive view and mini player; lists use still covers.
 - **Appearance**: light and dark themes, a pickable Material accent color, artwork-derived color, an ambient cover backdrop, an expandable navigation rail, density and per-view layouts.
 - **Lyrics**: synchronized lyrics, an immersive view, timing adjustments, LRC import, seek previews and search with jump-to-line playback.
+- **Offline**: songs you have played are kept on disk under a limit you set, so a replay starts at once and needs no network.
 - **Library tools**: likes, listening history, smart mixes, custom smart playlists, M3U playlist import and export, custom playlist covers, playlist cleanup, multi-selection, drag reordering and Undo.
 - **Playback controls**: mini player, queue editing with source headings, an immersive up-next carousel, volume normalization, shuffle, repeat, sleep timer, playback speed and audio-device selection.
 - **Keyboard and assistive use**: every control takes focus and shows it, sections are marked as headings, and colors are solved to keep 4.5:1 contrast in both themes and at either contrast setting.
@@ -205,6 +206,8 @@ Tested against Navidrome 0.63.2 and Jellyfin 10.11.11 / 12.0. Other servers must
 YouTube browsing is anonymous. YouTube likes, local playlists and local history are stored locally and **do not sync with your Google account**. Settings offers library JSON import/export; audio files, custom cover images and imported LRC files are not bundled into exports.
 
 For streams requiring sign-in, Settings can import a user-selected Netscape-format cookie file. Sung does not read your browser profile. Cookies can be removed in Settings.
+
+**Settings → Privacy & data → Keep played songs** keeps the audio Sung has already fetched. Sung buffers a whole song to disk before playing it either way; this keeps that file instead of handing it back when the track ends, so playing the song again starts at once and needs no network at all. Choose how much disk it may use, up to 16 GB. When the limit is reached the least recently played songs are given back first, and **Clear kept songs** empties it. Imported files are never copied, because they are already on disk. A song kept at one streaming quality is not reused at another, and a song larger than the whole limit is not kept. Off keeps nothing and removes what is there.
 
 Library data is stored in `~/.local/share/Sung/sung/`, settings in `~/.config/Sung/`, and cache in `~/.cache/Sung/sung/`. Standard XDG directory overrides are respected. Sung has no analytics or telemetry. Optional LRCLIB lyric lookups send the song’s title, artist and duration; they can be disabled in Settings.
 

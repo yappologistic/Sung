@@ -46,6 +46,7 @@ Backend::Backend(QObject *parent) : QObject(parent) {
   // Both decks report everything; only the one being heard is listened to.
   const auto eachDeck=[this](const std::function<void(QMediaPlayer *)> &wire){wire(&m_deckA);wire(&m_deckB);};
   m_userVolume=qBound(0.0,m_settings.value("volume",0.65).toDouble(),1.0);
+  m_offline.setBudget(qint64(keepPlayedMb())*1024*1024);
   m_videoCovers=m_settings.value("videoCovers").toMap();
   m_audioA.setVolume(m_userVolume);
   m_audioB.setVolume(m_userVolume);
@@ -634,6 +635,13 @@ void Backend::recoverStream() {
   emit playbackChanged();
   ++m_recoveryAttempts;
   m_streams.remove(current().value("videoId").toString());
+  // A kept copy that will not decode has to go with it. The retry below asks
+  // the store for nothing, so without this the same bad file would be handed
+  // back the next time the song came round.
+  const auto failed=current();
+  m_offline.forget(isServerSource(failed.value("source"))
+                       ? OfflineStore::keyFor(failed,QString::number(m_server.bitrate()))
+                       : OfflineStore::keyFor(failed,streamingQuality()));
   // Defer resetting the media source until the decoder's error callback unwinds.
   const auto token=m_trackToken;
   QTimer::singleShot(0,this,[this,token]{if(m_wantPlay && token==m_trackToken){m_media().stop();m_media().setSource({});resolveCurrent(true);}});
@@ -642,13 +650,28 @@ void Backend::resolveCurrent(bool retry) {
   if(isServerSource(current().value("source"))){
     cancelPreparation();cancel("play");m_recovering=false;m_resolving=true;
     if(!retry&&m_savedPosition>0)m_restorePosition=m_savedPosition;
+    // A song that was kept the last time it played is a local file now: no
+    // server, no network, no wait for a buffer.
+    const auto key=OfflineStore::keyFor(current(),QString::number(m_server.bitrate()));
+    if(!retry){
+      const auto kept=m_offline.take(key);
+      if(!kept.isEmpty()){
+        m_audioCache.reset();m_resolving=false;
+        m_media().setSource(QUrl::fromLocalFile(kept));
+        if(m_wantPlay)m_media().play();
+        emit playbackChanged();return;
+      }
+    }
     m_audioCache=audioDirectory();
     if(!m_audioCache||!m_audioCache->isValid()){m_resolving=false;m_wantPlay=false;notifyError("Could not create the audio buffer.");emit playbackChanged();return;}
     const auto token=m_trackToken;const auto directory=m_audioCache;
-    m_server.download(current(),directory->path()+"/song",[this,token,directory](const QVariantMap &data,const QString &error){
+    m_server.download(current(),directory->path()+"/song",[this,token,directory,key](const QVariantMap &data,const QString &error){
       if(token!=m_trackToken)return;
       if(!error.isEmpty()){m_resolving=false;m_wantPlay=false;notifyError(error,"play");emit playbackChanged();return;}
-      m_media().setSource(QUrl::fromLocalFile(data.value("file").toString()));if(m_wantPlay)m_media().play();emit playbackChanged();
+      auto file=data.value("file").toString();
+      const auto kept=m_offline.keep(key,file);
+      if(!kept.isEmpty())file=kept;
+      m_media().setSource(QUrl::fromLocalFile(file));if(m_wantPlay)m_media().play();emit playbackChanged();
     });emit playbackChanged();return;
   }
   if(!current().value("localPath").toString().isEmpty()) {
@@ -663,11 +686,29 @@ void Backend::resolveCurrent(bool retry) {
   auto id = current().value("videoId").toString();
   if (id.isEmpty())
     return;
+  const auto offlineKey = OfflineStore::keyFor(current(), streamingQuality());
+  if (!retry) {
+    const auto kept = m_offline.take(offlineKey);
+    if (!kept.isEmpty()) {
+      cancelPreparation();
+      m_recovering = false;
+      m_resolving = false;
+      m_stopped = false;
+      m_recoveryAttempts = 0;
+      if (m_media().source().isEmpty() && m_savedPosition > 0)
+        m_restorePosition = m_savedPosition;
+      m_media().setSource(QUrl::fromLocalFile(kept));
+      if (m_wantPlay)
+        m_media().play();
+      emit playbackChanged();
+      return;
+    }
+  }
   m_retry = retry;
   m_stopped=false;
   m_resolving = true;
   emit playbackChanged();
-  auto apply = [this, id](const QVariantMap &data) {
+  auto apply = [this, id, offlineKey](const QVariantMap &data) {
     if (current().value("videoId").toString() != id)
       return;
     if (!data.value("ok").toBool()) {
@@ -689,8 +730,15 @@ void Backend::resolveCurrent(bool retry) {
         }
     }
     auto url = QUrl(data.value("url").toString());
-    const auto file=data.value("file").toString();
-    if(!file.isEmpty() && m_audioCache && QFileInfo(file).isFile() && QFileInfo(file).canonicalPath()==QFileInfo(m_audioCache->path()).canonicalFilePath())url=QUrl::fromLocalFile(file);
+    auto file=data.value("file").toString();
+    if(!file.isEmpty() && m_audioCache && QFileInfo(file).isFile() && QFileInfo(file).canonicalPath()==QFileInfo(m_audioCache->path()).canonicalFilePath()){
+      // The buffer that was about to be thrown away is moved into the store
+      // instead, and played from there. Failing to keep it is not a reason to
+      // fail to play it, so the buffered file stands in.
+      const auto kept=m_offline.keep(offlineKey,file);
+      if(!kept.isEmpty())file=kept;
+      url=QUrl::fromLocalFile(file);
+    }
     if (url.scheme() != "https" && !url.isLocalFile()) {
       m_resolving = false;
       notifyError("The stream URL is invalid.");
@@ -1265,6 +1313,29 @@ void Backend::clearCookies() {
   cancelPreparation();m_streams.clear();
   m_settings.remove("cookies");
   emit settingsChanged();
+}
+void Backend::setKeepPlayedMb(int megabytes){
+  megabytes=qBound(0,megabytes,65536);
+  if(megabytes==keepPlayedMb())return;
+  m_settings.setValue("keepPlayedMb",megabytes);
+  // Lowering the budget gives the disk back now rather than at some later
+  // song, so the number in Settings is true the moment it is chosen.
+  m_offline.setBudget(qint64(megabytes)*1024*1024);
+  emit settingsChanged();
+}
+QString Backend::keptSongsSize() const {
+  const qint64 bytes=m_offline.bytes();
+  // Empty means the row that offers to clear it has nothing to offer, so it
+  // says nothing rather than saying zero.
+  if(bytes<=0)return {};
+  if(bytes<1024*1024)return QString("%1 kB").arg(bytes/1024);
+  if(bytes<1024LL*1024*1024)return QString("%1 MB").arg(bytes/(1024*1024));
+  return QString("%1 GB").arg(double(bytes)/(1024.0*1024*1024),0,'f',1);
+}
+void Backend::clearKeptSongs(){
+  m_offline.clear();
+  emit settingsChanged();
+  emit toast("Kept songs cleared");
 }
 void Backend::clearCache() {
   m_onlineArtworkTimer.stop();cancel("motion-artwork");++m_onlineArtworkGeneration;
@@ -1977,7 +2048,11 @@ void Backend::updatePreparation(){
   QString nextId;
   if(prepareNext()&&playing()&&m_wantPlay&&!m_resolving&&!shuffle()&&repeat()!=2&&!m_sleepAtEnd&&m_index>=0){
     const int next=m_index+1<m_queue.count()?m_index+1:repeat()==1?0:-1;
-    if(next>=0&&next!=m_index)nextId=m_queue.get(next).value("videoId").toString();
+    // A song already kept needs no head start: it is a local file by the time
+    // playback reaches it, and fetching it again would undo the point of
+    // keeping it.
+    if(next>=0&&next!=m_index&&!m_offline.has(OfflineStore::keyFor(m_queue.get(next),streamingQuality())))
+      nextId=m_queue.get(next).value("videoId").toString();
     if(m_sleepTimer.isActive()&&m_sleepTimer.remainingTime()<qMax<qint64>(0,duration()-position())/playbackRate())nextId.clear();
   }
   if(nextId.isEmpty()){cancelPreparation();m_preparationAttempt.clear();return;}

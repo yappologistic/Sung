@@ -17,6 +17,7 @@
 #include "collectionview.h"
 #include "playbacknotifier.h"
 #include "musicserver.h"
+#include "offlinestore.h"
 #include "scrobbler.h"
 #include <QElapsedTimer>
 #include <QFileSystemWatcher>
@@ -217,6 +218,10 @@ class Backend : public QObject {
   Q_PROPERTY(bool liked READ liked NOTIFY libraryChanged)
   Q_PROPERTY(QString cookies READ cookies NOTIFY settingsChanged)
   Q_PROPERTY(QString streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY settingsChanged)
+  // How much disk the songs already fetched may keep between them, and what
+  // they are using. Zero turns keeping off and empties the store.
+  Q_PROPERTY(int keepPlayedMb READ keepPlayedMb WRITE setKeepPlayedMb NOTIFY settingsChanged)
+  Q_PROPERTY(QString keptSongsSize READ keptSongsSize NOTIFY settingsChanged)
   Q_PROPERTY(QStringList musicFolders READ musicFolders NOTIFY libraryChanged)
   Q_PROPERTY(bool cleanupBusy READ cleanupBusy NOTIFY cleanupChanged)
   Q_PROPERTY(QVariantList cleanupItems READ cleanupItems NOTIFY cleanupChanged)
@@ -473,6 +478,10 @@ public:
   // song is buffered before it plays, so this is the download either way.
   QString streamingQuality() const { const auto v=m_settings.value("streamingQuality","standard").toString();return v=="saver"?v:"standard"; }
   void setStreamingQuality(const QString &value) { if(streamingQuality()==value || (value!="saver" && value!="standard"))return;m_settings.setValue("streamingQuality",value);emit settingsChanged(); }
+  int keepPlayedMb() const {return qBound(0,m_settings.value("keepPlayedMb",1024).toInt(),65536);}
+  void setKeepPlayedMb(int megabytes);
+  QString keptSongsSize() const;
+  Q_INVOKABLE void clearKeptSongs();
   // Overlap between one song and the next, in seconds. Zero plays them in turn.
   int crossfadeSeconds() const {return qBound(0,m_settings.value("crossfadeSeconds",0).toInt(),12);}
   void setCrossfadeSeconds(int seconds);
@@ -638,6 +647,9 @@ private:
   void serverBrowseRequest(QVariantMap request,bool push=true,bool append=false);
   void setupServer();
   MusicServer m_server;
+  // Songs already fetched, kept so a replay and a lost connection cost
+  // nothing. See offlinestore.h for why the directory is its own index.
+  OfflineStore m_offline;
   QString m_serverArtwork;
   std::shared_ptr<QTemporaryDir> m_serverArtDirectory;
   QTimer m_serverListenTimer;

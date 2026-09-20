@@ -443,11 +443,19 @@ private slots:
     b.seek(20000);QTRY_VERIFY_WITH_TIMEOUT(!b.m_preparedData.isEmpty(),5000);
     QVERIFY(QFileInfo::exists(source.toLocalFile()));QCOMPARE(b.trackToken(),token);QCOMPARE(b.media()->source(),source);
     const auto prepared=b.m_preparedData.value("file").toString();QVERIFY(QFileInfo::exists(prepared));
-    b.next();QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),5000);QCOMPARE(b.media()->source(),QUrl::fromLocalFile(prepared));
+    const auto preparedBytes=QFileInfo(prepared).size();
+    // The head start is kept rather than thrown away when the track ends, so
+    // the song plays out of the store. What this case is about is that it is
+    // the buffer that was prepared and that nothing went back for it.
+    b.next();QTRY_VERIFY_WITH_TIMEOUT(b.playing()&&!b.resolving(),5000);
+    const auto playing=b.media()->source();
+    QVERIFY2(playing.isLocalFile()&&QFileInfo::exists(playing.toLocalFile()),"the prepared song plays from a file");
+    QCOMPARE(QFileInfo(playing.toLocalFile()).size(),preparedBytes);
+    QVERIFY2(playing!=QUrl::fromLocalFile(prepared),"the buffer left the scratch directory for the store");
     // A reordered queue must discard the old target, without touching the decoder.
     b.seek(20000);QTRY_VERIFY_WITH_TIMEOUT(b.m_processes.contains("prepare"),3000);b.moveQueue(3,2);
     QTRY_COMPARE_WITH_TIMEOUT(b.m_preparedId,QString("prepare0004"),3000);QTest::qWait(600);QVERIFY(b.m_preparedData.isEmpty());QVERIFY(b.error().isEmpty());
-    QCOMPARE(b.media()->source(),QUrl::fromLocalFile(prepared));QVERIFY(QFileInfo::exists(prepared));
+    QCOMPARE(b.media()->source(),playing);QVERIFY(QFileInfo::exists(playing.toLocalFile()));
     b.moveQueue(3,2);QTRY_VERIFY_WITH_TIMEOUT(!b.m_preparedData.isEmpty(),5000);b.pause();QTRY_VERIFY(b.m_preparedId.isEmpty());QVERIFY(b.m_preparedData.isEmpty());
     b.play();b.setShuffle(true);QTest::qWait(100);QVERIFY(b.m_preparedId.isEmpty());b.setShuffle(false);b.setSleep(-1);QTest::qWait(100);QVERIFY(b.m_preparedId.isEmpty());b.setSleep(0);
     b.setPrepareNext(false);QTest::qWait(100);QVERIFY(b.m_preparedId.isEmpty());
