@@ -196,6 +196,13 @@ class Backend : public QObject {
   Q_PROPERTY(QString motionScheme READ motionScheme WRITE setMotionScheme NOTIFY settingsChanged)
   Q_PROPERTY(bool crossfading READ crossfading NOTIFY playbackChanged)
   Q_PROPERTY(bool prepareNext READ prepareNext WRITE setPrepareNext NOTIFY settingsChanged)
+  // Whether the mini player asks to stay above other windows, and whether the
+  // platform lets any window ask. Wayland has no protocol for raising
+  // yourself: the compositor owns stacking and drops the request, so the
+  // control is offered only where it does something. X11 and XWayland honour
+  // it; on Hyprland the equivalent is a window rule, which the README gives.
+  Q_PROPERTY(bool miniPinned READ miniPinned WRITE setMiniPinned NOTIFY settingsChanged)
+  Q_PROPERTY(bool canPinWindows READ canPinWindows CONSTANT)
   Q_PROPERTY(bool lyricsFallback READ lyricsFallback WRITE setLyricsFallback NOTIFY settingsChanged)
   Q_PROPERTY(QString lyricsSource READ lyricsSource NOTIFY lyricsChanged)
   Q_PROPERTY(QString lyrics READ lyrics NOTIFY lyricsChanged)
@@ -479,6 +486,9 @@ public:
     m_settings.setValue("motionScheme",chosen);
     emit settingsChanged();
   }
+  bool miniPinned() const {return m_settings.value("miniPinned",false).toBool();}
+  void setMiniPinned(bool value){if(miniPinned()==value)return;m_settings.setValue("miniPinned",value);emit settingsChanged();}
+  static bool canPinWindows();
   bool prepareNext() const {return m_settings.value("prepareNext",true).toBool();}
   void setPrepareNext(bool enabled);
   bool lyricsFallback() const {return m_settings.value("lyricsFallback",true).toBool();}

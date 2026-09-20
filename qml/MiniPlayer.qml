@@ -6,7 +6,11 @@ Window {
     objectName: "miniPlayerWindow"
     title: "Sung · Mini player"
     transientParent: null
+    // Pinned windows are a platform capability, not a preference: where the
+    // compositor owns stacking the hint is dropped, so the control that sets
+    // it is not offered either.
     flags: Qt.Window | Qt.FramelessWindowHint
+         | (app.canPinWindows && app.miniPinned ? Qt.WindowStaysOnTopHint : 0)
     readonly property bool hasTimedLyrics: app.lyricLines.length>0
     width: 520; height: hasTimedLyrics?216:188
     minimumWidth: 520; maximumWidth: 520
@@ -36,6 +40,7 @@ Window {
                     SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; font.weight: Font.DemiBold }
                     SungText { text: presentation.shown.artist || ""; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.bodyMedium; color: Theme.muted }
                 }
+                MButton { objectName: "miniPinButton"; symbol: "pin"; toggle: true; selected: app.miniPinned; visible: app.canPinWindows; tip: app.miniPinned?"Let other windows cover this":"Keep above other windows"; onClicked: app.miniPinned=!app.miniPinned }
                 MButton { objectName: "miniRestoreButton"; symbol: "expand"; tip: "Full player · Ctrl+M"; onClicked: mini.restoreRequested() }
                 MButton { symbol: "close"; tip: "Quit Sung"; onClicked: Qt.quit() }
             }

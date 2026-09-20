@@ -1962,6 +1962,12 @@ QVariantList Backend::libraryRows(const QString &kind) const {
   if(kind=="mix-rediscover")std::stable_sort(rows.begin(),rows.end(),[this](const QVariant&a,const QVariant&b){return m_lastPlayed.value(itemId(a)).toLongLong()<m_lastPlayed.value(itemId(b)).toLongLong();});
   return rows;
 }
+// Wayland deliberately gives a client no way to raise itself; xdg-shell has no
+// stacking request at all, so Qt's hint reaches the compositor and is dropped.
+// Measured on Hyprland: a window carrying the hint is tiled like any other.
+bool Backend::canPinWindows(){
+  return !QGuiApplication::platformName().startsWith(QLatin1String("wayland"));
+}
 void Backend::setPrepareNext(bool enabled){m_settings.setValue("prepareNext",enabled);emit settingsChanged();}
 void Backend::cancelPreparation(){
   ++m_preparationGeneration;cancel("prepare");m_prepareTimer.stop();m_preparedData.clear();m_preparedDirectory.reset();m_preparedId.clear();

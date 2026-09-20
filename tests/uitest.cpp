@@ -1786,7 +1786,26 @@ void runListeningRefinementTests(Backend *b,QQuickWindow *w){
   std::function<QQuickItem*(QQuickItem*,const QString&)> visibleItem=[&](QQuickItem *root,const QString &name)->QQuickItem*{if(!root->isVisible())return nullptr;if(root->objectName()==name)return root;for(auto child:root->childItems())if(auto found=visibleItem(child,name))return found;return nullptr;};
   auto tapItem=[&](QQuickWindow *target,QQuickItem *item){if(item)QTest::mouseClick(target,Qt::LeftButton,Qt::NoModifier,item->mapToScene(QPointF(item->width()/2,item->height()/2)).toPoint());QTest::qWait(250);};
   QMetaObject::invokeMethod(w,"openMiniPlayer");QTest::qWait(350);QQuickWindow *mini=nullptr;for(auto window:QGuiApplication::allWindows())if(window->objectName()=="miniPlayerWindow")mini=qobject_cast<QQuickWindow*>(window);
-  check(mini&&mini->isVisible(),"mini player opens");if(mini){QWindowSystemInterface::handleFocusWindowChanged(mini);tapItem(mini,visibleItem(mini->contentItem(),"miniVolumeButton"));auto field=visibleItem(mini->contentItem(),"volumePercent");check(field,"mini player offers numeric volume");if(field){field->setProperty("text","23");QTest::keyClick(mini,Qt::Key_Return);check(qAbs(b->volume()-.23)<.001,"mini numeric volume applies");}tapItem(mini,visibleItem(mini->contentItem(),"miniVolumeButton"));check(mini->grabWindow().save(dir+"/07-mini-volume.png"),"07-mini-volume");QTest::keyClick(mini,Qt::Key_Escape);check(mini->isVisible(),"Escape closes volume without leaving mini player");}
+  check(mini&&mini->isVisible(),"mini player opens");
+  // Staying above other windows is a capability of the platform rather than a
+  // preference, so the control is offered only where a window may ask. This
+  // runs offscreen, which stands in for a platform that honours the request;
+  // in a Wayland session the compositor owns stacking and the button is not
+  // drawn at all.
+  if(mini){
+    check(Backend::canPinWindows(),"this platform lets a window ask to stay on top");
+    auto pin=visibleItem(mini->contentItem(),"miniPinButton");
+    check(pin,"the mini player offers a pin");
+    check(!b->miniPinned()&&!(mini->flags()&Qt::WindowStaysOnTopHint),"which starts off");
+    tapItem(mini,pin);
+    check(b->miniPinned(),"pinning is remembered");
+    check(mini->flags()&Qt::WindowStaysOnTopHint,"and the window carries the request");
+    check(mini->isVisible()&&mini->width()==520,"pinning leaves the window open at its own size");
+    check(mini->grabWindow().save(dir+"/08-mini-pinned.png"),"08-mini-pinned");
+    tapItem(mini,visibleItem(mini->contentItem(),"miniPinButton"));
+    check(!b->miniPinned()&&!(mini->flags()&Qt::WindowStaysOnTopHint),"and the same control lets go again");
+  }
+  if(mini){QWindowSystemInterface::handleFocusWindowChanged(mini);tapItem(mini,visibleItem(mini->contentItem(),"miniVolumeButton"));auto field=visibleItem(mini->contentItem(),"volumePercent");check(field,"mini player offers numeric volume");if(field){field->setProperty("text","23");QTest::keyClick(mini,Qt::Key_Return);check(qAbs(b->volume()-.23)<.001,"mini numeric volume applies");}tapItem(mini,visibleItem(mini->contentItem(),"miniVolumeButton"));check(mini->grabWindow().save(dir+"/07-mini-volume.png"),"07-mini-volume");QTest::keyClick(mini,Qt::Key_Escape);check(mini->isVisible(),"Escape closes volume without leaving mini player");}
   QMetaObject::invokeMethod(w,"restorePlayer");QWindowSystemInterface::handleFocusWindowChanged(w);QTest::qWait(300);QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(500);tapItem(w,visibleItem(w->contentItem(),"exactVolumeButton"));auto immersivePercent=visibleItem(w->contentItem(),"volumePercent");check(immersivePercent,"immersive player offers numeric volume");if(immersivePercent)immersivePercent->setProperty("text","0");tapItem(w,visibleItem(w->contentItem(),"volumeApply"));check(b->volume()==0,"immersive numeric volume applies");QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(400);
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }

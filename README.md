@@ -140,6 +140,13 @@ Queue headings distinguish songs added manually, collection tracks and autoplay 
 
 Hold **Shift while dragging the seek bar** for fine seeking; the new position applies when you release. **Shift+Left / Right** seeks by 100ms. Escape cancels a fine drag. The mouse wheel over the seek bar moves playback in five-second steps. **0**–**9** jump to that tenth of the track, with the same on-screen feedback as the other seek shortcuts; they are ignored while you are typing or while a song list has the keyboard.
 
+The mini player can be pinned above other windows wherever the desktop allows a window to ask for that. Wayland has no protocol for it, so the control is not offered in a Wayland session; on Hyprland the same thing is a window rule:
+
+```
+windowrulev2 = float, title:^(Sung · Mini player)$
+windowrulev2 = pin, title:^(Sung · Mini player)$
+```
+
 Click the volume icon for a slider and an exact percentage. Enter a value from 0 to 100 and press Enter or Apply. This works in the main, mini and immersive players. In the main and immersive players, **Ctrl+Up / Down** adjusts volume and **M** toggles mute; shortcuts show brief playback feedback.
 
 Timed lyrics show a countdown during intros and explicit gaps of at least five seconds. Sung uses supplied line boundaries or blank timed lines; it does not infer instrumental passages from a long lyric line. Timing adjustments apply to the countdown.
