@@ -1377,7 +1377,7 @@ ApplicationWindow {
                 visible: window.compactWindow
                 // A window with little height to spare takes Material's short
                 // bar, which sets each label beside its icon instead of under.
-                short: window.height < 700
+                shortBar: window.height < 700
                 destinations: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library",badged:app.importingLocal}]
                 current: window.destination
                 onChosen: key => {
