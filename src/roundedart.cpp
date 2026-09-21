@@ -12,6 +12,9 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QStandardPaths>
+#include <QThread>
+#include <QThreadPool>
+#include <QtConcurrentRun>
 #include <utility>
 
 std::function<QNetworkRequest(const QUrl &)> RoundedArt::resolveServerArt;
@@ -20,6 +23,17 @@ static QCache<QString, QImage> cache(8 * 1024 * 1024);
 // Every surface alive right now, so a change in what a URL stands for can
 // reach the ones already drawing it. Surfaces live on the GUI thread only.
 static QSet<RoundedArt *> &liveArt() { static QSet<RoundedArt *> set; return set; }
+// Covers are decoded here rather than on Qt's global pool, so a burst of rows
+// scrolling in cannot take every thread the rest of the app shares. Two
+// threads keep a fast disk busy while leaving the GUI thread a core.
+static QThreadPool *decodePool() {
+  static QThreadPool *pool = nullptr;
+  if (!pool) {
+    pool = new QThreadPool(QCoreApplication::instance());
+    pool->setMaxThreadCount(qBound(2, QThread::idealThreadCount() / 2, 4));
+  }
+  return pool;
+}
 static QNetworkAccessManager *manager() {
   static QNetworkAccessManager *n = nullptr;
   if (!n) {
@@ -150,6 +164,9 @@ void RoundedArt::reload(bool preserve) {
     m_reply->deleteLater();
     m_reply = nullptr;
   }
+  // Whatever a running decode was reading is no longer what this surface
+  // shows, so its result is discarded when it arrives.
+  ++m_decode;
   if(!preserve){m_image = {};m_softImage = {};}
   emit readyChanged();
   update();
@@ -162,13 +179,36 @@ void RoundedArt::reload(bool preserve) {
     return;
   }
   if(m_source.isLocalFile()) {
-    const QFileInfo file(m_source.toLocalFile());if(file.size()>2*1024*1024){finishTransition();return;}
-    QImageReader reader(file.absoluteFilePath());reader.setAutoTransform(true);const auto size=reader.size();
-    if(!size.isValid()||size.width()>4096||size.height()>4096){finishTransition();return;}
-    reader.setScaledSize(size.scaled(m_pixels,m_pixels,Qt::KeepAspectRatio));m_image=reader.read();
-    if(m_image.format()==QImage::Format_RGB32)m_image=std::move(m_image).convertToFormat(QImage::Format_RGB888);
-    if(!m_image.isNull())cache.insert(key,new QImage(m_image),m_image.sizeInBytes());
-    imageReady();return;
+    // Reading and scaling a cover costs milliseconds, which is a dropped
+    // frame if it happens while the list is moving. The work goes to a pool
+    // thread and the result is taken back on the GUI thread, so a row that
+    // scrolls into view no longer stalls the one being drawn.
+    const QString path=m_source.toLocalFile();
+    const int pixels=m_pixels;
+    // A generation counter: only the newest request for this surface may
+    // deliver. A reused delegate that has moved on to another cover, or a
+    // surface being destroyed, leaves its earlier decode with a stale token.
+    const quint64 token=++m_decode;
+    auto *watcher=new QFutureWatcher<QImage>(this);
+    connect(watcher,&QFutureWatcherBase::finished,this,[this,watcher,key,token]{
+      watcher->deleteLater();
+      if(token!=m_decode)return;
+      m_image=watcher->result();
+      if(!m_image.isNull())cache.insert(key,new QImage(m_image),m_image.sizeInBytes());
+      imageReady();
+    });
+    watcher->setFuture(QtConcurrent::run(decodePool(),[path,pixels]{
+      const QFileInfo file(path);
+      if(file.size()>2*1024*1024)return QImage();
+      QImageReader reader(file.absoluteFilePath());reader.setAutoTransform(true);
+      const auto size=reader.size();
+      if(!size.isValid()||size.width()>4096||size.height()>4096)return QImage();
+      reader.setScaledSize(size.scaled(pixels,pixels,Qt::KeepAspectRatio));
+      QImage image=reader.read();
+      if(image.format()==QImage::Format_RGB32)image=std::move(image).convertToFormat(QImage::Format_RGB888);
+      return image;
+    }));
+    return;
   }
   const bool server=m_source.scheme()=="sungcover";
   QNetworkRequest serverRequest=server&&resolveServerArt?resolveServerArt(m_source):QNetworkRequest();

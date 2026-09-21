@@ -35,25 +35,28 @@ private slots:
   void coverCrossfade() {
     QTemporaryDir dir;QStringList files;for(const auto color:{Qt::red,Qt::blue,Qt::green}){QImage image(128,128,QImage::Format_RGB32);image.fill(color);const auto path=dir.filePath(QString::number(files.size())+".png");QVERIFY(image.save(path));files<<path;}
     RoundedArt art;art.setWidth(100);art.setHeight(100);art.setPixels(128);art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(files[0]));QVERIFY(!art.transitioning());
-    art.setSource(QUrl::fromLocalFile(files[1]));QVERIFY(art.transitioning());QVERIFY(!art.m_previous.isNull());QTest::qWait(110);
+    // A cover off disk is decoded on a pool thread, so a surface becomes ready
+    // a moment after it is given a source rather than inside the call.
+    QTRY_VERIFY(art.ready());
+    art.setSource(QUrl::fromLocalFile(files[1]));QTRY_VERIFY(art.transitioning());QVERIFY(!art.m_previous.isNull());QTest::qWait(110);
     QImage mixed(100,100,QImage::Format_ARGB32_Premultiplied);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}
     const auto color=mixed.pixelColor(50,50);QVERIFY(color.red()>30&&color.blue()>30);QVERIFY(color.alpha()>250);
     QTRY_VERIFY_WITH_TIMEOUT(!art.transitioning(),1000);QVERIFY(art.m_previous.isNull());
-    art.setSource(QUrl::fromLocalFile(files[0]));QTest::qWait(40);art.setSource(QUrl::fromLocalFile(files[2]));QVERIFY(art.transitioning());
-    art.setCrossfade(false);QVERIFY(!art.transitioning());QVERIFY(art.m_previous.isNull());QVERIFY(art.m_image.pixelColor(50,50).green()>200);
+    art.setSource(QUrl::fromLocalFile(files[0]));QTRY_VERIFY(art.ready());art.setSource(QUrl::fromLocalFile(files[2]));QVERIFY(art.transitioning());
+    art.setCrossfade(false);QVERIFY(!art.transitioning());QVERIFY(art.m_previous.isNull());QTRY_VERIFY(art.m_image.pixelColor(50,50).green()>200);
     QImage transparent(128,128,QImage::Format_ARGB32_Premultiplied);transparent.fill(Qt::transparent);const auto alphaFile=dir.filePath("transparent.png");QVERIFY(transparent.save(alphaFile));
-    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(alphaFile));QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,50).alphaF()-(1-art.m_mix))<0.02);
-    art.setCrossfade(false);art.setSource(QUrl::fromLocalFile(files[2]));QImage wide(128,64,QImage::Format_RGB32);wide.fill(Qt::blue);const auto wideFile=dir.filePath("wide.png");QVERIFY(wide.save(wideFile));
-    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(wideFile));art.setFit(true);QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,8).alphaF()-(1-art.m_mix))<0.02);QVERIFY(mixed.pixelColor(50,50).alpha()>250);
-    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(dir.filePath("missing.png")));QVERIFY(!art.ready());QVERIFY(!art.transitioning());
+    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(alphaFile));QTRY_VERIFY(art.ready());QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,50).alphaF()-(1-art.m_mix))<0.02);
+    art.setCrossfade(false);art.setSource(QUrl::fromLocalFile(files[2]));QTRY_VERIFY(art.ready());QImage wide(128,64,QImage::Format_RGB32);wide.fill(Qt::blue);const auto wideFile=dir.filePath("wide.png");QVERIFY(wide.save(wideFile));
+    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(wideFile));art.setFit(true);QTRY_VERIFY(art.ready());QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,8).alphaF()-(1-art.m_mix))<0.02);QVERIFY(mixed.pixelColor(50,50).alpha()>250);
+    art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(dir.filePath("missing.png")));QTRY_VERIFY(!art.ready());QVERIFY(!art.transitioning());
     art.setSource(QUrl::fromLocalFile(files[0]));art.setSource({});QVERIFY(!art.ready());QVERIFY(art.m_previous.isNull());
   }
   void fitAndLargeArtwork() {
     QTemporaryDir dir;QImage source(1600,800,QImage::Format_RGB32);source.fill(Qt::red);const auto file=dir.filePath("wide.jpg");QVERIFY(source.save(file));
-    RoundedArt art;art.setWidth(100);art.setHeight(100);art.setRadius(0);art.setPixels(1600);art.setSource(QUrl::fromLocalFile(file));QVERIFY(art.ready());QCOMPARE(art.m_image.width(),1600);
+    RoundedArt art;art.setWidth(100);art.setHeight(100);art.setRadius(0);art.setPixels(1600);art.setSource(QUrl::fromLocalFile(file));QTRY_VERIFY(art.ready());QCOMPARE(art.m_image.width(),1600);
     QImage fit(100,100,QImage::Format_ARGB32_Premultiplied);fit.fill(Qt::transparent);art.setFit(true);{QPainter painter(&fit);art.paint(&painter);}QCOMPARE(fit.pixelColor(50,0).alpha(),0);QVERIFY(fit.pixelColor(50,50).red()>240);
     QImage fill(100,100,QImage::Format_ARGB32_Premultiplied);fill.fill(Qt::transparent);art.setFit(false);{QPainter painter(&fill);art.paint(&painter);}QVERIFY(fill.pixelColor(50,0).red()>240);
-    art.setPixels(9000);QCOMPARE(art.pixels(),1600);art.setPixels(128);QCOMPARE(art.m_image.width(),128);
+    art.setPixels(9000);QCOMPARE(art.pixels(),1600);art.setPixels(128);QTRY_COMPARE(art.m_image.width(),128);
   }
   void softenedBackdrop() {
     QTemporaryDir dir;
@@ -72,7 +75,7 @@ private slots:
       return samples?double(total)/samples:0.0;
     };
     RoundedArt art;art.setWidth(120);art.setHeight(120);art.setRadius(0);art.setPixels(120);
-    art.setSource(QUrl::fromLocalFile(path));QVERIFY(art.ready());
+    art.setSource(QUrl::fromLocalFile(path));QTRY_VERIFY(art.ready());
     QCOMPARE(art.blur(),0);
     QVERIFY(art.m_softImage.isNull());
     const double sharp=detail(art.m_image);
@@ -102,9 +105,9 @@ private slots:
   }
   void accentSampling() {
     QTemporaryDir dir;RoundedArt art;QCOMPARE(art.seedColor().alpha(),0);
-    QImage picture(64,64,QImage::Format_RGB32);picture.fill(QColor("#e04466"));const auto path=dir.filePath("pink.png");QVERIFY(picture.save(path));art.setSource(QUrl::fromLocalFile(path));
+    QImage picture(64,64,QImage::Format_RGB32);picture.fill(QColor("#e04466"));const auto path=dir.filePath("pink.png");QVERIFY(picture.save(path));art.setSource(QUrl::fromLocalFile(path));QTRY_VERIFY(art.ready());
     const auto color=art.seedColor();QVERIFY(color.red()>200 && color.blue()<150);
-    picture.fill(Qt::gray);const auto gray=dir.filePath("gray.png");QVERIFY(picture.save(gray));art.setSource(QUrl::fromLocalFile(gray));QCOMPARE(art.seedColor().alpha(),0);
+    picture.fill(Qt::gray);const auto gray=dir.filePath("gray.png");QVERIFY(picture.save(gray));art.setSource(QUrl::fromLocalFile(gray));QTRY_VERIFY(art.ready());QCOMPARE(art.seedColor().alpha(),0);
     art.setSource({});QCOMPARE(art.seedColor().alpha(),0);
   }
   void animatedCover_data() {
@@ -146,9 +149,44 @@ private slots:
     QImage large(1600,800,QImage::Format_RGB32);large.fill(Qt::blue);motion.publishVideo(QVideoFrame(large));
     QCOMPARE(motion.frame().size(),QSize(800,400));
   }
+  // A list row is reused for another song while its cover is still being
+  // decoded. The decode that is no longer wanted must not land on the row.
+  void supersededLocalDecodeIsDiscarded() {
+    QTemporaryDir dir;
+    // The cover being abandoned is large and the one replacing it is small, so
+    // the stale decode is still running when the wanted one has finished. That
+    // is the ordering a reused list row actually hits.
+    QImage slow(4000,4000,QImage::Format_RGB32);slow.fill(Qt::red);
+    const auto slowPath=dir.filePath("slow.png");QVERIFY(slow.save(slowPath));
+    QImage quick(64,64,QImage::Format_RGB32);quick.fill(Qt::green);
+    const auto quickPath=dir.filePath("quick.png");QVERIFY(quick.save(quickPath));
+    RoundedArt art;art.setPixels(512);
+    // Both sources are set in the same turn of the event loop, so the first
+    // decode is still in flight when the second replaces it.
+    art.setSource(QUrl::fromLocalFile(slowPath));
+    art.setSource(QUrl::fromLocalFile(quickPath));
+    QTRY_VERIFY(art.ready());
+    QCOMPARE(art.m_image.pixelColor(10,10),QColor(Qt::green));
+    // Give the superseded decode every chance to arrive late and win.
+    QTest::qWait(600);
+    QCOMPARE(art.m_image.pixelColor(10,10),QColor(Qt::green));
+  }
+  // Clearing the source while a decode is running leaves nothing behind.
+  void clearedSourceDropsPendingLocalDecode() {
+    QTemporaryDir dir;QImage picture(512,512,QImage::Format_RGB32);picture.fill(Qt::red);
+    const auto path=dir.filePath("cover.png");QVERIFY(picture.save(path));
+    RoundedArt art;art.setPixels(512);
+    art.setSource(QUrl::fromLocalFile(path));
+    art.setSource({});
+    QTest::qWait(200);
+    QVERIFY(!art.ready());
+    QVERIFY(art.m_image.isNull());
+  }
   void localCoverIsBoundedAndShared() {
     QTemporaryDir dir;QImage picture(512,512,QImage::Format_RGB32);picture.fill(Qt::red);const auto path=dir.filePath("cover.jpg");QVERIFY(picture.save(path));
-    RoundedArt a,b;a.setSource(QUrl::fromLocalFile(path));b.setSource(QUrl::fromLocalFile(path));QVERIFY(a.ready());QCOMPARE(a.m_image.constBits(),b.m_image.constBits());QVERIFY(a.m_image.width()<=360);
+    RoundedArt a,b;a.setSource(QUrl::fromLocalFile(path));QTRY_VERIFY(a.ready());
+    // The second surface answers from the shared cache the first filled.
+    b.setSource(QUrl::fromLocalFile(path));QTRY_VERIFY(b.ready());QCOMPARE(a.m_image.constBits(),b.m_image.constBits());QVERIFY(a.m_image.width()<=360);
   }
   void concurrentViewsShareDecodedPixels() {
     QTemporaryDir profile;QVERIFY(profile.isValid());
