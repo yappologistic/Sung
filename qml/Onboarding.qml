@@ -12,6 +12,9 @@ MDialog {
     readonly property bool lastStep: step===steps-1
     property string folderError: ""
     property bool folderAdded: false
+    // Browse hides this dialog while the folder picker is up. Restoring it
+    // must not send the user back to step one.
+    property bool preserveStep: false
     signal browseRequested()
     signal serverRequested()
     title: ["Welcome to Sung","Add your music","Where should Sung open?"][step]
@@ -35,7 +38,7 @@ MDialog {
         folderAdded=!folderError;
         if(folderError)folderPath.forceActiveFocus();
     }
-    onOpened: step=0
+    onOpened: {if(!preserveStep)step=0;preserveStep=false}
     contentItem: ColumnLayout {
         spacing: 16
         SungText {

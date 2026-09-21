@@ -9,6 +9,7 @@
 #include <QProcess>
 #include <QQmlContext>
 #include <QQmlExpression>
+#include <QMetaObject>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSettings>
@@ -815,6 +816,18 @@ void runOnboardingTests(Backend *b, QQuickWindow *w) {
   if (auto browse = shownItem(w->contentItem(), "onboardingBrowse"))
     c.check(browse->property("outlined").toBool(),
             "browsing is offered at the medium emphasis beside Add folder");
+  c.click("onboardingBrowse");
+  auto dialogs = w->property("fileDialogs").value<QObject *>();
+  auto folderPicker = dialogs ? dialogs->property("folderPicker").value<QObject *>() : nullptr;
+  c.check(folderPicker && folderPicker->property("visible").toBool(),
+          "onboarding Browse opens the folder picker");
+  c.check(!dialog->property("visible").toBool(),
+          "and yields the setup dialog while the picker is open");
+  if (folderPicker)
+    QMetaObject::invokeMethod(folderPicker, "reject");
+  QTest::qWait(300);
+  c.check(dialog->property("visible").toBool() && dialog->property("step").toInt() == 1,
+          "canceling Browse returns to the music step");
   auto path = itemNamed(w->contentItem(), "onboardingFolderPath");
   c.check(path, "the folder field is present");
   if (path)

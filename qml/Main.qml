@@ -40,13 +40,26 @@ ApplicationWindow {
     Binding { target: motionArtwork; property: "source"; value: window.uiActive && app.motion && app.animatedArtwork ? (app.currentMotionArt || "") : "" }
     Binding { target: motionArtwork; property: "running"; value: window.uiActive && app.playing && app.motion && app.animatedArtwork }
     property var fileDialogs: null
+    property bool folderPickerPending: false
     function openFileDialog(kind) {
         if(!fileDialogs) {
             const component=Qt.createComponent("FileDialogs.qml");
+            if(component.status===Component.Error){console.error(component.errorString());app.toast("Could not open the file picker.");if(kind==="folder")window.returnToFolderEntry();return;}
             fileDialogs=component.createObject(window,{ownerWindow:window});
-            if(!fileDialogs){console.error(component.errorString());return;}
+            if(!fileDialogs){console.error(component.errorString());app.toast("Could not open the file picker.");if(kind==="folder")window.returnToFolderEntry();return;}
         }
         fileDialogs.open(kind);
+        if(kind!=="folder")return;
+        folderPickerPending=true;
+        Qt.callLater(function(){
+            if(!window.folderPickerPending)return;
+            if(fileDialogs && fileDialogs.folderPicker.visible){window.folderPickerPending=false;return;}
+            window.folderPickerPending=false;
+            const message="Could not open the folder picker. Enter the path instead.";
+            if(window.folderPickForOnboarding)onboarding.folderError=message;
+            else musicFolderEntry.pathError=message;
+            window.returnToFolderEntry();
+        });
     }
     property bool compactMode: false
     property bool immersive: false
@@ -1664,17 +1677,23 @@ ApplicationWindow {
         }
     }
     property bool folderPickForOnboarding: false
+    function restoreOnboarding() {
+        onboarding.preserveStep=true;
+        onboarding.open();
+    }
     function finishFolderPick(url) {
-        if(folderPickForOnboarding){folderPickForOnboarding=false;onboarding.setFolderPath(url.toString());return;}
+        folderPickerPending=false;
+        if(folderPickForOnboarding){folderPickForOnboarding=false;onboarding.setFolderPath(url.toString());restoreOnboarding();return;}
         musicFolderPath.text=url.toString();musicFolderEntry.pathError="";musicFolderEntry.open();
     }
     function returnToFolderEntry() {
-        if(folderPickForOnboarding){folderPickForOnboarding=false;return;}
+        folderPickerPending=false;
+        if(folderPickForOnboarding){folderPickForOnboarding=false;restoreOnboarding();return;}
         musicFolderEntry.open();
     }
     Onboarding {
         id: onboarding; objectName: "onboarding"
-        onBrowseRequested: {window.folderPickForOnboarding=true;window.openFileDialog("folder");}
+        onBrowseRequested: {window.folderPickForOnboarding=true;onboarding.preserveStep=true;onboarding.close();window.openFileDialog("folder");}
         onServerRequested: serverConnection.open()
     }
     MDialog {
