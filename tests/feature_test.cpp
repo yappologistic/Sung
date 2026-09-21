@@ -3549,14 +3549,14 @@ void runMaterialSchemeTests(Backend *b, QQuickWindow *w) {
   w->resize(520, 640);
   QTest::qWait(800);
   auto bar = shownItem(w->contentItem(), "navigationBar");
-  c.check(bar && bar->property("short").toBool(),
+  c.check(bar && bar->property("shortBar").toBool(),
           "a window with little height takes Material's short bar");
   c.check(bar && qAbs(bar->height() - 64) < 0.5,
           QString("which is 64dp rather than 80 (%1)").arg(bar ? bar->height() : 0, 0, 'f', 0));
   c.shot("05-short-navigation-bar");
   w->resize(520, 900);
   QTest::qWait(800);
-  c.check(bar && !bar->property("short").toBool(), "and the full bar comes back with the room");
+  c.check(bar && !bar->property("shortBar").toBool(), "and the full bar comes back with the room");
   c.shot("06-navigation-bar");
 
   // --- The expanded rail takes the width Material allows it ---
