@@ -37,6 +37,7 @@
 !/assets/icons/*.svg
 /licenses/*
 !/licenses/MaterialSymbols-LICENSE.txt
+!/licenses/ytdlp-ejs-LICENSE.txt
 
 # Private state, credentials, build products and editor/assistant files.
 **/__pycache__/

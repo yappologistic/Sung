@@ -137,6 +137,46 @@ class CatalogTests(unittest.TestCase):
                 catalog.run({'op':'resolve','id':'abcdefghijk','quality':quality})
                 self.assertEqual(mods['yt_dlp'].YoutubeDL.call_args[0][0]['format'],expected)
 
+    def test_js_runtimes_prefers_sibling_ejs(self):
+        from unittest.mock import patch
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            ejs=pathlib.Path(directory)/'ejs'; ejs.write_text(''); ejs.chmod(0o755)
+            with patch.object(catalog,'__file__',str(pathlib.Path(directory)/'catalog.py')):
+                with patch.dict(os.environ,{},clear=False):
+                    os.environ.pop('SUNG_EJS',None)
+                    self.assertEqual(catalog.js_runtimes(),{'quickjs':{'path':str(ejs)}})
+
+    def test_js_runtimes_env_overrides_sibling(self):
+        from unittest.mock import patch
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            sibling=pathlib.Path(directory)/'ejs'; sibling.write_text(''); sibling.chmod(0o755)
+            other=pathlib.Path(directory)/'other'; other.write_text(''); other.chmod(0o755)
+            with patch.object(catalog,'__file__',str(pathlib.Path(directory)/'catalog.py')):
+                with patch.dict(os.environ,{'SUNG_EJS':str(other)}):
+                    self.assertEqual(catalog.js_runtimes(),{'quickjs':{'path':str(other)}})
+
+    def test_js_runtimes_falls_back_to_node(self):
+        from unittest.mock import patch
+        import os, tempfile
+        with tempfile.TemporaryDirectory() as directory:
+            skipped=pathlib.Path(directory)/'ejs'; skipped.write_text(''); skipped.chmod(0o644)
+            with patch.object(catalog,'__file__',str(pathlib.Path(directory)/'catalog.py')):
+                with patch.dict(os.environ,{},clear=False):
+                    os.environ.pop('SUNG_EJS',None)
+                    self.assertEqual(catalog.js_runtimes(),{'node':{}})
+
+    def test_js_runtimes_reaches_ytdlp(self):
+        from unittest.mock import patch, MagicMock
+        downloader=MagicMock();downloader.__enter__.return_value=downloader
+        downloader.extract_info.return_value={'url':'https://example.invalid/a','duration':1}
+        expected={'quickjs':{'path':'/tmp/ejs'}}
+        with patch.object(catalog,'js_runtimes',return_value=expected):
+            with patch.dict('sys.modules',{'yt_dlp':MagicMock(YoutubeDL=MagicMock(return_value=downloader))}) as mods:
+                catalog.run({'op':'resolve','id':'abcdefghijk'})
+                self.assertEqual(mods['yt_dlp'].YoutubeDL.call_args[0][0]['js_runtimes'],expected)
+
     def test_image_size(self):
         self.assertEqual(catalog.artwork({'thumbnails':[{'url':'https://yt3.googleusercontent.com/a=w60-h60-l90-rj'}]}),'https://yt3.googleusercontent.com/a=w544-h544-l90-rj')
 

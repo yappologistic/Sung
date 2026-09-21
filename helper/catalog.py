@@ -6,6 +6,20 @@ import sys
 from urllib.parse import urlparse, parse_qs
 
 
+def js_runtimes():
+    import os
+    from pathlib import Path
+    env = os.environ.get('SUNG_EJS', '')
+    candidates = []
+    if env:
+        candidates.append(Path(env))
+    candidates.append(Path(__file__).resolve().parent / 'ejs')
+    for path in candidates:
+        if path.is_file() and os.access(path, os.X_OK):
+            return {'quickjs': {'path': str(path)}}
+    return {'node': {}}
+
+
 def artwork(item):
     thumbs = item.get('thumbnails') or []
     if not thumbs:
@@ -368,7 +382,7 @@ def run(req):
         opts = {'quiet': True, 'noprogress': True, 'no_warnings': True, 'noplaylist': True,
                 'format': audio_format(req.get('quality', 'standard'), req.get('fallback')), 'socket_timeout': 18,
                 'retries': 2, 'extractor_retries': 2, 'cachedir': False,
-                'js_runtimes': {'node': {}}, 'skip_download': True}
+                'js_runtimes': js_runtimes(), 'skip_download': True}
         if req.get('cookies'):
             opts['cookiefile'] = req['cookies']
         if op == 'buffer':

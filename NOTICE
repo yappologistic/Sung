@@ -15,5 +15,7 @@ Runtime dependencies carry their own licenses. Qt is dynamically linked;
 Qt licensing: https://www.qt.io/licensing/open-source-lgpl-obligations
 The installed Qt Multimedia and FFmpeg packages determine the media backend.
 Catalog requests use ytmusicapi (MIT); audio resolution uses yt-dlp (Unlicense).
+YouTube n/sig solving can use a bundled ytdlp-ejs binary (MIT; https://github.com/ahaoboy/ytdlp-ejs)
+that embeds SWC (Apache-2.0) and QuickJS-ng via rquickjs (MIT). See licenses/ytdlp-ejs-LICENSE.txt.
 No fonts are bundled. Sung uses an installed Google Sans Flex or Noto Sans font.
 Sung is independent of Google and YouTube.

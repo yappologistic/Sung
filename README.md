@@ -44,7 +44,7 @@ Native rendering and bounded artwork caches keep Sung lightweight. Animated cove
 Install the build and runtime dependencies:
 
 ```bash
-sudo pacman -S --needed git base-devel cmake ninja python nodejs ffmpeg qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland qt6-imageformats
+sudo pacman -S --needed git base-devel cmake ninja python rust ffmpeg qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland qt6-imageformats
 ```
 
 Download and install Sung:
@@ -65,7 +65,7 @@ Installation is per-user in `~/.local`; do not run the install script with `sudo
 
 ### Other Linux distributions
 
-Install the equivalent development packages for **Qt 6.8+** (Core, Gui, Quick, Qml, QuickControls2, Multimedia, Network, DBus, Svg and Wayland), a C++20 compiler, CMake 3.24+, Ninja, Python 3 with `venv`/`pip`, Node.js 20+ and FFmpeg. Install the Qt image-format plugins for WebP artwork. Then follow the clone and install commands above.
+Install the equivalent development packages for **Qt 6.8+** (Core, Gui, Quick, Qml, QuickControls2, Multimedia, Network, DBus, Svg and Wayland), a C++20 compiler, CMake 3.24+, Ninja, Python 3 with `venv`/`pip`, Rust (for the bundled YouTube JS solver) and FFmpeg. Install the Qt image-format plugins for WebP artwork. Then follow the clone and install commands above. Node.js 22+ is an optional fallback if the solver binary is not built.
 
 Sung uses Google Sans Flex when installed and otherwise falls back to a system font. Noctalia is optional.
 
