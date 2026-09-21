@@ -1827,6 +1827,62 @@ void runInteractionRefinementTests(Backend *b,QQuickWindow *w){
   settings->setProperty("searchQuery","current artwork");QTest::qWait(100);check(findItem(w->contentItem(),"settingsNoResults")->isVisible(),"unavailable current artwork produces no empty section");
   settings->setProperty("searchQuery","sleep");QTest::qWait(100);auto clearSearch=findItem(search,"clearSearchButton");check(clearSearch&&clearSearch->isVisible(),"settings search exposes clear action");if(clearSearch)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,clearSearch->mapToScene(QPointF(24,24)).toPoint());QTest::qWait(150);check(settings->property("searchQuery").toString().isEmpty()&&search->hasActiveFocus(),"clear updates filter and restores text focus");
   auto darkChoice=findItem(w->contentItem(),"themeDark");check(darkChoice,"theme segmented choice exists");if(darkChoice){darkChoice->forceActiveFocus(Qt::TabFocusReason);QTest::keyClick(w,Qt::Key_Left);QTest::qWait(200);check(b->theme()=="light","arrow key selects adjacent theme");QTest::keyClick(w,Qt::Key_Right);QTest::qWait(200);check(b->theme()=="dark","arrow key returns to dark theme");}
+  // --- The wheel scrolls like a browser, not by Qt's line steps ---------------
+  // Qt moves a Flickable a few lines per notch and jumps there in one frame,
+  // which is what issue #2 is about. MSmoothWheel animates a notch into a
+  // glide and hands a touchpad's pixels straight to the view.
+  auto wheelOn=[&](QQuickItem *item,QPoint pixel,QPoint angle,Qt::KeyboardModifiers mods){
+    const auto p=item->mapToScene(QPointF(item->width()/2,item->height()/2));
+    QWheelEvent e(p,w->mapToGlobal(p.toPoint()),pixel,angle,Qt::NoButton,mods,Qt::NoScrollPhase,false);
+    QCoreApplication::sendEvent(w,&e);
+  };
+  // A ScrollView's contentItem is the Flickable the wheel has to drive.
+  auto settingsScroll=findItem(w->contentItem(),"settingsScroll");
+  auto scroller=settingsScroll?qobject_cast<QQuickItem*>(settingsScroll->property("contentItem").value<QObject*>()):nullptr;
+  // A window with room shows every setting of a category at once, so the list
+  // is given less height than it needs before the wheel is asked to move it.
+  w->resize(1280,520);QTest::qWait(400);
+  const auto reach=scroller?scroller->property("contentHeight").toReal()-scroller->height():0.0;
+  check(scroller&&reach>=300,"settings is long enough to scroll");
+  // The handler catches a wheel over the area it covers, so a handler with no
+  // area catches nothing and the view quietly falls back to Qt's line steps.
+  // Sizing it by anchors does exactly that, because flick is still null while
+  // the component is built.
+  auto wheelItem=scroller?findItem(scroller,"smoothWheel"):nullptr;
+  check(wheelItem&&wheelItem->width()>0&&qAbs(wheelItem->height()-scroller->height())<0.5,
+        qPrintable(QString("the wheel handler covers the viewport (%1x%2)")
+                   .arg(wheelItem?wheelItem->width():-1,0,'f',0).arg(wheelItem?wheelItem->height():-1,0,'f',0)));
+  if(scroller&&reach>=300){
+    const auto notch=260.0;  // MSmoothWheel's travel per notch
+    scroller->setProperty("contentY",0);QTest::qWait(120);
+    wheelOn(scroller,QPoint(),QPoint(0,-120),Qt::NoModifier);
+    QTest::qWait(60);const auto early=scroller->property("contentY").toReal();
+    QTest::qWait(90);const auto later=scroller->property("contentY").toReal();
+    check(early>0&&later>early&&later<notch,
+          qPrintable(QString("a wheel notch travels over several frames (%1 then %2)").arg(early,0,'f',0).arg(later,0,'f',0)));
+    check(until([&]{return qAbs(scroller->property("contentY").toReal()-notch)<2;}),
+          "and settles a browser-sized notch further down, not three lines");
+    shot("settings-wheel-scrolled");
+    // A touchpad already sends the pixels the fingers moved, so those are put
+    // on the view as they arrive rather than being animated a second time.
+    const auto held=scroller->property("contentY").toReal();
+    wheelOn(scroller,QPoint(0,-48),QPoint(0,-120),Qt::NoModifier);
+    QTest::qWait(30);
+    check(qAbs(scroller->property("contentY").toReal()-(held+48))<1,
+          "touchpad pixels move the view one to one, with no glide of their own");
+    // Reduced motion keeps the travel and drops the animation.
+    b->setMotion(false);QTest::qWait(60);
+    scroller->setProperty("contentY",0);QTest::qWait(80);
+    wheelOn(scroller,QPoint(),QPoint(0,-120),Qt::NoModifier);QTest::qWait(60);
+    check(qAbs(scroller->property("contentY").toReal()-notch)<2,"reduced motion lands the notch at once");
+    b->setMotion(true);QTest::qWait(60);
+    // The ends hold: a wheel at the top has nowhere to go.
+    scroller->setProperty("contentY",0);QTest::qWait(80);
+    wheelOn(scroller,QPoint(),QPoint(0,120),Qt::NoModifier);QTest::qWait(400);
+    check(scroller->property("contentY").toReal()<=0.5,"a wheel at the top does not pull past it");
+    scroller->setProperty("contentY",0);QTest::qWait(80);
+  }
+  w->resize(1280,850);QTest::qWait(300);
   w->resize(780,580);QTest::qWait(300);auto selector=findItem(w->contentItem(),"settingsCategoryPicker");check(selector&&selector->isVisible(),"narrow settings uses category selector");shot("settings-narrow");
   b->setTheme("light");shot("settings-light");QMetaObject::invokeMethod(settings,"close");QTest::qWait(250);b->setTheme("dark");w->resize(1280,850);
   QQmlComponent glyphComponent(qmlEngine(w),QUrl("qrc:/qml/MButton.qml"));
