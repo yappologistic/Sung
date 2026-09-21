@@ -1,0 +1,49 @@
+Source: sung
+Section: sound
+Priority: optional
+Maintainer: Mohammadreza Hajianpour <hajianpour.mr@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+               cmake (>= 3.24),
+               ninja-build,
+               qt6-base-dev,
+               qt6-declarative-dev,
+               qt6-declarative-dev-tools,
+               qt6-multimedia-dev,
+               qt6-svg-dev,
+               python3-venv,
+               python3-pip,
+               ca-certificates
+Standards-Version: 4.7.0
+Homepage: https://github.com/yappologistic/Sung
+Rules-Requires-Root: no
+
+Package: sung
+Architecture: amd64
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         python3,
+         ffmpeg,
+         nodejs,
+         qt6-qpa-plugins,
+         qt6-image-formats-plugins,
+         qt6-wayland,
+         qml6-module-qtcore,
+         qml6-module-qtqml,
+         qml6-module-qtqml-workerscript,
+         qml6-module-qtquick,
+         qml6-module-qtquick-controls,
+         qml6-module-qtquick-dialogs,
+         qml6-module-qtquick-layouts,
+         qml6-module-qtquick-shapes,
+         qml6-module-qtquick-templates,
+         qml6-module-qtquick-window
+Description: native Material 3 player for YouTube Music, local files and music servers
+ Sung plays YouTube Music, imported audio files and a Navidrome, Subsonic or
+ Jellyfin server through one Qt Quick interface, with synchronized lyrics, an
+ immersive player, animated artwork and MPRIS desktop integration.
+ .
+ The QML modules this package depends on are listed by hand: they are loaded at
+ runtime by name and no automatic dependency scanner can see them.
+ .
+ An isolated Python runtime for the YouTube resolver is bundled under
+ /usr/lib/sung/runtime, because ytmusicapi is not packaged in Debian.

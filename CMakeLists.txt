@@ -18,6 +18,11 @@ target_link_libraries(sung PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Q
 target_compile_options(sung PRIVATE -Wall -Wextra -Wpedantic "$<$<CONFIG:Release>:-Oz;-ffunction-sections;-fdata-sections>")
 target_link_options(sung PRIVATE "$<$<CONFIG:Release>:-Oz;-Wl,--gc-sections;-Wl,-z,pack-relative-relocs>")
 set_target_properties(sung PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
+# Wayland takes the window's app id from the desktop entry name the application
+# reports, so a package that installs the entry under a different name has to
+# say so here or the window will not match its launcher. Only Flatpak does.
+set(SUNG_DESKTOP_ID "sung" CACHE STRING "Base name of the installed desktop entry")
+target_compile_definitions(sung PRIVATE SUNG_DESKTOP_ID="${SUNG_DESKTOP_ID}")
 # This small, first-use-only component can compile on demand. Keep the player
 # and animation components precompiled, without embedding unused picker bytecode.
 set_source_files_properties(qml/FileDialogs.qml PROPERTIES QT_QML_SKIP_CACHEGEN TRUE)

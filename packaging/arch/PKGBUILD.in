@@ -1,0 +1,33 @@
+# Maintainer: Mohammadreza Hajianpour <hajianpour.mr@gmail.com>
+pkgname=sung
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='YouTube Music, your music files, and your music server, native on Linux'
+arch=('x86_64')
+url='https://github.com/yappologistic/Sung'
+license=('MIT')
+depends=('qt6-base' 'qt6-declarative' 'qt6-multimedia' 'qt6-svg' 'qt6-wayland'
+         'qt6-imageformats' 'python' 'ffmpeg' 'nodejs')
+makedepends=('cmake' 'ninja' 'python-pip')
+# CMake drives its own interprocedural optimisation and strips the binary in
+# Release; !debug keeps makepkg from splitting a debug package off a target
+# that carries no debug info.
+options=('!lto' '!debug')
+source=("sung-$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "sung-$pkgver"
+  cmake -S . -B build -G Ninja \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DBUILD_TESTING=OFF \
+    -DSUNG_DIAGNOSTICS=OFF
+  cmake --build build
+}
+
+package() {
+  cd "sung-$pkgver"
+  DESTDIR="$pkgdir" cmake --install build
+  packaging/common/venv.sh "$pkgdir" /usr
+}

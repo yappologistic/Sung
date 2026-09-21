@@ -12,6 +12,8 @@
 !/tests/
 !/assets/
 !/licenses/
+!/packaging/
+!/.github/
 
 /src/*
 !/src/*.cpp
@@ -32,11 +34,28 @@
 !/assets/readme-banner.png
 !/assets/sung.png
 !/assets/sung.desktop
+!/assets/io.github.yappologistic.Sung.metainfo.xml
 !/assets/icons/
 /assets/icons/*
 !/assets/icons/*.svg
 /licenses/*
 !/licenses/MaterialSymbols-LICENSE.txt
+/packaging/*
+!/packaging/*/
+/packaging/*/*
+!/packaging/*/*.sh
+!/packaging/*/*.in
+!/packaging/*/*.yml
+!/packaging/debian/control
+!/packaging/debian/copyright
+!/packaging/debian/rules
+!/packaging/debian/source/
+/packaging/debian/source/*
+!/packaging/debian/source/format
+/.github/*
+!/.github/workflows/
+/.github/workflows/*
+!/.github/workflows/*.yml
 
 # Private state, credentials, build products and editor/assistant files.
 **/__pycache__/

@@ -1,0 +1,5 @@
+sung (@VERSION@) unstable; urgency=medium
+
+  * Package built from the upstream tree by continuous integration.
+
+ -- Mohammadreza Hajianpour <hajianpour.mr@gmail.com>  @DATE@

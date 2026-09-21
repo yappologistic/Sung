@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.yappologistic.Sung</id>
+  <metadata_license>MIT</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Sung</name>
+  <summary>YouTube Music, your music files, and your music server</summary>
+  <developer id="io.github.yappologistic">
+    <name>Mohammadreza Hajianpour</name>
+  </developer>
+
+  <description>
+    <p>
+      A minimal Material 3 music player built with C++ and Qt Quick, native on
+      Linux and Wayland. Sung plays YouTube Music, your own audio files and
+      your music server from one interface.
+    </p>
+    <ul>
+      <li>YouTube Music search and playback without an embedded browser</li>
+      <li>Navidrome, Subsonic and Jellyfin browsing, playback, playlists, ratings and synchronized lyrics</li>
+      <li>Local FLAC, MP3 and other audio files, browsed by album, artist or folder</li>
+      <li>Synchronized lyrics with an immersive view, timing adjustments and LRC import</li>
+      <li>Animated album artwork, artwork-derived colour and an ambient cover backdrop</li>
+      <li>Media keys through MPRIS, light and dark themes, and a pickable Material accent colour</li>
+    </ul>
+    <p>
+      Sung is an independent project and is not affiliated with Google or
+      YouTube.
+    </p>
+  </description>
+
+  <launchable type="desktop-id">io.github.yappologistic.Sung.desktop</launchable>
+  <url type="homepage">https://github.com/yappologistic/Sung</url>
+  <url type="bugtracker">https://github.com/yappologistic/Sung/issues</url>
+
+  <screenshots>
+    <screenshot type="default">
+      <caption>Music collections and synchronized lyrics</caption>
+      <image>https://raw.githubusercontent.com/yappologistic/Sung/main/assets/readme-banner.png</image>
+    </screenshot>
+  </screenshots>
+
+  <categories>
+    <category>AudioVideo</category>
+    <category>Audio</category>
+    <category>Player</category>
+  </categories>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+  </supports>
+
+  <recommends>
+    <display_length compare="ge">768</display_length>
+  </recommends>
+
+  <content_rating type="oars-1.1">
+    <content_attribute id="social-audio">intense</content_attribute>
+  </content_rating>
+
+  <releases>
+    <release version="0.12.0" date="2026-09-19"/>
+  </releases>
+</component>

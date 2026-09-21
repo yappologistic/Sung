@@ -1,0 +1,121 @@
+name: packages
+
+# Packages are built on every trigger so the pipeline is exercised by ordinary
+# pull requests; only a v* tag publishes a release.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  # Sung's helper resolves YouTube through yt-dlp, which pip fetches while the
+  # package is built. Nothing here needs a secret.
+  DOCKER_RUN: docker run --rm -v ${{ github.workspace }}:/src -w /src
+
+jobs:
+  build:
+    name: build (${{ matrix.distro }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Debian trixie is the oldest Debian with the Qt 6.8 CMakeLists.txt
+          # requires; bookworm ships 6.4.
+          - distro: debian
+            image: debian:trixie
+            shell: bash
+          - distro: fedora
+            image: fedora:42
+            shell: bash
+          - distro: arch
+            image: archlinux:base-devel
+            shell: bash
+          # The glibc Void image ships no bash, so its scripts are POSIX sh.
+          - distro: void
+            image: ghcr.io/void-linux/void-linux:latest-full-x86_64
+            shell: sh
+          # Not a distribution package: bubblewrap has to build its sandbox
+          # inside the container, which is what the extra privilege is for.
+          - distro: flatpak
+            image: fedora:42
+            shell: bash
+            docker_args: --privileged
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the version in CMakeLists.txt
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          declared="$(./scripts/version.sh)"
+          tagged="${GITHUB_REF_NAME#v}"
+          if [ "$declared" != "$tagged" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match project version $declared"
+            exit 1
+          fi
+
+      # Built on the host because the distribution images are minimal and
+      # several ship no git at all.
+      - name: Create the source tarball
+        id: tarball
+        run: |
+          version="$(./scripts/version.sh)"
+          ./packaging/common/tarball.sh dist
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build the ${{ matrix.distro }} package
+        run: |
+          $DOCKER_RUN ${{ matrix.docker_args }} ${{ matrix.image }} ${{ matrix.shell }} \
+            packaging/${{ matrix.distro }}/build.sh \
+            /src/dist/sung-${{ steps.tarball.outputs.version }}.tar.gz \
+            /src/dist/${{ matrix.distro }}
+
+      # A pristine image: none of the build dependencies are installed, so the
+      # package's own declared dependencies are what have to pull Qt, the QML
+      # modules, ffmpeg and node in. A missing one fails here.
+      - name: Install and smoke-test the package
+        run: |
+          $DOCKER_RUN ${{ matrix.docker_args }} ${{ matrix.image }} ${{ matrix.shell }} \
+            packaging/${{ matrix.distro }}/verify.sh \
+            /src/dist/${{ matrix.distro }} \
+            ${{ steps.tarball.outputs.version }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sung-${{ matrix.distro }}
+          # xbps-rindex leaves repository metadata beside the Void package;
+          # that is build scaffolding, not something to publish.
+          path: |
+            dist/${{ matrix.distro }}/*
+            !dist/${{ matrix.distro }}/*-repodata
+          if-no-files-found: error
+
+  release:
+    name: release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          pattern: sung-*
+          merge-multiple: true
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ls -l artifacts
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Sung $GITHUB_REF_NAME" \
+            --generate-notes \
+            artifacts/*

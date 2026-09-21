@@ -95,7 +95,7 @@ int main(int argc, char **argv) {
   app.setApplicationDisplayName("Sung");
   app.setOrganizationName("Sung");
   app.setApplicationVersion("0.12.0");
-  app.setDesktopFileName("sung");
+  app.setDesktopFileName(SUNG_DESKTOP_ID);
 #ifdef SUNG_DIAGNOSTICS
   if(app.arguments().contains("--immersive-polish-test"))app.setDesktopFileName("sung-immersive-test");
 #endif

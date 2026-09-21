@@ -1,0 +1,72 @@
+# Flatpak manifest. Unlike the four native packages, this one bundles no Python
+# interpreter: the runtime already ships Python 3.13, so only the modules Sung
+# imports are installed, onto PYTHONPATH. ffmpeg and ffprobe come from the
+# runtime too. Node does not, and yt-dlp needs one to solve YouTube's player
+# challenges, so it is the single bundled binary.
+id: io.github.yappologistic.Sung
+runtime: org.kde.Platform
+runtime-version: '6.11'
+sdk: org.kde.Sdk
+command: sung
+
+finish-args:
+  - --socket=wayland
+  - --socket=fallback-x11
+  - --share=ipc
+  - --device=dri
+  - --socket=pulseaudio
+  # YouTube, Navidrome/Subsonic and Jellyfin servers, and online artwork.
+  - --share=network
+  # Sung imports music by absolute path, including folders that are mounted
+  # network shares. A narrower grant would break the documented workflow.
+  - --filesystem=host
+  # Media keys travel over MPRIS; playback notifications are optional but the
+  # name has to be reachable when they are switched on.
+  - --own-name=org.mpris.MediaPlayer2.sung
+  - --talk-name=org.freedesktop.Notifications
+  # yt_dlp and ytmusicapi are installed outside the runtime's site-packages.
+  - --env=PYTHONPATH=/app/lib/sung/python
+
+modules:
+  - name: node
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 bin/node /app/bin/node
+    cleanup:
+      - /include
+      - /share
+    sources:
+      - type: archive
+        url: https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-x64.tar.xz
+        sha256: fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
+        strip-components: 1
+
+  - python3-deps.yml
+
+  - name: sung
+    buildsystem: cmake-ninja
+    config-opts:
+      - -DCMAKE_BUILD_TYPE=Release
+      - -DBUILD_TESTING=OFF
+      - -DSUNG_DIAGNOSTICS=OFF
+      # Flatpak exports the desktop entry under the application id, and Qt
+      # takes the Wayland app id from the entry name the binary reports, so
+      # the two have to agree or the window will not match its launcher.
+      - -DSUNG_DESKTOP_ID=io.github.yappologistic.Sung
+    sources:
+      # The build runs against an extracted release tarball, so this is the
+      # same tracked-files-only tree the other four packages are built from.
+      - type: dir
+        path: ../..
+    post-install:
+      # Flatpak requires the desktop entry, icon and metainfo to be named for
+      # the application id. StartupWMClass already carries the unprefixed name
+      # the binary reports, so window-to-icon matching still resolves.
+      - mv /app/share/applications/sung.desktop
+          /app/share/applications/io.github.yappologistic.Sung.desktop
+      - mv /app/share/icons/hicolor/512x512/apps/sung.png
+          /app/share/icons/hicolor/512x512/apps/io.github.yappologistic.Sung.png
+      - desktop-file-edit --set-icon=io.github.yappologistic.Sung
+          /app/share/applications/io.github.yappologistic.Sung.desktop
+      - install -Dm644 assets/io.github.yappologistic.Sung.metainfo.xml
+          /app/share/metainfo/io.github.yappologistic.Sung.metainfo.xml

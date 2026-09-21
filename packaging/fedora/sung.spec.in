@@ -1,0 +1,74 @@
+# The binary is stripped by CMake in Release and carries no debug info, so
+# there is nothing for a debuginfo package to hold. Without one, the build-id
+# links rpm would otherwise generate belong to no package and fail the build.
+%global debug_package %{nil}
+%global _build_id_links none
+
+# /usr/lib/sung/runtime is a relocated virtualenv. rpm must not synthesise
+# dependencies or provides from its wheels' shared objects, byte-compile it
+# into the system interpreter's cache, or rewrite the shebangs venv.sh has
+# already pointed at the installed path.
+%global __requires_exclude_from ^%{_prefix}/lib/sung/runtime/.*$
+%global __provides_exclude_from ^%{_prefix}/lib/sung/runtime/.*$
+%global __brp_python_bytecompile %{nil}
+%global __brp_mangle_shebangs %{nil}
+
+Name:           sung
+Version:        @VERSION@
+Release:        1%{?dist}
+Summary:        YouTube Music, your music files, and your music server, native on Linux
+License:        MIT
+URL:            https://github.com/yappologistic/Sung
+Source0:        sung-%{version}.tar.gz
+ExclusiveArch:  x86_64
+
+BuildRequires:  cmake >= 3.24
+BuildRequires:  ninja-build
+BuildRequires:  gcc-c++
+BuildRequires:  qt6-qtbase-devel
+BuildRequires:  qt6-qtdeclarative-devel
+BuildRequires:  qt6-qtmultimedia-devel
+BuildRequires:  qt6-qtsvg-devel
+BuildRequires:  python3-pip
+
+Requires:       qt6-qtbase
+Requires:       qt6-qtdeclarative
+Requires:       qt6-qtmultimedia
+Requires:       qt6-qtsvg
+Requires:       qt6-qtwayland
+Requires:       qt6-qtimageformats
+Requires:       python3
+# Provides the ffmpeg and ffprobe the catalog helper shells out to.
+Requires:       ffmpeg-free
+# yt-dlp resolves YouTube's player challenges through a JavaScript runtime.
+Requires:       nodejs
+
+%description
+Sung plays YouTube Music, imported audio files and a Navidrome, Subsonic or
+Jellyfin server through one Qt Quick interface, with synchronized lyrics, an
+immersive player, animated artwork and MPRIS desktop integration.
+
+An isolated Python runtime for the YouTube resolver is bundled under
+%{_prefix}/lib/sung/runtime, because ytmusicapi is not packaged in Fedora.
+
+%prep
+%autosetup -n sung-%{version}
+
+%build
+%cmake -GNinja -DBUILD_TESTING=OFF -DSUNG_DIAGNOSTICS=OFF
+%cmake_build
+
+%install
+%cmake_install
+packaging/common/venv.sh %{buildroot} %{_prefix}
+
+%files
+%{_bindir}/sung
+%{_prefix}/lib/sung/
+%{_datadir}/applications/sung.desktop
+%{_datadir}/icons/hicolor/512x512/apps/sung.png
+%{_datadir}/licenses/sung/
+
+%changelog
+* Sat Sep 19 2026 Mohammadreza Hajianpour <hajianpour.mr@gmail.com> - @VERSION@-1
+- Package built from the upstream tree by continuous integration.

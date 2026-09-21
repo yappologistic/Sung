@@ -69,6 +69,26 @@ Install the equivalent development packages for **Qt 6.8+** (Core, Gui, Quick, Q
 
 Sung uses Google Sans Flex when installed and otherwise falls back to a system font. Noctalia is optional.
 
+### Packaged releases
+
+Each tagged release carries prebuilt packages for Arch, Debian, Fedora, Void and Flatpak, built and install-tested in a clean container of their own distribution. Download the one for your system from the [releases page](https://github.com/yappologistic/Sung/releases) and install it:
+
+```bash
+sudo pacman -U sung-*-x86_64.pkg.tar.zst          # Arch
+sudo apt install ./sung_*_amd64.deb               # Debian 13 or newer
+sudo dnf install ./sung-*.x86_64.rpm              # Fedora 42 or newer
+flatpak install ./sung-*.flatpak                  # any distribution
+```
+
+Void needs the package indexed before installing it:
+
+```bash
+xbps-rindex -a sung-*.x86_64.xbps
+sudo xbps-install -R . sung
+```
+
+These packages install to `/usr` rather than `~/.local`, and carry their own isolated Python environment, so no separate setup step is needed. The Flatpak uses the Python, FFmpeg and Qt in its runtime instead. Packages are x86_64 only; other architectures and older releases of Debian and Fedora, whose Qt predates 6.8, need the source install above.
+
 ## Getting started
 
 ### Music library
@@ -223,6 +243,8 @@ If YouTube playback stops working after an upstream change, update the resolver:
 
 To update Sung, quit the player, then run `git pull` and `./scripts/install.sh` from this checkout. To uninstall, run `./scripts/uninstall.sh`; your library and settings are kept.
 
+A packaged install is updated through its own package manager, and removed the same way: `pacman -R sung`, `apt remove sung`, `dnf remove sung`, `xbps-remove sung` or `flatpak uninstall io.github.yappologistic.Sung`.
+
 ## Development
 
 Build and run from the checkout:
@@ -274,6 +296,27 @@ python3 tests/jellyfin_integration.py \
 ```
 
 The server binds to loopback only and stops after testing. Test data and credentials stay in the private output directory; remove it when finished. Add `--ui-binary /path/to/sung` for rendered UI checks, or additionally `--native-ui` to use Hyprland workspace 2. The normal test suite also checks malformed responses, redirects, cancellation, credential persistence and failed downloads using a local mock server.
+
+### Releasing
+
+The version in `CMakeLists.txt` is the single source of truth; `scripts/version.sh` reads it and the packaging recipes are instantiated from it. To publish a release, bump that version, commit, then push a matching tag:
+
+```bash
+git tag v0.12.0
+git push origin v0.12.0
+```
+
+The `packages` workflow builds all five packages, installs and runs each one in a clean container of its own distribution, and attaches them to a GitHub release. A tag that disagrees with the version in `CMakeLists.txt` fails the build before anything is published. Packages are also built on every pull request, without publishing, so packaging breakage surfaces before a release.
+
+To build one locally, the workflow's steps run unchanged:
+
+```bash
+./packaging/common/tarball.sh dist
+docker run --rm -v "$PWD:/src" -w /src debian:trixie bash \
+  packaging/debian/build.sh /src/dist/sung-0.12.0.tar.gz /src/dist/debian
+```
+
+After changing `helper/requirements.txt`, regenerate the Flatpak's pinned wheel list with `packaging/flatpak/generate-python-sources.sh`, which resolves them for the Python in the Flatpak runtime rather than the one on your machine.
 
 ## License
 
