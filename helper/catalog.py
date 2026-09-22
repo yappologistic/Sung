@@ -7,7 +7,11 @@ from urllib.parse import urlparse, parse_qs
 
 
 def artwork(item):
-    thumbs = item.get('thumbnails') or []
+    # Search and browse results carry `thumbnails`. A watch playlist carries
+    # `thumbnail`, singular, because ytmusicapi's parse_watch_track writes that
+    # key, and radio and autoplay are both built from watch playlists. Reading
+    # only the plural left every song they queued without a cover.
+    thumbs = item.get('thumbnails') or item.get('thumbnail') or []
     if not thumbs:
         return ''
     src = thumbs[-1].get('url', '')

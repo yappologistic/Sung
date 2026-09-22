@@ -98,6 +98,23 @@ class CatalogTests(unittest.TestCase):
         t=catalog.normalize({'videoId':'12345678901'},'song',p)
         self.assertEqual(t['art'],'https://example.com/a.jpg')
         self.assertEqual(t['album'],'Record')
+    def test_watch_playlist_track_keeps_its_cover(self):
+        # ytmusicapi's parse_watch_track writes `thumbnail`, singular, where
+        # search and browse results write `thumbnails`. Radio and autoplay are
+        # both built from watch playlists, so reading only the plural left
+        # every song they queued with no cover at all.
+        track={'title':'Somewhere I Belong','videoId':'12345678901',
+               'artists':[{'name':'Linkin Park','id':'UC1'}],
+               'thumbnail':[{'url':'https://lh3.googleusercontent.com/a=w60-h60-l90-rj'}]}
+        self.assertTrue(catalog.artwork(track))
+        self.assertTrue(catalog.normalize(track,'song')['art'])
+        # The larger size is still asked for, the same as any other cover.
+        self.assertIn('w544-h544',catalog.normalize(track,'song')['art'])
+        # And the plural still wins where both are present, because that is
+        # the one search results carry.
+        both=dict(track,thumbnails=[{'url':'https://example.com/plural.jpg'}])
+        self.assertEqual(catalog.artwork(both),'https://example.com/plural.jpg')
+
     def test_unavailable_and_empty(self):
         self.assertEqual(catalog.clean([{},None,{'title':'No ID'}]),[])
         self.assertFalse(catalog.normalize({'videoId':'12345678901','isAvailable':False})['available'])
