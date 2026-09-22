@@ -4,6 +4,7 @@
 #include <QColor>
 #include <QDir>
 #include <QFile>
+#include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
 #include <QProcess>
@@ -18,7 +19,9 @@
 #include <QTest>
 #include <QWheelEvent>
 #include <qpa/qwindowsysteminterface.h>
+#include <cstdlib>
 #include <functional>
+#include <unistd.h>
 
 namespace {
 QQuickItem *itemNamed(QQuickItem *root, const QString &name) {
@@ -1721,6 +1724,43 @@ void runFootprintTests(Backend *b, QQuickWindow *w) {
   // the environment still wins over it.
   c.check(qgetenv("QSG_ATLAS_WIDTH") == "1024" && qgetenv("QSG_ATLAS_HEIGHT") == "1024",
           "the texture atlas defaults to 1024 by 1024");
+
+  // --- Memory freed in use goes back once the application is not in use ---
+  // A busy session frees memory in pieces between allocations that stay, and
+  // glibc cannot give those pages back by itself. This builds that shape on
+  // purpose: 64 MiB in blocks too small to be mapped apart, each followed by
+  // a small one that is kept. The writes are volatile so the compiler cannot
+  // decide the pages were never touched.
+  const auto residentMiB = [] {
+    QFile statm("/proc/self/statm");
+    if (!statm.open(QIODevice::ReadOnly))
+      return 0.0;
+    return statm.readAll().split(' ').value(1).toDouble() * sysconf(_SC_PAGESIZE) / 1048576.0;
+  };
+  constexpr int blockBytes = 64 * 1024;
+  QList<void *> freed, kept;
+  for (int i = 0; i < 1024; ++i) {
+    auto *block = static_cast<volatile char *>(malloc(blockBytes));
+    for (int offset = 0; offset < blockBytes; offset += 4096)
+      block[offset] = 1;
+    freed.append(const_cast<char *>(block));
+    kept.append(malloc(64));
+  }
+  for (void *block : freed)
+    free(block);
+  const double held = residentMiB();
+  QWindowSystemInterface::handleFocusWindowChanged<QWindowSystemInterface::SynchronousDelivery>(nullptr);
+  QCoreApplication::processEvents();
+  const double given = held - residentMiB();
+  c.check(QGuiApplication::applicationState() != Qt::ApplicationActive,
+          "losing the focus leaves the application inactive");
+  c.check(given > 48, QString("memory freed in use goes back once the application is not in use (%1 MiB)")
+                          .arg(given, 0, 'f', 1));
+  QWindowSystemInterface::handleFocusWindowChanged<QWindowSystemInterface::SynchronousDelivery>(w);
+  QCoreApplication::processEvents();
+  c.check(QGuiApplication::applicationState() == Qt::ApplicationActive, "focus brings the application back");
+  for (void *block : kept)
+    free(block);
 
   c.finish();
 }

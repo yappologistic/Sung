@@ -187,6 +187,17 @@ int main(int argc, char **argv) {
     QObject::disconnect(startupSettled);
     returnFreedMemory();
   }, Qt::QueuedConnection);
+  // A session goes on freeing memory between the trims that follow startup
+  // and saves. At the end of a tour of the interface 30 MiB was free but
+  // still held, half of it in the arenas of worker threads, where the main
+  // thread cannot reuse it. Once the application stops being the one in
+  // use, that memory matters more to everything else than to Sung, and the
+  // trim took under half a millisecond on that heap. Qt reports the change
+  // from the window's focus, on Wayland as everywhere else.
+  QObject::connect(&app, &QGuiApplication::applicationStateChanged, &app, [](Qt::ApplicationState state) {
+    if (state != Qt::ApplicationActive)
+      returnFreedMemory();
+  });
   QObject::connect(&backend, &Backend::raiseRequested, window, [window] {
     QMetaObject::invokeMethod(window,"restorePlayer");
     window->raise();
