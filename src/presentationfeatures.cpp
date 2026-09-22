@@ -2,6 +2,7 @@
 #include <algorithm>
 
 void Backend::setCompactDensity(bool value){if(value==compactDensity())return;m_settings.setValue("compactDensity",value);emit presentationChanged();}
+void Backend::setSidebarNavigation(bool value){if(value==sidebarNavigation())return;m_settings.setValue("sidebarNavigation",value);emit presentationChanged();}
 void Backend::setStartPage(const QString &value){if(!QStringList{"home","files","server","favorites"}.contains(value)||value==startPage())return;m_settings.setValue("startPage",value);emit presentationChanged();}
 void Backend::openStartPage(){const auto page=startPage();if(page=="files"||page=="favorites"||page=="server")library(page);else home();}
 QVariantList Backend::homeSections(bool includeHidden) const {

@@ -30,6 +30,10 @@ Rectangle {
     // it spans the column it sits in, which is the width Material gives a
     // navigation bar in the first place.
     property bool hugsContent: false
+    // Whether the bar reaches the window's edges. Material's own placement
+    // does, against the bottom, and a container flush with an edge takes no
+    // corner there. Where the bar floats inside a margin it keeps its own.
+    property bool edgeToEdge: false
     property string current: ""
     signal chosen(string key)
 
@@ -43,9 +47,10 @@ Rectangle {
     // The container is the floating toolbar's, the one Material draws at this
     // size with a full corner: 64dp tall, cornerFull, surfaceContainer, 8dp at
     // either end. It keeps that corner at both widths, because the bar sits
-    // inside the column's margin either way and a square edge between two
-    // rounded surfaces would be the odd one out.
-    radius: Theme.shapeFull(height)
+    // inside the column's margin either way, and a square edge between two
+    // rounded surfaces would be the odd one out. Against the window's bottom
+    // edge it gives that corner up, which is where edgeToEdge applies.
+    radius: edgeToEdge ? 0 : Theme.shapeFull(height)
     color: Theme.container
     Accessible.role: Accessible.PageTabList
     Accessible.name: "Navigation"

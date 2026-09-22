@@ -155,6 +155,7 @@ class Backend : public QObject {
   Q_PROPERTY(QString viewMode READ viewMode WRITE setViewMode NOTIFY presentationChanged)
   Q_PROPERTY(bool viewSupportsGrid READ viewSupportsGrid NOTIFY presentationChanged)
   Q_PROPERTY(bool compactDensity READ compactDensity WRITE setCompactDensity NOTIFY presentationChanged)
+  Q_PROPERTY(bool sidebarNavigation READ sidebarNavigation WRITE setSidebarNavigation NOTIFY presentationChanged)
   Q_PROPERTY(QString startPage READ startPage WRITE setStartPage NOTIFY presentationChanged)
   Q_PROPERTY(QStringList homeOrder READ homeOrder NOTIFY presentationChanged)
   Q_PROPERTY(QStringList hiddenHomeSections READ hiddenHomeSections NOTIFY presentationChanged)
@@ -376,7 +377,12 @@ public:
   static QVariantList queueWithOrigin(const QVariantList &items,const QString &origin);
   static bool sameAlbum(const QVariantMap &a,const QVariantMap &b);
   bool compactDensity() const {return m_settings.value("compactDensity",false).toBool();}
+  // Navigation down the leading edge instead of across the top bar. The top
+  // bar is what the application ships with; this keeps the rail for anyone
+  // who had learned it.
+  bool sidebarNavigation() const {return m_settings.value("sidebarNavigation",false).toBool();}
   void setCompactDensity(bool value);
+  void setSidebarNavigation(bool value);
   QString startPage() const {return m_settings.value("startPage","home").toString();}
   void setStartPage(const QString &value);
   QStringList homeOrder() const {return m_settings.value("homeOrder").toStringList();}

@@ -2181,6 +2181,111 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
           }, 3000),
           "widening brings the capsule back");
 
+  // --- The sidebar arrangement, which the top bar replaced ---
+  // It is kept behind a setting. Both arrangements offer the same three
+  // destinations and the same two window actions; what changes is where they
+  // are, so neither may end up with a second copy of either.
+  b->home();
+  c.check(c.until([&] { return !b->busy(); }), "Home is open to compare the two on");
+  c.check(!shownItem(w->contentItem(), "searchBar"),
+          "the top bar arrangement keeps no search bar on a page that is not Search");
+  // Turned on the way a person turns it on, from the control in Settings.
+  auto navSettings = c.dialog("settingsDialog");
+  QTest::qWait(400);
+  c.check(shownItem(w->contentItem(), "navigationSidebar"),
+          "Settings offers the two arrangements");
+  c.click("navigationSidebar");
+  c.check(c.until([&] { return b->sidebarNavigation(); }, 3000),
+          "and choosing the sidebar takes");
+  c.closeDialog(navSettings);
+  QTest::qWait(800);
+  auto rail = shownItem(w->contentItem(), "navigationRail");
+  c.check(rail, "the setting puts the rail back down the leading edge");
+  c.check(!shownItem(w->contentItem(), "navigationBar"),
+          "and stands the capsule down, so the destinations are in one place");
+  auto chromeSearch = shownItem(w->contentItem(), "searchBar");
+  c.check(chromeSearch, "the search bar returns to the chrome, on every page");
+  // It gives way to the page's own heading only where it is on the page. In
+  // the chrome it is beside the heading, not instead of it.
+  c.check(shownItem(w->contentItem(), "collectionHeaderTitle"),
+          "and the page keeps its heading, because the bar is not on the page");
+  if (rail && chromeSearch) {
+    c.check(qAbs(rail->width() - 96) < 1,
+            QString("the rail is collapsed at Material's 96dp (%1)")
+                .arg(rail->width(), 0, 'f', 0));
+    const double searchTop = chromeSearch->mapToScene(QPointF(0, 0)).y();
+    c.check(searchTop < 96,
+            QString("and the bar it holds is in the top bar (%1 down)").arg(searchTop, 0, 'f', 0));
+    // One button each, moved between the two slots rather than duplicated.
+    for (const auto *name : {"settingsButton", "miniPlayerButton"}) {
+      const auto found = w->findChildren<QQuickItem *>(name);
+      c.check(found.size() == 1,
+              QString("there is one %1 in the window, not one per arrangement (%2)")
+                  .arg(name).arg(found.size()));
+      if (found.size() == 1)
+        c.check(found.first()->mapToItem(rail, QPointF(0, 0)).x() >= -1 &&
+                    found.first()->mapToItem(rail, QPointF(0, 0)).x() < rail->width(),
+                QString("and it sits at the foot of the rail").arg(name));
+    }
+    for (const auto *key : {"home", "search", "library"})
+      c.check(shownItem(w->contentItem(), QString("nav_") + key),
+              QString("the rail offers %1").arg(key));
+    c.shot("10-sidebar-arrangement");
+    // Material heads the rail with the surface's primary action.
+    QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("playlists")));
+    QTest::qWait(600);
+    auto slot = shownItem(w->contentItem(), "railFabSlot");
+    auto fab = shownItem(w->contentItem(), "libraryFab");
+    c.check(slot && fab && fab->parentItem() == slot,
+            "and carries the library's action at its head");
+    c.check(w->findChildren<QQuickItem *>("libraryFab").size() == 1,
+            "which is the same one button the other arrangement puts on the pane");
+    // The rail opens into Material's expanded form, where the pins live.
+    c.click("navigationMenuButton");
+    c.check(c.until([&] { return rail->property("expanded").toBool(); }, 3000),
+            "the menu button opens it");
+    QTest::qWait(700);
+    c.check(rail->width() >= 220 && rail->width() <= 360,
+            QString("into Material's 220 to 360dp range (%1)").arg(rail->width(), 0, 'f', 0));
+    c.shot("11-sidebar-expanded");
+    c.click("navigationMenuButton");
+    c.check(c.until([&] { return !rail->property("expanded").toBool(); }, 3000),
+            "and closes it again");
+  }
+  // Below the rail's width the arrangement falls back to the bar against the
+  // bottom edge and the drawer, which is where it kept them before.
+  w->resize(520, 760);
+  QTest::qWait(900);
+  c.check(!shownItem(w->contentItem(), "navigationRail"),
+          "a compact window stands the rail down");
+  auto bottomBar = shownItem(w->contentItem(), "navigationBar");
+  c.check(bottomBar, "and the bar takes the destinations back");
+  if (bottomBar) {
+    c.check(bottomBar->property("edgeToEdge").toBool() &&
+                bottomBar->property("radius").toReal() < 0.5,
+            "square, because a container flush with an edge takes no corner there");
+    const double foot = bottomBar->mapToScene(QPointF(0, bottomBar->height())).y();
+    c.check(qAbs(foot - w->height()) < 2,
+            QString("against the bottom of the window (%1 of %2)").arg(foot, 0, 'f', 0).arg(w->height()));
+    c.check(bottomBar->width() >= w->width() - 2, "and spanning it");
+  }
+  c.check(shownItem(w->contentItem(), "drawerButton"), "a menu button opens the drawer");
+  c.click("drawerButton");
+  auto drawer = w->findChild<QObject *>("navigationDrawer");
+  c.check(drawer && drawer->property("visible").toBool(), "which opens over the page");
+  c.check(anyItem(w->contentItem(), "drawerPin_0") || b->pins().isEmpty(),
+          "carrying the pinned collections the collapsed rail has no room for");
+  c.shot("12-sidebar-drawer");
+  QTest::keyClick(w, Qt::Key_Escape);
+  QTest::qWait(400);
+  c.check(drawer && !drawer->property("visible").toBool(), "and Escape puts it away");
+  b->setSidebarNavigation(false);
+  w->resize(1400, 900);
+  QTest::qWait(900);
+  c.check(!shownItem(w->contentItem(), "navigationRail"),
+          "turning the setting off returns the top bar arrangement");
+  c.check(shownItem(w->contentItem(), "navigationBar"), "with the capsule back");
+
   // --- Floating toolbar in the immersive player ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
   QTest::qWait(300);
@@ -3380,8 +3485,10 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(900);
   c.check(w->property("compactWindow").toBool(), "a compact window is compact");
   c.check(!shownItem(w->contentItem(), "navigationRail"), "there is no rail at any size");
-  c.check(!w->findChild<QObject *>("navigationDrawer"),
-          "and no drawer holding a second copy of the destinations");
+  // The drawer belongs to the sidebar arrangement. Here there is no way to
+  // reach one, so the destinations are not offered twice.
+  c.check(!shownItem(w->contentItem(), "drawerButton"),
+          "and nothing that opens a drawer holding a second copy of them");
   auto narrowBar = shownItem(w->contentItem(), "navigationBar");
   c.check(narrowBar && !narrowBar->property("hugsContent").toBool(),
           "the bar gives up the capsule and spans the column");
