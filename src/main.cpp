@@ -20,6 +20,9 @@
 #include <QQmlContext>
 #include <QQmlNetworkAccessManagerFactory>
 #include <QQuickImageProvider>
+#include <QQuickPaintedItem>
+#include <QEventLoop>
+#include <QtMath>
 #include <QQuickStyle>
 #include <QQuickWindow>
 #include <QStandardPaths>
@@ -32,6 +35,8 @@
 void runBenchmark(Backend *, QQuickWindow *);
 #endif
 #include <cstdio>
+#include <algorithm>
+#include <functional>
 
 class Symbols : public QQuickImageProvider {
 public:
@@ -182,6 +187,78 @@ int main(int argc, char **argv) {
     QObject::connect(window,&QQuickWindow::frameSwapped,&app,[&] {
       fprintf(stdout,"STARTUP_FRAME_MS %.3f\n",startupTimer.nsecsElapsed()/1e6);fflush(stdout);
       app.quit();
+    },Qt::QueuedConnection);
+    QTimer::singleShot(10000,&app,[&]{app.exit(2);});
+    return app.exec();
+  }
+  // What the interface actually builds, once the first frame is up. The value
+  // of SUNG_OBJECT_PROBE is the smallest subtree worth naming, so a large
+  // number reports only the totals. Parts that are meant to be built on demand
+  // should be absent here until something asks for them, and a painted
+  // surface's render target should be no larger than the picture in it.
+  if (qEnvironmentVariableIsSet("SUNG_OBJECT_PROBE")) {
+    const int floor = qEnvironmentVariableIntValue("SUNG_OBJECT_PROBE");
+    QObject::connect(window,&QQuickWindow::frameSwapped,&app,[&] {
+      // SUNG_PROBE_OPEN names a dialog to open first, which is how a deferred
+      // part is confirmed to arrive when it is finally asked for.
+      if (qEnvironmentVariableIsSet("SUNG_PROBE_OPEN")) {
+        const auto name = qEnvironmentVariable("SUNG_PROBE_OPEN");
+        if (auto *dialog = window->findChild<QObject *>(name)) {
+          QMetaObject::invokeMethod(dialog,"open");
+          QEventLoop settle;QTimer::singleShot(900,&settle,&QEventLoop::quit);settle.exec();
+          fprintf(stdout,"OPENED %s visible=%d built=%d headline=%d\n",qPrintable(name),
+                  dialog->property("visible").toBool(),dialog->property("built").toBool(),
+                  window->findChild<QQuickItem *>("dialogTitle") != nullptr);
+        } else fprintf(stdout,"OPENED %s NOT FOUND\n",qPrintable(name));
+      }
+      const qreal dpr = window->effectiveDevicePixelRatio();
+      QHash<QByteArray,int> tally;int total=0,painted=0;double targets=0;
+      std::function<void(QObject *)> walk=[&](QObject *o){
+        ++total;++tally[o->metaObject()->className()];
+        if (auto *surface=qobject_cast<QQuickPaintedItem *>(o)) {
+          ++painted;
+          const QSize size = surface->textureSize().isEmpty()
+              ? QSize(qCeil(surface->width()*dpr),qCeil(surface->height()*dpr))
+              : surface->textureSize();
+          const double mib = size.width()*double(size.height())*4/1048576.0;
+          targets += mib;
+          if (surface->width()>0 && surface->height()>0)
+            fprintf(stdout,"  PAINTED %-22s %4.0fx%-4.0f target %4dx%-4d %6.2f MiB  shown=%d pixels=%d blur=%d radius=%.0f\n",
+                    qPrintable(surface->objectName().isEmpty()
+                               ? QString::fromLatin1(surface->metaObject()->className())
+                               : surface->objectName()),
+                    surface->width(),surface->height(),size.width(),size.height(),mib,
+                    surface->isVisible(),surface->property("pixels").toInt(),
+                    surface->property("blur").toInt(),surface->property("radius").toDouble());
+        }
+        for (auto *child:o->children()) walk(child);
+      };
+      for (auto *root:engine.rootObjects()) walk(root);
+      // The same counts arranged as a tree, so a heavy part can be located
+      // rather than guessed at from its type alone.
+      std::function<int(QObject *,int)> branch=[&](QObject *o,int depth)->int{
+        int n=1;QList<QPair<int,QObject *>> kids;
+        for (auto *child:o->children()) {const int k=branch(child,-1);n+=k;kids.append({k,child});}
+        if (depth>=0) {
+          std::sort(kids.begin(),kids.end(),[](auto &a,auto &b){return a.first>b.first;});
+          for (const auto &[k,child]:kids) {
+            if (k<floor) continue;
+            fprintf(stdout,"%*s%5d %s %s\n",depth*2+2,"",k,child->metaObject()->className(),
+                    qPrintable(child->objectName()));
+            branch(child,depth+1);
+          }
+        }
+        return n;
+      };
+      fprintf(stdout,"SUBTREES\n");
+      for (auto *root:engine.rootObjects()) branch(root,0);
+      QList<QPair<int,QByteArray>> ranked;
+      for (auto it=tally.cbegin();it!=tally.cend();++it) ranked.append({it.value(),it.key()});
+      std::sort(ranked.begin(),ranked.end(),[](auto &a,auto &b){return a.first>b.first;});
+      fprintf(stdout,"OBJECTS_TOTAL %d\nPAINTED_ITEMS %d\nPAINTED_TARGET_MIB %.2f\n",total,painted,targets);
+      for (int i=0;i<qMin(30,int(ranked.size()));++i)
+        fprintf(stdout,"  %5d %s\n",ranked[i].first,ranked[i].second.constData());
+      fflush(stdout);app.quit();
     },Qt::QueuedConnection);
     QTimer::singleShot(10000,&app,[&]{app.exit(2);});
     return app.exec();
