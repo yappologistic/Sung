@@ -24,15 +24,23 @@ Item {
     readonly property bool live: icon.name.length > 0 && icon.visible && (!icon.Window.window || icon.Window.window.visible)
     // The outlined form sits underneath and the filled one fades in over it, so
     // the axis reads as a fill arriving rather than one icon replacing another.
-    Image {
-        objectName: "iconOutline"
+    // Only the four symbols named above have an outlined form to fade from, and
+    // an icon is built several hundred times over in a window, so the layer is
+    // not built for the ones that would leave it empty. Each one carried an
+    // Image and a Screen attachment of its own.
+    Loader {
         anchors.fill: parent
-        visible: icon.hasOutline && icon.fill < 1
-        source: icon.live && icon.hasOutline ? "image://symbols/" + icon.name + "_outline/" + Math.round(icon.size) + "/" + icon.ink.toString().substring(1) : ""
-        cache: false
-        sourceSize: Qt.size(icon.size * Screen.devicePixelRatio, icon.size * Screen.devicePixelRatio)
-        fillMode: Image.PreserveAspectFit
-        smooth: true
+        active: icon.hasOutline
+        sourceComponent: Image {
+            objectName: "iconOutline"
+            anchors.fill: parent
+            visible: icon.fill < 1
+            source: icon.live ? "image://symbols/" + icon.name + "_outline/" + Math.round(icon.size) + "/" + icon.ink.toString().substring(1) : ""
+            cache: false
+            sourceSize: Qt.size(icon.size * Screen.devicePixelRatio, icon.size * Screen.devicePixelRatio)
+            fillMode: Image.PreserveAspectFit
+            smooth: true
+        }
     }
     Image {
         objectName: "iconFill"
