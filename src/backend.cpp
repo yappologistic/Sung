@@ -1,5 +1,6 @@
 #include "backend.h"
 #include "artworkurl.h"
+#include "librarydata.h"
 #include <QLocale>
 #include <QMediaMetaData>
 #include "lrc.h"
@@ -1373,7 +1374,7 @@ void Backend::load() {
   QJsonParseError parse;
   const auto document=QJsonDocument::fromJson(f.readAll(),&parse);
   if(parse.error!=QJsonParseError::NoError || !document.isObject()) {m_storageHealthy=false;notifyError("Your saved library could not be read. The original file has been preserved.");return;}
-  auto d = document.object().toVariantMap();
+  auto d = librarydata::read(document.object());
   m_localTracks=playable(d.value("localTracks").toList());
   m_musicFolders=d.value("musicFolders").toStringList().mid(0,64);
   m_favorites = d.value("favorites").toList();
