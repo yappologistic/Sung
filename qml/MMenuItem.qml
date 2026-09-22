@@ -36,6 +36,16 @@ MenuItem {
     readonly property color leadingInk: !control.enabled ? Theme.muted
                                       : control.checked ? ink : Theme.muted
 
+    // A menu item's insides are built the first time the menu it sits in is
+    // actually on the screen. An item is only effectively visible once its
+    // menu is open, so that is the gate. Menus are built with the window and
+    // then wait, sometimes forever, and each item carried a glyph, two labels
+    // and three containers while it waited. Built stays built, because a menu
+    // reopened is the common case.
+    property bool built: false
+    onVisibleChanged: if (visible) built = true
+    Component.onCompleted: if (visible) built = true
+
     readonly property bool showsTick: checkable && checked
     readonly property bool hasLeading: showsTick || symbol.length > 0
     readonly property real leadingSpace: 32
@@ -44,6 +54,9 @@ MenuItem {
     height: visible ? implicitHeight : 0
     leftPadding: 14; rightPadding: 14
     palette.windowText: control.ink
+    // The leading glyph stays a plain Icon rather than going behind a holder:
+    // the menu reads the indicator's own ink and size, and a holder in front of
+    // it would answer for neither.
     indicator: Icon {
         objectName: "menuItemLeading"
         name: control.showsTick ? "check" : control.symbol
@@ -53,7 +66,9 @@ MenuItem {
         // Set on the label's baseline rather than the row's centre line.
         y: (control.height-height)/2 + Math.round(Theme.labelLarge*0.115)
     }
-    contentItem: Item {
+    contentItem: Loader {
+      active: control.built
+      sourceComponent: Item {
         SungText {
             objectName: "menuItemLabel"
             anchors.verticalCenter: parent.verticalCenter
@@ -74,9 +89,12 @@ MenuItem {
             font.pixelSize: Theme.labelMedium
             Accessible.ignored: true
         }
+      }
     }
     Accessible.name: control.text + (control.shortcut ? ", " + control.shortcut : "")
-    background: Item {
+    background: Loader {
+      active: control.built
+      sourceComponent: Item {
         // The run's own container. Material rounds the ends of the run and
         // leaves the corners inside it nearly square, and rounds an item fully
         // while it is taken.
@@ -104,5 +122,6 @@ MenuItem {
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
         Rectangle { anchors.fill: parent; anchors.margins: 2; radius: Theme.shapeSmall; color: "transparent"; border.color: Theme.focusRing; border.width: 2; visible: control.visualFocus }
+      }
     }
 }
