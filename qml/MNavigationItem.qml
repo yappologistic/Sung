@@ -44,7 +44,7 @@ AbstractButton {
             // belongs on it, and the label the secondary role itself.
             color: control.selected ? Theme.secondaryContainer : "transparent"
             Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-            Behavior on radius { enabled: app.motion; SpringAnimation { spring: 5; damping: 0.8; mass: 0.8 } }
+            Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Rectangle {
                 anchors.fill: parent; radius: parent.radius
                 color: Theme.secondaryContainerText

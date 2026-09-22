@@ -101,8 +101,8 @@ Item {
                 color: button.selected ? Theme.secondaryContainer : "transparent"
                 border.width: 1; border.color: Theme.outline
                 Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-                Behavior on topLeftRadius { enabled: app.motion; SpringAnimation { spring: 5; damping: 0.8; mass: 0.8 } }
-                Behavior on topRightRadius { enabled: app.motion; SpringAnimation { spring: 5; damping: 0.8; mass: 0.8 } }
+                Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+                Behavior on topRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
                 Rectangle {
                     anchors.fill: parent
                     topLeftRadius: parent.topLeftRadius; bottomLeftRadius: parent.bottomLeftRadius

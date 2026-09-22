@@ -142,7 +142,11 @@ AbstractButton {
         // An elevated button is the one variant Material lifts off the page.
         MElevation { anchors.fill: parent; radius: parent.radius; level: control.elevated && !control.dimmed ? 1 : 0 }
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-        Behavior on radius { enabled: app.motion; SpringAnimation { spring: 5; damping: 0.8; mass: 0.8 } }
+        // Material morphs the container squarer while it is held, and says
+        // outright that this one takes the effects spring "to prevent any
+        // bounce in this component": a control answering a finger must not
+        // wobble under it. Spatial springs ring; this is the one that does not.
+        Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
         Rectangle {
             anchors.fill: parent; radius: parent.radius
             color: control.ink
@@ -192,5 +196,5 @@ AbstractButton {
         }
     }
     scale: down ? 0.96 : 1
-    Behavior on scale { enabled: app.motion; SpringAnimation { spring: 5; damping: 0.8; mass: 0.6 } }
+    Behavior on scale { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
 }

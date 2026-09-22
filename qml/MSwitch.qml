@@ -44,7 +44,10 @@ Switch {
             // variant ink: the handle and the track edge are the boundary of a
             // control, and they read as one piece because of it.
             color: control.checked ? Theme.primaryText : Theme.outline
-            Behavior on x { enabled: app.motion; SpringAnimation { spring: 5; damping: 0.8 } }
+            // The thumb travelling across the track is movement, and
+            // Material gives the switch the fast spatial spring for it, so it
+            // carries a little of the overshoot a spatial spring has.
+            Behavior on x { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             Behavior on width { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
     }
