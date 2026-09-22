@@ -417,7 +417,7 @@ void runNavigationMotionTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(400);
   c.check(qAbs(column->opacity() - 1) < 0.01 && qAbs(column->scale() - 1) < 0.01,
           "a settled view sits at full size and opacity");
-  c.tap("nav_library");
+  c.tap("navBar_library");
   // Sample during the outgoing half: the view must be on its way out.
   QTest::qWait(45);
   const double leavingOpacity = column->opacity();
@@ -1813,37 +1813,41 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(200);
 
   // The tokens are not decoration: a real animated property has to overshoot.
-  auto rail = shownItem(w->contentItem(), "navigationRail");
-  c.check(rail, "the navigation rail is on screen to measure");
-  if (rail) {
-    const auto expand = [&](const QString &scheme) {
+  // The side panel opens on the spatial spring, so its width is the one to
+  // watch now that navigation no longer has a pane that widens.
+  // It is hidden until it has a width, which is the property being measured,
+  // so it has to be found whether or not it is on screen yet.
+  auto panel = anyItem(w->contentItem(), "sidePanel");
+  c.check(panel, "the side panel is there to measure");
+  if (panel) {
+    const auto reveal = [&](const QString &scheme) {
       b->setMotionScheme(scheme);
-      c.evaluate("railSettings.expanded=false");
-      // Settled means the rail has reached the width it is asking for, which
-      // is a number the specification owns rather than one written in here.
-      c.until([&] { return qAbs(rail->width() - rail->property("shownWidth").toDouble()) < 1; },
-              2000);
+      c.evaluate("window.side=''");
+      // Settled means the panel has reached the width it is asking for, which
+      // is a number the layout owns rather than one written in here.
+      c.until([&] { return panel->width() < 1; }, 2000);
       QTest::qWait(200);
-      c.evaluate("railSettings.expanded=true");
+      c.evaluate("window.side='queue'");
       double widest = 0;
       QElapsedTimer timer;
       timer.start();
       while (timer.elapsed() < 1200) {
-        widest = qMax(widest, rail->width());
+        widest = qMax(widest, panel->width());
         QTest::qWait(8);
       }
       return widest;
     };
-    const double bouncy = expand("expressive");
-    const double flat = expand("standard");
-    c.check(bouncy > 220.5,
-            QString("the expressive scheme overshoots the rail's 220dp (reached %1)")
-                .arg(bouncy, 0, 'f', 1));
+    const double bouncy = reveal("expressive");
+    const double settledWidth = panel->width();
+    const double flat = reveal("standard");
+    c.check(settledWidth > 0 && bouncy > settledWidth + 0.5,
+            QString("the expressive scheme overshoots the panel's settled width (%1 past %2)")
+                .arg(bouncy, 0, 'f', 1).arg(settledWidth, 0, 'f', 1));
     c.check(bouncy > flat,
             QString("further than the standard scheme does (%1 against %2)")
                 .arg(bouncy, 0, 'f', 1).arg(flat, 0, 'f', 1));
     b->setMotionScheme("expressive");
-    c.evaluate("railSettings.expanded=false");
+    c.evaluate("window.side=''");
     QTest::qWait(400);
   }
 
@@ -2032,21 +2036,46 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     c.check(!puller->isVisible(), "and letting go without a refresh puts it away");
   }
 
-  // --- Navigation: a rail at this size, a bar once the window is compact ---
+  // --- Navigation: a capsule in the top bar, spanning the column once compact ---
+  c.check(!shownItem(w->contentItem(), "navigationRail"),
+          "no rail takes a column of the window any more");
   c.check(!w->property("compactWindow").toBool(), "a wide window is not compact");
-  c.check(shownItem(w->contentItem(), "navigationRail"), "so navigation is a rail");
-  c.check(!shownItem(w->contentItem(), "navigationBar"), "and not a bar");
+  auto bar = shownItem(w->contentItem(), "navigationBar");
+  c.check(bar, "navigation is on screen");
+  c.check(bar && bar->property("hugsContent").toBool(), "as the capsule the top bar centres");
+  if (bar) {
+    // It belongs to the top bar, so it sits above the content pane rather
+    // than beside or below it.
+    const double foot = bar->mapToScene(QPointF(0, bar->height())).y();
+    if (auto pane = shownItem(w->contentItem(), "contentColumn"))
+      c.check(foot <= pane->mapToScene(QPointF(0, 0)).y() + 1,
+              QString("above the content rather than beside it (ends at %1)").arg(foot, 0, 'f', 0));
+    const double middle = bar->mapToScene(QPointF(bar->width() / 2, 0)).x();
+    c.check(qAbs(middle - w->width() / 2.0) < 1.5,
+            QString("centred on the window, not on the gap between the two sides (%1 against %2)")
+                .arg(middle, 0, 'f', 1).arg(w->width() / 2.0, 0, 'f', 1));
+    // The window's own actions are the top bar's trailing pair, and they clear
+    // the capsule rather than running under it.
+    if (auto settings = shownItem(w->contentItem(), "settingsButton"))
+      c.check(settings->mapToScene(QPointF(0, 0)).x() > middle + bar->width() / 2,
+              "the window's actions trail it without overlapping");
+  }
   w->resize(520, 760);
   QTest::qWait(700);
   c.check(w->property("compactWindow").toBool(), "a narrow window is compact");
-  auto bar = shownItem(w->contentItem(), "navigationBar");
-  c.check(bar, "which moves navigation to a bar along the bottom");
-  c.check(!shownItem(w->contentItem(), "navigationRail"), "and stands the rail down");
+  bar = shownItem(w->contentItem(), "navigationBar");
+  c.check(bar, "which keeps the same bar rather than swapping it for another");
+  c.check(bar && !bar->property("hugsContent").toBool(),
+          "standing the capsule down so the destinations still fit");
   if (bar) {
-    c.check(bar->width() >= w->width() - 2, "the bar spans the window");
-    const auto foot = bar->mapToScene(QPointF(0, bar->height())).y();
-    c.check(qAbs(foot - w->height()) < 2,
-            QString("and sits at the bottom of it (ends at %1 of %2)").arg(foot).arg(w->height()));
+    c.check(bar->width() > w->width() * 0.85,
+            QString("it spans the column (%1 of %2)").arg(bar->width(), 0, 'f', 0).arg(w->width()));
+    // It still floats inside the column's margin here rather than reaching an
+    // edge, so it keeps the full corner. A square bar between the rounded pane
+    // below it and the rounded window above would be the odd one out.
+    c.check(qAbs(bar->property("radius").toReal() - bar->height() / 2) < 0.5,
+            QString("and keeps the full corner it has when it hugs (%1 of a %2 bar)")
+                .arg(bar->property("radius").toReal(), 0, 'f', 0).arg(bar->height(), 0, 'f', 0));
     int destinations = 0;
     for (const auto *key : {"home", "search", "library"})
       if (shownItem(bar, QString("navBar_") + key))
@@ -2058,11 +2087,14 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     // Exactly one destination carries the active indicator, and Material
     // paints it in the secondary container: navigation reports where you are
     // rather than offering an action, so it does not take the action accent.
+    // The indicator is only there on the destination you are on: Material
+    // grows it from nothing, so everywhere else its width is nought.
     int active = 0;
     QString marked;
     for (const auto *key : {"home", "search", "library"})
       if (auto indicator = shownItem(bar, QString("navBarIndicator_") + key))
-        if (indicator->property("color").value<QColor>() == c.themeColor("secondaryContainer")) {
+        if (indicator->width() > 1 &&
+            indicator->property("color").value<QColor>() == c.themeColor("secondaryContainer")) {
           ++active;
           marked = key;
         }
@@ -2072,9 +2104,9 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     for (const auto *key : {"home", "search", "library"})
       if (auto label = shownItem(bar, QString("navBarLabel_") + key))
         c.check(label->property("color").value<QColor>() ==
-                    c.themeColor(key == marked ? "secondary" : "muted"),
+                    c.themeColor(key == marked ? "secondaryContainerText" : "muted"),
                 key == marked
-                    ? QString("the %1 you are on has the secondary role for a label").arg(key)
+                    ? QString("the %1 you are on is lettered on its container").arg(key)
                     : QString("and the %1 you are not on is the variant ink").arg(key));
     // Round 13 put one focus ring on every control in the app. The bar was
     // bordering its indicator instead, which marked the pill rather than the
@@ -2095,7 +2127,46 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
                     .arg(indicator->width(), 0, 'f', 0));
     }
     c.shot("06-navigation-bar");
-    c.click("navBar_search");
+
+    // --- The indicator arrives rather than appearing ---
+    // Material measures the indicator at its full width but draws it at that
+    // width times an animated progress, which is why the layer that answers
+    // the pointer is a separate box. The progress runs on the default spatial
+    // spring, so it overshoots before it settles.
+    auto arriving = anyItem(bar, "navBarIndicator_search");
+    auto leaving = anyItem(bar, "navBarIndicator_home");
+    auto layer = anyItem(bar, "navBarStateLayer_search");
+    c.check(arriving && leaving && layer,
+            "the indicator and the state layer are separate boxes");
+    if (arriving && leaving && layer) {
+      const double layerWidth = layer->width();
+      c.check(layerWidth > 1,
+              QString("the state layer is there whether or not you are on it (%1 wide)")
+                  .arg(layerWidth, 0, 'f', 0));
+      c.check(arriving->width() < 1,
+              QString("and the indicator is not, on a destination you are not on (%1 wide)")
+                  .arg(arriving->width(), 0, 'f', 1));
+      // No settling wait: the point is to watch what the press sets off.
+      c.tap("navBar_search");
+      double first = -1, widest = 0;
+      QElapsedTimer timer;
+      timer.start();
+      while (timer.elapsed() < 1200) {
+        if (first < 0 && arriving->width() > 0) first = arriving->width();
+        widest = qMax(widest, arriving->width());
+        QTest::qWait(8);
+      }
+      const double settled = arriving->width();
+      c.check(first >= 0 && first < settled * 0.9,
+              QString("it grows in from nothing rather than appearing whole (caught at %1 of %2)")
+                  .arg(first, 0, 'f', 0).arg(settled, 0, 'f', 0));
+      c.check(widest > settled + 0.5,
+              QString("on a spatial spring, which overshoots (%1 past %2)")
+                  .arg(widest, 0, 'f', 1).arg(settled, 0, 'f', 1));
+      c.check(c.until([&] { return leaving->width() < 1; }, 2000),
+              "and the one you left gives its width back");
+      c.check(layer->width() > 1, "while the state layer keeps the whole target");
+    }
     c.check(c.until([&] { return w->property("destination") == "search"; }, 3000),
             "and choosing one navigates");
     c.click("navBar_home");
@@ -2104,8 +2175,11 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
   }
   w->resize(1400, 900);
   QTest::qWait(700);
-  c.check(shownItem(w->contentItem(), "navigationRail"), "widening brings the rail back");
-  c.check(!shownItem(w->contentItem(), "navigationBar"), "and puts the bar away");
+  c.check(c.until([&] {
+            auto back = shownItem(w->contentItem(), "navigationBar");
+            return back && back->property("hugsContent").toBool();
+          }, 3000),
+          "widening brings the capsule back");
 
   // --- Floating toolbar in the immersive player ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
@@ -2169,9 +2243,9 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(500);
 
   // --- The fill axis: filled where you are, outlined where you are not ---
-  auto railHome = shownItem(w->contentItem(), "nav_home");
-  auto railLibrary = shownItem(w->contentItem(), "nav_library");
-  c.check(railHome && railLibrary, "the rail offers Home and Library");
+  auto railHome = shownItem(w->contentItem(), "navBar_home");
+  auto railLibrary = shownItem(w->contentItem(), "navBar_library");
+  c.check(railHome && railLibrary, "navigation offers Home and Library");
   if (railHome && railLibrary) {
     auto glyphOf = [](QQuickItem *item) { return item ? shownItem(item, "materialIcon") : nullptr; };
     auto homeGlyph = glyphOf(railHome), libraryGlyph = glyphOf(railLibrary);
@@ -2254,7 +2328,7 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   c.shot("03-queue-badge");
 
   // A dot instead, for work pending rather than counted.
-  auto navBadge = railLibrary ? anyItem(railLibrary, "navigationBadge") : nullptr;
+  auto navBadge = railLibrary ? anyItem(railLibrary, "navBarBadge_library") : nullptr;
   auto tabBadge = primaryTabs ? anyItem(primaryTabs, "tabBadge_files") : nullptr;
   c.check(navBadge && tabBadge, "the library destination and its tab can both carry a dot");
   c.check(navBadge && !navBadge->isVisible() && tabBadge && !tabBadge->isVisible(),
@@ -3058,34 +3132,28 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
   }
 
   // --- The indicator behind the destination you are on ---
-  if (auto destination = shownItem(w->contentItem(), "nav_library"))
-    if (auto pill = anyItem(destination, "navigationIndicator"))
-      c.check(qAbs(pill->width() - 56) < 0.5 && qAbs(pill->height() - 32) < 0.5,
-              QString("the active indicator is 56 by 32 (%1 by %2)")
-                  .arg(pill->width(), 0, 'f', 0).arg(pill->height(), 0, 'f', 0));
-
-  // --- Navigation is drawn in the secondary pair ---
-  // Material gives the navigation bar and the rail the same colours, and they
-  // are not the accent that offers an action: the indicator is the secondary
-  // container, the glyph on it the ink that belongs there, and the label the
-  // secondary role itself. Everything you are not on is the variant ink.
+  // Material gives the navigation bar colours that are not the accent offering
+  // an action: the indicator is the secondary container, the glyph on it the
+  // ink that belongs there, and the label, because it sits inside the
+  // indicator here, the same ink rather than the secondary role a label under
+  // one would take. Everything you are not on is the variant ink.
   QQuickItem *here = nullptr;
+  QString hereKey;
   for (const auto *key : {"home", "search", "library"})
-    if (auto d = shownItem(w->contentItem(), QString("nav_") + key))
-      if (d->property("selected").toBool()) here = d;
-  c.check(here, "one rail destination is marked as the one you are on");
+    if (auto d = shownItem(w->contentItem(), QString("navBar_") + key))
+      if (d->property("active").toBool()) { here = d; hereKey = key; }
+  c.check(here, "one destination is marked as the one you are on");
   if (here) {
-    auto pill = anyItem(here, "navigationIndicator");
+    auto pill = anyItem(w->contentItem(), "navBarIndicator_" + hereKey);
     auto glyph = shownItem(here, "materialIcon");
-    auto label = anyItem(here, "navigationLabel");
+    auto label = anyItem(w->contentItem(), "navBarLabel_" + hereKey);
     c.check(pill && pill->property("color").value<QColor>() == c.themeColor("secondaryContainer"),
             "its indicator is the secondary container");
-    // Material wraps the glyph in the indicator with (32-24)/2 either side, so
-    // the two share a centre. They did not: the indicator sat at the top of
-    // the container and the glyph 4dp below its middle.
+    // The glyph and the indicator share a centre. They did not once: the
+    // indicator sat at the top of the container and the glyph below its middle.
     if (pill && glyph) {
-      const double pillMiddle = pill->mapToItem(here, QPointF(0, pill->height()/2)).y();
-      const double glyphMiddle = glyph->mapToItem(here, QPointF(0, glyph->height()/2)).y();
+      const double pillMiddle = pill->mapToScene(QPointF(0, pill->height()/2)).y();
+      const double glyphMiddle = glyph->mapToScene(QPointF(0, glyph->height()/2)).y();
       c.check(qAbs(pillMiddle - glyphMiddle) < 0.51,
               QString("the glyph sits in the middle of it (%1 against %2)")
                   .arg(glyphMiddle, 0, 'f', 1).arg(pillMiddle, 0, 'f', 1));
@@ -3095,77 +3163,59 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
             "which is neither the surface it used to take nor the action accent");
     c.check(glyph && glyph->property("ink").value<QColor>() == c.themeColor("secondaryContainerText"),
             "the glyph on it is the ink that container carries");
-    c.check(label && label->property("color").value<QColor>() == c.themeColor("secondary"),
-            "and the label is the secondary role");
+    c.check(label && label->property("color").value<QColor>() == c.themeColor("secondaryContainerText"),
+            "and so is the label, because it is drawn on the container too");
     for (const auto *key : {"home", "search", "library"})
-      if (auto other = shownItem(w->contentItem(), QString("nav_") + key))
-        if (!other->property("selected").toBool())
-          if (auto quiet = anyItem(other, "navigationLabel"))
+      if (auto other = shownItem(w->contentItem(), QString("navBar_") + key))
+        if (!other->property("active").toBool())
+          if (auto quiet = anyItem(w->contentItem(), QString("navBarLabel_") + key))
             c.check(quiet->property("color").value<QColor>() == c.themeColor("muted"),
                     QString("%1, which you are not on, is the variant ink").arg(key));
+
+    // --- The horizontal item's own measurements ---
+    // NavigationBarHorizontalItemTokens: a 40dp indicator with no fixed width,
+    // 16dp of leading and trailing space, and a 24dp icon. The gap inside it
+    // is NavigationBarTokens.ItemActiveIndicatorIconLabelSpace, which is 4dp.
+    if (pill && glyph && label) {
+      c.check(qAbs(pill->height() - 40) < 0.5,
+              QString("the indicator is 40dp tall (%1)").arg(pill->height(), 0, 'f', 0));
+      c.check(qAbs(glyph->width() - 24) < 0.5,
+              QString("around a 24dp glyph (%1)").arg(glyph->width(), 0, 'f', 0));
+      const double pillLeft = pill->mapToScene(QPointF(0, 0)).x();
+      const double glyphLeft = glyph->mapToScene(QPointF(0, 0)).x();
+      const double labelLeft = label->mapToScene(QPointF(0, 0)).x();
+      const double labelRight = labelLeft + label->width();
+      c.check(qAbs(glyphLeft - pillLeft - 16) < 0.6,
+              QString("which starts 16dp inside it (%1)").arg(glyphLeft - pillLeft, 0, 'f', 1));
+      c.check(qAbs(labelLeft - glyphLeft - 28) < 0.6,
+              QString("the words follow the glyph 4dp later (%1)")
+                  .arg(labelLeft - glyphLeft - 24, 0, 'f', 1));
+      c.check(qAbs(pillLeft + pill->width() - labelRight - 16) < 0.6,
+              QString("and it closes 16dp after them (%1)")
+                  .arg(pillLeft + pill->width() - labelRight, 0, 'f', 1));
+    }
   }
 
-  // --- The rail's own measurements ---
-  // Material's collapsed rail is 96dp across and sets 4dp between its
-  // destinations, each of which is a 64dp container.
-  c.check(qAbs(c.evaluate("navigationRail.shownWidth").toDouble() - 96) < 0.5,
-          QString("the collapsed rail is 96dp wide (%1)")
-              .arg(c.evaluate("navigationRail.shownWidth").toDouble(), 0, 'f', 0));
-  c.check(qAbs(c.evaluate("navigationRail.spacing").toDouble() - 4) < 0.5,
-          QString("with 4dp between its destinations (%1)")
-              .arg(c.evaluate("navigationRail.spacing").toDouble(), 0, 'f', 0));
-  if (here)
-    c.check(qAbs(here->height() - 64) < 0.5,
-            QString("and a 64dp container for each (%1)").arg(here->height(), 0, 'f', 0));
-
-  // --- The expanded rail, opened the way a person opens it ---
-  // Material's horizontal rail item keeps 16dp either side of the row and sets
-  // 8dp between the glyph and the words, inside a 56dp indicator.
-  c.click("navigationMenuButton");
-  const bool opened = c.until([&] { return c.evaluate("navigationRail.expanded").toBool(); }, 3000);
-  c.check(opened, "the menu button opens the rail");
-  if (opened) {
-    QTest::qWait(700);
-    const double wide = c.evaluate("navigationRail.shownWidth").toDouble();
-    c.check(wide >= 220 && wide <= 360,
-            QString("which runs between 220 and 360dp (%1)").arg(wide, 0, 'f', 0));
-    if (auto open = shownItem(w->contentItem(), "nav_home")) {
-      auto glyph = shownItem(open, "materialIcon");
-      auto label = anyItem(open, "navigationWideLabel");
-      const double glyphLeft = glyph ? glyph->mapToItem(open, QPointF(0, 0)).x() : -1;
-      const double labelLeft = label ? label->mapToItem(open, QPointF(0, 0)).x() : -1;
-      const double labelRight = label ? labelLeft + label->width() : 0;
-      c.check(qAbs(glyphLeft - 16) < 0.5,
-              QString("the row starts 16dp in (%1)").arg(glyphLeft, 0, 'f', 0));
-      c.check(qAbs(labelLeft - glyphLeft - 32) < 0.5,
-              QString("the words follow a 24dp glyph 8dp later (%1)")
-                  .arg(labelLeft - glyphLeft - 24, 0, 'f', 0));
-      c.check(qAbs(open->width() - labelRight - 16) < 0.5,
-              QString("and it ends 16dp from the far edge (%1)")
-                  .arg(open->width() - labelRight, 0, 'f', 0));
-      if (auto pill = anyItem(open, "navigationIndicator"))
-        c.check(qAbs(pill->height() - 56) < 0.5,
-                QString("the indicator around it is 56dp tall (%1)")
-                    .arg(pill->height(), 0, 'f', 0));
-      // Where the glyph leads, the label is inside the indicator and takes the
-      // ink of the container it is on. Stacked, it is below the indicator and
-      // on the surface, so it takes the secondary role instead. Material makes
-      // that distinction and it is the difference between a label that is
-      // legible on the container and one that is merely near it.
-      QQuickItem *chosen = nullptr;
-      for (const auto *key : {"home", "search", "library"})
-        if (auto d = shownItem(w->contentItem(), QString("nav_") + key))
-          if (d->property("selected").toBool()) chosen = d;
-      if (auto wideLabel = chosen ? anyItem(chosen, "navigationWideLabel") : nullptr)
-        c.check(wideLabel->property("color").value<QColor>() ==
-                    c.themeColor("secondaryContainerText"),
-                "the label inside the indicator is drawn on its container");
+  // --- The capsule's own container ---
+  // FloatingToolbarTokens: 64dp tall, a full corner, and 8dp of leading and
+  // trailing space inside it. NavigationBarTokens.ItemBetweenSpace is nought,
+  // so nothing but the indicators' own padding separates the destinations.
+  if (auto capsule = shownItem(w->contentItem(), "navigationBar")) {
+    c.check(qAbs(capsule->height() - 64) < 0.5,
+            QString("the capsule is 64dp tall (%1)").arg(capsule->height(), 0, 'f', 0));
+    c.check(qAbs(capsule->property("radius").toReal() - capsule->height() / 2) < 0.5,
+            "and takes a full corner rather than a fixed radius");
+    QQuickItem *first = shownItem(w->contentItem(), "navBar_home");
+    QQuickItem *last = shownItem(w->contentItem(), "navBar_library");
+    if (first && last) {
+      const double lead = first->mapToScene(QPointF(0, 0)).x() - capsule->mapToScene(QPointF(0, 0)).x();
+      const double trail = capsule->mapToScene(QPointF(capsule->width(), 0)).x() -
+                           last->mapToScene(QPointF(last->width(), 0)).x();
+      c.check(qAbs(lead - 8) < 0.6 && qAbs(trail - 8) < 0.6,
+              QString("with 8dp at each end (%1 and %2)")
+                  .arg(lead, 0, 'f', 1).arg(trail, 0, 'f', 1));
     }
-    c.shot("09-rail-expanded");
-    c.click("navigationMenuButton");
-    c.check(c.until([&] { return !c.evaluate("navigationRail.expanded").toBool(); }, 3000),
-            "and closes it again");
-    QTest::qWait(500);
+    c.shot("09-navigation-capsule");
   }
 
   // --- A rule inside a list starts where the labels start ---
@@ -3299,17 +3349,18 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
           QString("900px is the expanded class (%1)").arg(w->property("sizeClass").toString()));
   c.check(w->property("atLeastExpanded").toBool() && !w->property("sheetMode").toBool(),
           "where the supporting pane sits beside the content rather than in a sheet");
-  if (auto rail = shownItem(w->contentItem(), "navigationRail"))
-    c.check(rail->property("roomToExpand").toBool(),
-            "and the rail can be opened, because there is room for one beside it");
+  if (auto capsule = shownItem(w->contentItem(), "navigationBar"))
+    c.check(capsule->property("hugsContent").toBool(),
+            "and navigation is the capsule, because the window has room to centre one");
   w->resize(800, 860);
   QTest::qWait(700);
   c.check(w->property("sizeClass").toString() == "medium" &&
               !w->property("atLeastExpanded").toBool(),
           "800px is the medium class");
   c.check(w->property("sheetMode").toBool(), "where the pane becomes a sheet");
-  if (auto rail = shownItem(w->contentItem(), "navigationRail"))
-    c.check(!rail->property("roomToExpand").toBool(), "and the rail stays collapsed");
+  if (auto capsule = shownItem(w->contentItem(), "navigationBar"))
+    c.check(capsule->property("hugsContent").toBool(),
+            "and the capsule holds, because medium is still wide enough for it");
 
   // --- An app bar's trailing actions are the variant ink ---
   // Material keeps the surface ink for the leading icon and gives the trailing
@@ -3324,28 +3375,22 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
       break;
     }
 
-  // --- A window too narrow for a rail ---
+  // --- A window too narrow to centre the capsule ---
   w->resize(520, 860);
   QTest::qWait(900);
-  c.check(w->property("compactWindow").toBool(), "a compact window stands the rail down");
-  c.check(!shownItem(w->contentItem(), "navigationRail"), "which takes its settings with it");
-  auto drawerButton = shownItem(w->contentItem(), "drawerButton");
-  c.check(drawerButton && drawerButton->isVisible(),
-          "so a menu button appears to open the drawer instead");
-  if (drawerButton) {
-    c.click("drawerButton");
-    auto drawer = w->findChild<QObject *>("navigationDrawer");
-    c.check(drawer && drawer->property("visible").toBool(), "the drawer opens over the page");
-    c.check(anyItem(w->contentItem(), "drawerSettings") != nullptr &&
-                anyItem(w->contentItem(), "drawerMiniPlayer") != nullptr,
-            "carrying what the rail was carrying");
-    c.check(anyItem(w->contentItem(), "drawerNav_library") != nullptr,
-            "and the destinations with it");
-    c.shot("07-navigation-drawer");
-    QTest::keyClick(w, Qt::Key_Escape);
-    QTest::qWait(400);
-    c.check(drawer && !drawer->property("visible").toBool(), "and Escape puts it away");
-  }
+  c.check(w->property("compactWindow").toBool(), "a compact window is compact");
+  c.check(!shownItem(w->contentItem(), "navigationRail"), "there is no rail at any size");
+  c.check(!w->findChild<QObject *>("navigationDrawer"),
+          "and no drawer holding a second copy of the destinations");
+  auto narrowBar = shownItem(w->contentItem(), "navigationBar");
+  c.check(narrowBar && !narrowBar->property("hugsContent").toBool(),
+          "the bar gives up the capsule and spans the column");
+  // What the rail used to carry at its foot is in the top bar now, at every
+  // size, so nothing has to be opened to reach it.
+  c.check(shownItem(w->contentItem(), "settingsButton"),
+          "settings is still one press away");
+  c.check(shownItem(w->contentItem(), "miniPlayerButton"), "and so is the mini player");
+  c.shot("07-navigation-narrow");
 
   // --- A dialog on a window with nowhere to float ---
   auto compactDialog = c.dialog("settingsDialog");
@@ -3545,33 +3590,30 @@ void runMaterialSchemeTests(Backend *b, QQuickWindow *w) {
               outlineVariantRole == c.evaluate("Theme.roles['outlineVariant']").value<QColor>(),
           "both come off the scheme rather than being mixed by hand");
 
-  // --- A short window takes the short navigation bar ---
+  // --- The bar is the same height whatever the window does ---
+  // Material offers the item two ways, the label under the icon in an 80dp
+  // container or beside it in a 64dp one. Sung takes the second everywhere,
+  // so a window that loses height loses nothing from navigation.
   w->resize(520, 640);
   QTest::qWait(800);
   auto bar = shownItem(w->contentItem(), "navigationBar");
-  c.check(bar && bar->property("shortBar").toBool(),
-          "a window with little height takes Material's short bar");
   c.check(bar && qAbs(bar->height() - 64) < 0.5,
-          QString("which is 64dp rather than 80 (%1)").arg(bar ? bar->height() : 0, 0, 'f', 0));
+          QString("a short window keeps the 64dp bar (%1)").arg(bar ? bar->height() : 0, 0, 'f', 0));
   c.shot("05-short-navigation-bar");
   w->resize(520, 900);
   QTest::qWait(800);
-  c.check(bar && !bar->property("shortBar").toBool(), "and the full bar comes back with the room");
+  c.check(bar && qAbs(bar->height() - 64) < 0.5, "and a taller one does not grow it");
   c.shot("06-navigation-bar");
 
-  // --- The expanded rail takes the width Material allows it ---
+  // --- The capsule takes only the width its destinations need ---
   w->resize(1600, 900);
   QTest::qWait(700);
-  c.evaluate("railSettings.expanded=true");
-  QTest::qWait(700);
-  auto rail = shownItem(w->contentItem(), "navigationRail");
-  c.check(rail && rail->width() >= 220 && rail->width() <= 360,
-          QString("the expanded rail stays inside Material's 220 to 360 range (%1)")
-              .arg(rail ? rail->width() : 0, 0, 'f', 0));
-  c.check(rail && rail->width() > 220, "taking more of it on a window with room");
-  c.shot("07-wide-rail");
-  c.evaluate("railSettings.expanded=false");
-  QTest::qWait(500);
+  auto wide = shownItem(w->contentItem(), "navigationBar");
+  c.check(wide && wide->property("hugsContent").toBool(), "a wide window centres the capsule");
+  c.check(wide && wide->width() < w->width() / 3,
+          QString("which hugs its destinations rather than spreading across the window "
+                  "(%1 of %2)").arg(wide ? wide->width() : 0, 0, 'f', 0).arg(w->width()));
+  c.shot("07-wide-capsule");
 
   // --- A slider says what it is worth while it is moved ---
   QQmlComponent sliderSource(qmlEngine(w), QUrl("qrc:/qml/SettingSlider.qml"));
@@ -4407,7 +4449,7 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
 
   // --- The structure assistive technology reads ---
   QStringList missing;
-  for (const auto *name : {"navigationRail", "sidePanel", "playbackBar"})
+  for (const auto *name : {"navigationBar", "sidePanel", "playbackBar"})
     if (auto pane = w->findChild<QQuickItem *>(name)) {
       if (QQmlProperty::read(pane, "Accessible.name", qmlContext(pane)).toString().isEmpty())
         missing.append(name);
@@ -4717,42 +4759,41 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
             "pressing that clears the filter");
   }
 
-  // --- The action at the head of the rail ---
+  // --- The surface's primary action ---
+  // Material puts a FAB on the surface it acts on. It used to head the rail;
+  // with no rail there, the library's own pane is that surface, and the slot
+  // at its corner is what keeps the last row of the list clear of it.
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("playlists")));
   QTest::qWait(600);
-  auto slot = shownItem(w->contentItem(), "railFabSlot");
-  c.check(slot, "the rail carries the surface's primary action");
+  auto slot = shownItem(w->contentItem(), "contentFabHost");
+  c.check(slot, "the content pane carries the surface's primary action");
   auto fab = shownItem(w->contentItem(), "libraryFab");
   c.check(fab && slot && fab->parentItem() == slot, "and the action sits in it");
-  if (auto rail = shownItem(w->contentItem(), "navigationRail")) {
-    auto menu = shownItem(w->contentItem(), "navigationMenuButton");
-    auto home = shownItem(w->contentItem(), "nav_home");
-    c.check(menu && fab && home && menu->y() < fab->mapToItem(rail, QPointF(0,0)).y() &&
-                fab->mapToItem(rail, QPointF(0,0)).y() < home->y(),
-            "between the menu and the destinations, where Material puts it");
-    // Opening the rail turns the action into an extended FAB.
-    if (!rail->property("expanded").toBool())
-      c.click("navigationMenuButton");
-    c.check(c.until([&] { return rail->property("expanded").toBool(); }), "the rail opens");
-    QTest::qWait(600);
-    c.check(fab && fab->property("extended").toBool(),
-            "and the action says in words what it does");
-    auto label = fab ? anyItem(fab, "fabLabel") : nullptr;
-    c.check(label && label->isVisible() && !label->property("text").toString().isEmpty(),
-            "which is what an extended FAB is");
-    c.check(rail->implicitWidth() <= rail->width() + 1,
-            QString("the rail still keeps its width (%1 wide, wants %2)")
-                .arg(rail->width()).arg(rail->implicitWidth()));
-    c.shot("05-rail-extended-fab");
-    // The menu opens from the rail, which sits against the leading edge, so it
-    // has to open towards the content. Every action has to be separately
-    // readable and clickable: one that hangs off the window, or that lands on
-    // top of another, or that the content surface paints over, is none of those.
+  if (auto pane = shownItem(w->contentItem(), "content")) {
+    if (fab) {
+      const auto corner = fab->mapToItem(pane, QPointF(fab->width(), fab->height()));
+      c.check(corner.x() <= pane->width() + 1 && corner.y() <= pane->height() + 1 &&
+                  corner.x() > pane->width() * 0.5 && corner.y() > pane->height() * 0.5,
+              QString("at the pane's trailing bottom corner (%1, %2 of %3 by %4)")
+                  .arg(corner.x(), 0, 'f', 0).arg(corner.y(), 0, 'f', 0)
+                  .arg(pane->width(), 0, 'f', 0).arg(pane->height(), 0, 'f', 0));
+    }
+    c.check(slot && qAbs(slot->width() - (fab ? fab->width() : 0)) < 1 &&
+                qAbs(slot->height() - (fab ? fab->height() : 0)) < 1,
+            "and the slot reserves exactly the room it takes");
+  }
+  c.shot("05-library-fab");
+  {
+    // The menu opens from a button in the pane's bottom corner, so it has to
+    // open upward and stay inside the window. Every action has to be
+    // separately readable and clickable: one that hangs off the window, or
+    // that lands on top of another, or that the content surface paints over,
+    // is none of those.
     const auto menuOpensClear=[&](const char *state){
       const auto before=w->grabWindow();
       c.click("fab");
       if(!c.until([&]{return shownItem(w->contentItem(),"fabMenuItem_0")!=nullptr;},3000)){
-        c.check(false,QString("the rail menu opens (%1)").arg(state));return;
+        c.check(false,QString("the action menu opens (%1)").arg(state));return;
       }
       QTest::qWait(700);
       const auto container=c.themeColor("primaryContainer");
@@ -4778,12 +4819,12 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
       c.check(worstEdge<=1,QString("every action stays inside the window (%1, worst %2 past the edge)").arg(state).arg(qRound(worstEdge)));
       c.check(separate,QString("the actions are stacked rather than piled on one another (%1)").arg(state));
       c.check(drawn==actions,QString("and each one is drawn over the content, not under it (%1, %2 of %3)").arg(state).arg(drawn).arg(actions));
-      c.shot(QString("06-rail-fab-menu-%1").arg(state));
+      c.shot(QString("06-library-fab-menu-%1").arg(state));
       c.click("fab");
       c.check(c.until([&]{return !fab->property("open").toBool();},3000),
               QString("pressing the button again closes them (%1)").arg(state));
     };
-    menuOpensClear("expanded");
+    menuOpensClear("default");
     // Reachable without a mouse: the actions take focus in turn, Escape puts
     // the menu away, and focus comes back to the button that opened it rather
     // than being stranded inside a surface that is no longer there.
@@ -4806,10 +4847,7 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
     QTest::qWait(400);
     menuOpensClear("reduced-motion");
     b->setMotion(true);
-    c.click("navigationMenuButton");
-    c.check(c.until([&]{return !rail->property("expanded").toBool();},3000),"the rail closes again");
-    QTest::qWait(600);
-    menuOpensClear("collapsed");
+    QTest::qWait(400);
     // The menu is a surface of its own over the content, so it has to hold up
     // in the light scheme too, where its container and the page behind it are
     // far closer in tone than they are in the dark one.
@@ -4819,16 +4857,14 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
     b->setTheme("dark");
     QTest::qWait(700);
   }
-  // A window too narrow for the rail puts the same menu at the bottom right of
-  // the content, where it opens upward and towards the leading edge instead.
+  // The same menu on a narrow window, where there is far less room around the
+  // button for it to open into.
   {
     const QSize full=w->size();
     w->resize(560, 760);
     QTest::qWait(900);
-    auto rail = shownItem(w->contentItem(), "navigationRail");
-    c.check(!rail, "a narrow window puts the destinations at the bottom, not in a rail");
     auto narrowFab = shownItem(w->contentItem(), "libraryFab");
-    c.check(narrowFab, "and the action moves with them");
+    c.check(narrowFab, "the action is still on the pane");
     if (narrowFab) {
       c.click("fab");
       c.check(c.until([&]{return shownItem(w->contentItem(),"fabMenuItem_0")!=nullptr;},3000),"the menu still opens");
@@ -4844,7 +4880,7 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
       c.check(found==narrowFab->property("count").toInt(),
               QString("all %1 actions are there").arg(narrowFab->property("count").toInt()));
       c.check(found&&worst<=1,QString("and every action fits the narrow window (worst %1 past the edge)").arg(qRound(worst)));
-      c.shot("06-rail-fab-menu-narrow");
+      c.shot("06-library-fab-menu-narrow");
       c.click("fab");
       c.until([&]{return !narrowFab->property("open").toBool();},3000);
     }

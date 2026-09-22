@@ -27,7 +27,7 @@ A minimal Material 3 player built with C++ and Qt Quick, designed for CachyOS an
 - **Jellyfin**: browse music libraries, albums, artists and genres; search, stream original or transcoded audio, manage permitted server playlists, sync favorites and display synchronized lyrics.
 - **Your music**: import FLAC, MP3 and other supported audio files or folders; browse albums and artists, search paths and group songs by folder. Mix local and YouTube songs in the same playlists.
 - **Animated artwork**: local animated covers and automatic online covers for matching YouTube songs, shared across the player, immersive view and mini player; lists use still covers.
-- **Appearance**: light and dark themes, a pickable Material accent color, artwork-derived color, an ambient cover backdrop, an expandable navigation rail, density and per-view layouts.
+- **Appearance**: light and dark themes, a pickable Material accent color, artwork-derived color, an ambient cover backdrop, density and per-view layouts.
 - **Lyrics**: synchronized lyrics, an immersive view, timing adjustments, LRC import, seek previews and search with jump-to-line playback.
 - **Offline**: songs you have played are kept on disk under a limit you set, so a replay starts at once and needs no network.
 - **Library tools**: likes, listening history, smart mixes, custom smart playlists, M3U playlist import and export, custom playlist covers, playlist cleanup, multi-selection, drag reordering and Undo.
@@ -89,7 +89,7 @@ In a playlist’s menu, choose **Change cover…** to crop a PNG, JPEG or WebP. 
 
 ### Artwork and appearance
 
-The navigation rail on the left can expand. Use the menu button at its top to switch between icons and a wider list that also shows your pinned collections. The choice is remembered, and windows narrower than 1080px stay collapsed because the expanded rail sits beside the content rather than over it.
+Home, Search and Library sit in a capsule at the top of the window, with the mini player and Settings at its right. Below 600px the capsule gives up the centre and the bar spans the window instead, so the three destinations stay where they are rather than moving to an edge.
 
 On first run Sung offers a three-step setup: theme and accent color, a music folder, and the page to open on. Every step can be skipped, and each control also lives in Settings.
 
@@ -189,7 +189,7 @@ Open a song’s menu to queue it, like it or add it to a playlist. Local playlis
 
 Open **Settings → Connections → Music server** and choose **Subsonic** (including Navidrome) or **Jellyfin**, and enter your server address, username and password. Use the server root, including any deployment subpath, without `/rest` or `/web`. Use HTTPS for remote servers.
 
-Open **Library → Music server** to browse. The main search bar searches your server while this view is open. The server menu offers library selection and playlist creation. Permitted playlists support renaming, song removal and drag reordering; deletion requires owner or administrator permissions. Subsonic also offers ratings and server queue save/restore. Jellyfin shared playlists respect the server’s editing permissions.
+Open **Library → Music server** to browse. The search bar on that page searches your server. The server menu offers library selection and playlist creation. Permitted playlists support renaming, song removal and drag reordering; deletion requires owner or administrator permissions. Subsonic also offers ratings and server queue save/restore. Jellyfin shared playlists respect the server’s editing permissions.
 
 Local playlists can mix YouTube, local files and server songs. Server playlists accept songs from that server only. One server account can be connected at a time. Server lyrics use synchronized lyrics when available, otherwise plain text.
 

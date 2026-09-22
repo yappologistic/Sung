@@ -673,37 +673,58 @@ void runHomeRailTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(700);
   c.check(backdrop->property("active").toBool(), "re-enabling restores it");
 
-  // --- Expanded navigation rail ---
-  auto rail = itemNamed(w->contentItem(), "navigationRail");
-  c.check(rail, "navigation rail exists");
-  if (!rail)
+  // --- The navigation capsule in the top bar ---
+  auto bar = itemNamed(w->contentItem(), "navigationBar");
+  c.check(bar, "the navigation bar exists");
+  if (!bar)
     return c.finish();
-  c.check(!rail->property("expanded").toBool() && qAbs(rail->width() - 96) < 1,
-          "the rail starts collapsed at Material's 96dp container width");
-  auto home = itemNamed(w->contentItem(), "nav_home");
-  auto stacked = home ? itemNamed(home, "navigationStack") : nullptr;
-  auto wide = home ? itemNamed(home, "navigationRow") : nullptr;
-  c.check(stacked && stacked->opacity() > 0.9, "collapsed items stack icon over label");
-  c.check(wide && wide->opacity() < 0.1, "the wide layout is hidden while collapsed");
-  c.check(!itemNamed(w->contentItem(), "navPin_0"), "collapsed rail shows no secondary destinations");
-  c.shot("03-rail-collapsed");
-
-  c.click("navigationMenuButton");
-  c.check(c.until([&] { return rail->property("expanded").toBool(); }), "the menu button expands the rail");
-  // Material's expanded rail runs from 220dp to 360dp rather than sitting at
-  // one width, so it takes more of that range on a window with room.
-  c.check(c.until([&] { return rail->width() >= 219 && rail->width() <= 361; }),
-          QString("the expanded rail lands inside Material's width range (%1)").arg(rail->width(), 0, 'f', 0));
-  c.check(c.until([&] { return wide && wide->opacity() > 0.9; }), "expanded items lay icon beside label");
-  c.check(stacked && stacked->opacity() < 0.1, "the stacked layout is hidden while expanded");
-  auto menu = itemNamed(w->contentItem(), "navigationMenuButton");
-  c.check(menu && menu->property("symbol") == "menu_open",
-          "the menu icon changes to show the rail can be collapsed");
-  if (home) {
-    auto indicator = home->property("background").value<QQuickItem *>();
-    c.check(home->width() >= 220 - 1, "the target area spans the full rail width");
+  c.check(bar->property("hugsContent").toBool(),
+          "a window with room for it shows the bar as the capsule");
+  // FloatingToolbarTokens and NavigationBarTokens both put this container at
+  // 64dp, and the capsule takes a full corner rather than a fixed radius.
+  c.check(qAbs(bar->height() - 64) < 1,
+          QString("which is 64dp tall (%1)").arg(bar->height(), 0, 'f', 0));
+  c.check(qAbs(bar->property("radius").toReal() - bar->height() / 2) < 0.5,
+          "and rounded to its own half height");
+  // The capsule hugs its destinations rather than spanning the window, so it
+  // has to be narrower than the bar it replaced would have been.
+  c.check(bar->width() < w->width() / 2,
+          QString("it hugs its destinations (%1 across a %2 window)")
+              .arg(bar->width(), 0, 'f', 0).arg(w->width()));
+  // Centred on the window, not on the gap between the two sides of the bar.
+  const double middle = bar->mapToScene(QPointF(bar->width() / 2, 0)).x();
+  c.check(qAbs(middle - w->width() / 2.0) < 1.5,
+          QString("and centred on the window (%1 against %2)")
+              .arg(middle, 0, 'f', 1).arg(w->width() / 2.0, 0, 'f', 1));
+  auto home = itemNamed(w->contentItem(), "navBar_home");
+  c.check(home, "Home is one of its destinations");
+  // The indicator only measures anything on the destination you are on, so
+  // the anatomy has to be read off that one.
+  QString onKey;
+  for (const auto *key : {"home", "search", "library"})
+    if (auto d = itemNamed(w->contentItem(), QString("navBar_") + key))
+      if (d->property("active").toBool()) onKey = key;
+  c.check(!onKey.isEmpty(), "one destination is the one you are on");
+  auto homePill = itemNamed(w->contentItem(), "navBarIndicator_" + onKey);
+  auto homeLabel = itemNamed(w->contentItem(), "navBarLabel_" + onKey);
+  // NavigationBarHorizontalItemTokens gives the horizontal item no indicator
+  // width at all: 40dp tall, wrapping both pieces, with 16dp of leading and
+  // trailing space. That wrapping indicator is what makes it read as a pill.
+  c.check(homePill && qAbs(homePill->height() - 40) < 1,
+          QString("the active indicator is 40dp tall (%1)")
+              .arg(homePill ? homePill->height() : 0, 0, 'f', 0));
+  if (homePill && homeLabel) {
+    const double pillLeft = homePill->mapToScene(QPointF(0, 0)).x();
+    const double pillRight = pillLeft + homePill->width();
+    const double labelRight = homeLabel->mapToScene(QPointF(homeLabel->width(), 0)).x();
+    c.check(qAbs(pillRight - labelRight - 16) < 1.5,
+            QString("and wraps the label with 16dp after it (%1)")
+                .arg(pillRight - labelRight, 0, 'f', 1));
   }
-  c.shot("04-rail-expanded");
+  // The window's own actions moved here with it.
+  c.check(itemNamed(w->contentItem(), "miniPlayerButton"), "the mini player is a top bar action");
+  c.check(itemNamed(w->contentItem(), "settingsButton"), "and so is settings");
+  c.shot("03-navigation-capsule");
 
   // Secondary destinations appear only once there is room for them.
   const auto playlist = b->createPlaylist("Pinned mix");
@@ -715,14 +736,21 @@ void runHomeRailTests(Backend *b, QQuickWindow *w) {
   b->togglePin(b->collectionItem());
   c.check(c.until([&] { return !b->pins().isEmpty(); }), "a collection is pinned");
   QTest::qWait(400);
-  auto pin = itemNamed(w->contentItem(), "navPin_0");
-  c.check(pin && pin->isVisible(), "the expanded rail reveals pinned collections");
-  c.check(itemNamed(w->contentItem(), "navigationPinnedLabel"), "secondary destinations are labelled");
-  c.check(pin && pin->property("text").toString() == "Pinned mix", "the pin shows its collection name");
 
   // With nothing playing, Home falls back to the first cover on its shelves.
   b->home();
   c.check(c.until([&] { return !b->busy(); }), "reload Home with a pinned shelf");
+  // Pinning says "Pinned to Home", and Home is the one place it lands now that
+  // no navigation surface carries a second copy of the same list. The shelf is
+  // built for the page you are on, so this can only be asked once Home is it.
+  const auto pinnedOnHome = [&] {
+    for (const auto &section : b->homeSections())
+      for (const auto &entry : section.toMap().value("items").toList())
+        if (entry.toMap().value("title").toString() == "Pinned mix")
+          return true;
+    return false;
+  };
+  c.check(c.until(pinnedOnHome), "the pinned collection reaches Home's shelves");
   b->clearQueue();
   QTest::qWait(400);
   const auto shelfArt = w->property("homeArtwork").toString();
@@ -734,24 +762,26 @@ void runHomeRailTests(Backend *b, QQuickWindow *w) {
 
   b->home();
   c.check(c.until([&] { return !b->busy(); }), "leave the playlist");
-  QMetaObject::invokeMethod(pin, "clicked");
-  c.check(c.until([&] { return b->libraryId() == playlist; }), "a pinned destination opens its collection");
-  c.shot("05-rail-pinned");
+  c.shot("05-home-with-pin");
 
-  // M3 puts the expanded rail beside content, so a window below the expanded
-  // class collapses it whatever the preference says.
-  w->resize(780, 800);
-  QTest::qWait(500);
-  c.check(!rail->property("expanded").toBool() && qAbs(rail->width() - 96) < 1,
-          "a narrow window collapses the rail even while the preference is on");
-  c.check(!itemNamed(w->contentItem(), "navPin_0"), "collapsing releases the secondary destinations");
-  c.check(menu && !menu->isEnabled(), "the menu button is disabled where there is no room");
-  c.shot("06-rail-narrow");
+  // A compact window cannot centre the capsule and still clear the actions
+  // either side of it, so the bar gives up the capsule and spans the column,
+  // which is the width Material gives a navigation bar in the first place.
+  w->resize(520, 800);
+  QTest::qWait(600);
+  c.check(c.until([&] { return !bar->property("hugsContent").toBool(); }),
+          "a compact window stands the capsule down");
+  c.check(bar->width() > w->width() * 0.85,
+          QString("and spans the column instead (%1 of %2)")
+              .arg(bar->width(), 0, 'f', 0).arg(w->width()));
+  for (const auto *key : {"home", "search", "library"})
+    c.check(itemNamed(w->contentItem(), QString("navBar_") + key),
+            QString("%1 survives the narrow window").arg(key));
+  c.shot("06-navigation-narrow");
   w->resize(1280, 860);
-  QTest::qWait(500);
-  c.check(rail->property("expanded").toBool(), "widening restores the remembered rail");
-  c.click("navigationMenuButton");
-  c.check(c.until([&] { return !rail->property("expanded").toBool(); }), "the menu button collapses it again");
+  QTest::qWait(600);
+  c.check(c.until([&] { return bar->property("hugsContent").toBool(); }),
+          "widening brings the capsule back");
   b->stop();
   b->clearQueue();
   c.finish();

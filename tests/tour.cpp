@@ -355,30 +355,31 @@ void runTourCapture(Backend *b, QQuickWindow *w) {
   c.closeDialog(onboarding);
   b->setOnboarded(true);
 
-  // --- Navigation rail, expanded, and the narrow layout ---
+  // --- Navigation in the top bar, and the two windows that change it ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("playlists")));
   QTest::qWait(200);
   b->openPlaylist(playlist);
   c.check(c.until([&] { return !b->busy() && !b->collectionItem().isEmpty(); }), "a collection is open to pin");
   b->togglePin(b->collectionItem());
   c.check(c.until([&] { return !b->pins().isEmpty(); }), "the collection is pinned");
-  auto rail = shownItem(w->contentItem(), "navigationRail");
-  c.check(rail, "the navigation rail is on screen");
-  // Material puts the surface's primary action at the head of the rail, so the
-  // rail has to stay the width it says it is with that action in it.
-  if (auto slot = w->findChild<QQuickItem *>("railFabSlot"))
-    c.check(rail && rail->implicitWidth() <= rail->width() + 1,
-            QString("the rail keeps its width with the action in it (%1 wide, wants %2)")
-                .arg(rail ? rail->width() : 0).arg(rail ? rail->implicitWidth() : 0));
-  if (rail && !rail->property("expanded").toBool())
-    c.click("navigationMenuButton");
-  c.check(c.until([&] { return rail && rail->property("expanded").toBool(); }), "the rail expands");
-  c.shot("navigation-rail-expanded", "navigationRail");
+  auto bar = shownItem(w->contentItem(), "navigationBar");
+  c.check(bar, "the navigation bar is on screen");
+  c.check(bar && bar->property("hugsContent").toBool(), "as the capsule the top bar centres");
+  c.shot("navigation-capsule", "navigationBar");
 
+  // Medium: still wide enough to centre the capsule between the two sides.
   w->resize(900, 700);
   QTest::qWait(600);
-  c.check(rail && !rail->property("expanded").toBool(), "a narrow window collapses the rail");
-  c.shot("narrow-window", "navigationRail");
+  c.check(bar && bar->property("hugsContent").toBool(), "a medium window keeps the capsule");
+  c.shot("narrow-window", "navigationBar");
+
+  // Compact, at the narrowest window Sung allows, which is where the bar has
+  // least room and where its corners have the least width to round against.
+  w->resize(480, 620);
+  QTest::qWait(600);
+  c.check(bar && !bar->property("hugsContent").toBool(), "a compact window spans the bar instead");
+  c.shot("compact-window", "navigationBar");
+
   w->resize(1440, 900);
   QTest::qWait(500);
 

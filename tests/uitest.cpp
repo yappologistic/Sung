@@ -99,7 +99,7 @@ void runUiTests(Backend *b, QQuickWindow *w) {
   check(!b->sections().isEmpty(), "live home shelves");
   QTest::qWait(2000);
   shot("home-dark");
-  click("nav_search");
+  click("navBar_search");
   auto search = findItem(w->contentItem(), "searchField");
   check(search && search->hasActiveFocus(), "search navigation focuses field");
   if (search) {
@@ -166,12 +166,12 @@ void runUiTests(Backend *b, QQuickWindow *w) {
   w->setProperty("side", "queue");
   shot("narrow-queue");
   w->setProperty("side", "");
-  click("nav_library");
+  click("navBar_library");
   check(w->property("destination").toString() == "library",
         "library navigation");
   shot("library-narrow");
   check(validIconSizes(w->contentItem()), "icons retain logical sizes at device scale");
-  auto nav=findItem(w->contentItem(),"nav_home");
+  auto nav=findItem(w->contentItem(),"navBar_home");
   if(nav) check(qAbs(nav->mapToScene(QPointF(nav->width()/2,0)).x()-44)<1,"navigation centered in 88px rail");
   b->pause();
   b->save();
@@ -268,7 +268,7 @@ void runUiAudit(Backend *b, QQuickWindow *w) {
   }
   query("Nujabes Feather", "videos");
   shot("09-search-videos");
-  click("nav_library");
+  click("navBar_library");
   shot("10-liked-songs");
   click("historyTab");
   shot("11-history");
@@ -523,7 +523,7 @@ void runFeatureTests(Backend *b,QQuickWindow *w) {
   }
   check(w->isPersistentGraphics() && w->isPersistentSceneGraph(),"restored player keeps active render resources warm");
   auto restored=w->grabWindow();
-  if(auto nav=findItem(w->contentItem(),"nav_home"))if(auto icon=findItem(nav,"materialIcon")){
+  if(auto nav=findItem(w->contentItem(),"navBar_home"))if(auto icon=findItem(nav,"materialIcon")){
     const qreal scale=qreal(restored.width())/w->width();auto pt=icon->mapToScene(QPointF());
     const QRect r(qRound(pt.x()*scale),qRound(pt.y()*scale),qRound(icon->width()*scale),qRound(icon->height()*scale));
     // Fractional-scale native rasterization can vary slightly after remapping.
@@ -970,7 +970,7 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
   emit b->toast(QString("Imported a very long album and playlist name ").repeated(12));QTest::qWait(200);
   auto toast=findItem(w->contentItem(),"toastBar");
   check(toast&&toast->width()<=w->width()-48&&toast->height()>48,"long notification wraps within compact window");shot("06-compact-notification");
-  if(auto nav=findItem(w->contentItem(),"nav_library"))QMetaObject::invokeMethod(nav,"clicked");
+  if(auto nav=findItem(w->contentItem(),"navBar_library"))QMetaObject::invokeMethod(nav,"clicked");
   QTest::qWait(250);
   auto liked=findItem(w->contentItem(),"likedTab");auto playlists=findItem(w->contentItem(),"playlistsTab");
   auto history=findItem(w->contentItem(),"serverTab");auto tabs=findItem(w->contentItem(),"libraryTabs");
@@ -1769,8 +1769,11 @@ void runListeningRefinementTests(Backend *b,QQuickWindow *w){
   QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","30","-metadata","album=Still Water","-metadata","artist=Example Artist",dir+"/music/Track 01.wav"});check(encode.waitForFinished(10000)&&encode.exitCode()==0,"generate silent local audio");
   for(int i=2;i<=8;++i)QFile::copy(dir+"/music/Track 01.wav",dir+QString("/music/Track %1.wav").arg(i,2,10,QChar('0')));
   b->importMusicFolder(QUrl::fromLocalFile(dir+"/music"));check(until([&]{return !b->importingLocal();}),"import fixture songs");b->library("files");b->playCollection(0);check(until([&]{return b->playing();}),"local playback starts");b->pause();
-  auto homeNav=findItem(w->contentItem(),"nav_home");check(homeNav,"Home navigation exists");if(homeNav){QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,homeNav->mapToScene(QPointF(homeNav->width()/2,54)).toPoint());QTest::qWait(150);check(w->property("destination").toString()=="home","navigation label activates Home");}
-  auto libraryNav=findItem(w->contentItem(),"nav_library");if(libraryNav){QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,libraryNav->mapToScene(QPointF(libraryNav->width()/2,54)).toPoint());QTest::qWait(150);check(w->property("destination").toString()=="library","navigation label activates Library");}b->library("files");QTest::qWait(200);
+  auto homeNav=findItem(w->contentItem(),"navBar_home");check(homeNav,"Home navigation exists");
+  // The label sits beside the glyph inside the indicator, so pressing the
+  // words has to reach the destination just as pressing the glyph does.
+  if(auto homeLabel=findItem(w->contentItem(),"navBarLabel_home")){QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,homeLabel->mapToScene(QPointF(homeLabel->width()/2,homeLabel->height()/2)).toPoint());QTest::qWait(150);check(w->property("destination").toString()=="home","navigation label activates Home");}else check(false,"the Home label is on screen");
+  if(auto libraryLabel=findItem(w->contentItem(),"navBarLabel_library")){QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,libraryLabel->mapToScene(QPointF(libraryLabel->width()/2,libraryLabel->height()/2)).toPoint());QTest::qWait(150);check(w->property("destination").toString()=="library","navigation label activates Library");}b->library("files");QTest::qWait(200);
   auto seek=findItem(w->contentItem(),"seekBar");check(seek,"seek control exists");b->seek(5000);QTest::qWait(100);
   if(seek){const auto start=seek->mapToScene(QPointF(seek->width()/2,seek->height()/2)).toPoint();QSignalSpy sought(b,&Backend::seeked);QTest::mousePress(w,Qt::LeftButton,Qt::ShiftModifier,start);QTest::mouseMove(w,start+QPoint(90,0));QTest::qWait(80);check(seek->property("fineSeeking").toBool(),"Shift drag enters precise seek");check(sought.isEmpty(),"precise drag previews without repeated decoder seeks");QTest::mouseRelease(w,Qt::LeftButton,Qt::ShiftModifier,start+QPoint(90,0));QTest::qWait(80);check(sought.count()==1&&b->position()>5000&&b->position()<6500,"precise seek commits one small movement");b->seek(2000);QTest::qWait(50);check(qAbs(seek->property("value").toDouble()-2000)<20,"seek follows playback after precise drag");QTest::keyClick(w,Qt::Key_Right,Qt::ShiftModifier);check(qAbs(b->position()-2100)<20,"Shift arrow seeks 100 ms");}
   if(seek){QTest::mouseMove(w,QPoint(5,5));w->contentItem()->forceActiveFocus();for(int tab=0;tab<80 && (tab==0 || w->activeFocusItem()!=seek);++tab){QTest::keyClick(w,Qt::Key_Tab);QTest::qWait(5);}QTest::qWait(100);fprintf(stdout,"SEEK_FOCUS active=%d visual=%d reason=%d window=%d\n",seek->hasActiveFocus(),seek->property("visualFocus").toBool(),seek->property("focusReason").toInt(),w->isActive());check(w->activeFocusItem()==seek,"Tab navigation reaches seek control");auto ring=findItem(seek,"sliderFocusRing");check(ring&&ring->isVisible(),"keyboard seek has an external focus ring");check(qAbs(seek->property("previewValue").toDouble()-b->position())<1,"keyboard preview follows playback value");shot("00-keyboard-seek");}

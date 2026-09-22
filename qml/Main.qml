@@ -103,7 +103,7 @@ ApplicationWindow {
     property bool searchFocused: (window.activeFocusItem && window.activeFocusItem.handlesTextInput===true) || searchField.activeFocus || (window.activeFocusItem && window.activeFocusItem.objectName==="lyricSearchField")
     readonly property bool editableLocal: {app.playlists;return !!localPlaylist && !app.smartPlaylist(localPlaylist).id;}
     readonly property bool modalOpen: immersiveQueue.visible || otherModalOpen
-    readonly property bool otherModalOpen: trimDialog.visible || onboarding.visible || artworkViewer.visible || (immersiveLoader.item && immersiveLoader.item.popupVisible) || viewLayoutDialog.visible || volumeControl.popupVisible || homeEditor.visible || outputPicker.visible || sessionsDialog.visible || statsDialog.visible || playlistVersionsDialog.visible || playlistCoverDialog.visible || commandPalette.visible || artworkControls.visible || smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || navigationDrawer.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSort.menuOpen
+    readonly property bool otherModalOpen: trimDialog.visible || onboarding.visible || artworkViewer.visible || (immersiveLoader.item && immersiveLoader.item.popupVisible) || viewLayoutDialog.visible || volumeControl.popupVisible || homeEditor.visible || outputPicker.visible || sessionsDialog.visible || statsDialog.visible || playlistVersionsDialog.visible || playlistCoverDialog.visible || commandPalette.visible || artworkControls.visible || smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSort.menuOpen
     property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.handlesArrowKeys === true
     function selectedView() {var item=window.activeFocusItem;while(item){if(item.sourceRows!==undefined)return item;item=item.parent;}return tracks;}
     function addBatch(view) {batchItems=view.selection.items();addPlaylistDialog.open();}
@@ -188,7 +188,6 @@ ApplicationWindow {
     // A panel width of nought means nobody has dragged it, so it follows the
     // canonical supporting pane proportion instead.
     Settings { id: geometry; category: "Window"; property int width: 1180; property int height: 800; property real panelWidth: 0 }
-    Settings { id: railSettings; category: "Navigation"; property bool expanded: false }
     Component.onCompleted: { windowResources.manage(window);width=geometry.width;height=geometry.height;geometryReady=true;app.setUiActive(uiActive);if(!app.onboarded)Qt.callLater(()=>{if(!app.onboarded)onboarding.open();}); }
     onWidthChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.width=width;}
     onHeightChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.height=height;}
@@ -348,7 +347,16 @@ ApplicationWindow {
         return {kind:kind,title:kind==="artist"?item.artist:item.album,browseId:item[kind+"Id"],remoteId:item[kind+"Id"],source:item.source || "",server:item.server || ""}
     }
     function openServerConnection() {serverConnection.open()}
-    function focusSearch() { if(app.page==="server"){searchField.forceActiveFocus();searchField.selectAll();return;}if(immersive)toggleImmersive();side="";app.startSearch();destination="search";searchField.forceActiveFocus();searchField.selectAll(); }
+    // The field is part of the Search page rather than the window, so reaching
+    // it means arriving there first; an item that is not on screen yet cannot
+    // take the focus.
+    function focusSearch() {
+        if(app.page==="server"){searchField.forceActiveFocus();searchField.selectAll();return;}
+        if(immersive)toggleImmersive();
+        side="";app.startSearch();destination="search";
+        searchField.forceActiveFocus();searchField.selectAll();
+        Qt.callLater(()=>{if(!searchField.activeFocus){searchField.forceActiveFocus();searchField.selectAll();}});
+    }
     // Material 3 navigation motion. Rail destinations fade through; the library
     // tabs are peers on one line, so they share the X axis in the direction of
     // travel through them.
@@ -505,259 +513,48 @@ ApplicationWindow {
     readonly property bool windowWashed: app.ambientBackdrop && !!window.windowArtwork && !window.compactMode && !window.immersive
     readonly property real washAlpha: windowWashed ? 0.74 : 1
     function washed(surface) { return Qt.rgba(surface.r,surface.g,surface.b,window.washAlpha) }
-    RowLayout {
+    Item {
         visible: !window.compactMode && !window.immersive
-        anchors.fill: parent; spacing: 0
+        anchors.fill: parent
         ColumnLayout {
-            id: navigationRail
-            objectName: "navigationRail"
-            Accessible.role: Accessible.Pane
-            Accessible.name: "Navigation"
-            // M3 places the expanded rail beside body content, so it only opens
-            // where there is room for it; narrower windows stay collapsed.
-            visible: !window.compactWindow
-            // The expanded rail runs from 220dp and sits beside the content, so
-            // it is offered from the class that has room for a pane beside
-            // one. This asked for 1080, which is not a breakpoint either.
-            readonly property bool roomToExpand: window.atLeastExpanded
-            readonly property bool expanded: railSettings.expanded && roomToExpand
-            readonly property var pinned: expanded ? app.pins.slice(0,6) : []
-            // Material's expanded rail runs from 220dp to 360dp; it takes more
-            // of that range as the window has room to give.
-            property real shownWidth: expanded ? Math.max(220, Math.min(360, window.width*0.2)) : 96
-            Behavior on shownWidth { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
-            Layout.preferredWidth: shownWidth; Layout.minimumWidth: shownWidth; Layout.maximumWidth: shownWidth
-            // Material's collapsed rail is 96dp wide and sets 4dp between its
-            // destinations; the header above them keeps 8dp of its own.
-            Layout.fillHeight: true; Layout.topMargin: 24; spacing: 4
-            MButton {
-                objectName: "navigationMenuButton"
-                symbol: navigationRail.expanded ? "menu_open" : "menu"
-                tip: navigationRail.expanded ? "Collapse navigation" : "Expand navigation"
-                enabled: navigationRail.roomToExpand
-                Layout.alignment: navigationRail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-                Layout.leftMargin: navigationRail.expanded ? 16 : 0
-                onClicked: railSettings.expanded=!railSettings.expanded
-            }
-            // Material's rail carries the surface's primary action above its
-            // destinations, as a FAB while the rail is collapsed and as an
-            // extended FAB once it has opened and there is room for the words.
-            Item {
-                id: railFabSlot
-                objectName: "railFabSlot"
-                visible: window.libraryAddApplies
-                Layout.preferredWidth: visible ? libraryFab.width : 0
-                Layout.preferredHeight: visible ? libraryFab.height : 0
-                Layout.alignment: navigationRail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-                Layout.leftMargin: navigationRail.expanded ? 16 : 0
-                Layout.topMargin: 4; Layout.bottomMargin: 4
-            }
-            Repeater {
-                model: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library"}]
-                MNavigationItem {
-                    required property var modelData
-                    objectName: "nav_"+modelData.key
-                    expanded: navigationRail.expanded
-                    Layout.alignment: navigationRail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-                    Layout.preferredWidth: navigationRail.expanded ? navigationRail.shownWidth-24 : 80
-                    Layout.preferredHeight: navigationRail.expanded ? 56 : 64
-                    symbol: modelData.icon; text: modelData.label; selected: window.destination===modelData.key
-                    // Importing is pending work inside the library, so the
-                    // destination says so while it runs.
-                    badged: modelData.key==="library" && app.importingLocal
-                    onClicked: {
-                        if(window.destination===modelData.key)return
-                        destinationTransition.fadeThrough(() => {
-                            window.destination=modelData.key
-                            if(modelData.key==="home")app.home()
-                            else if(modelData.key==="search"){app.startSearch();window.focusSearch();}
-                            else window.applyLibrary("favorites")
-                        })
-                    }
-                }
-            }
-            // Secondary destinations the collapsed rail has no room to show.
-            MDivider { objectName: "navigationDivider"; visible: navigationRail.pinned.length>0; Layout.preferredWidth: navigationRail.shownWidth-32; Layout.alignment: Qt.AlignLeft; Layout.leftMargin: 16; Layout.topMargin: 4 }
-            SungText { objectName: "navigationPinnedLabel"; visible: navigationRail.pinned.length>0; text: "Pinned"; color: Theme.muted; font.pixelSize: Theme.titleSmall; typeRole: "titleSmall"; Layout.leftMargin: 20; Layout.alignment: Qt.AlignLeft }
-            Repeater {
-                model: navigationRail.pinned
-                MNavigationItem {
-                    required property var modelData
-                    required property int index
-                    objectName: "navPin_"+index
-                    expanded: true
-                    Layout.alignment: Qt.AlignLeft
-                    Layout.preferredWidth: navigationRail.shownWidth-24; Layout.preferredHeight: 48
-                    artUrl: modelData.art || ""; text: modelData.title || ""
-                    selected: app.libraryId===modelData.id || app.collectionItem.id===modelData.id
-                    onClicked: app.open(modelData)
-                }
-            }
-            Item { Layout.fillHeight: true }
-            MButton { objectName: "miniPlayerButton"; symbol: "mini"; tip: "Mini player · Ctrl+M"; text: navigationRail.expanded?"Mini player":""; leftAligned: navigationRail.expanded; Layout.preferredWidth: navigationRail.expanded?navigationRail.shownWidth-32:48; Layout.alignment: navigationRail.expanded ? Qt.AlignLeft : Qt.AlignHCenter; Layout.leftMargin: navigationRail.expanded ? 16 : 0; onClicked: window.openMiniPlayer() }
-            MButton { objectName: "settingsButton"; symbol: "settings"; tip: "Settings"; text: navigationRail.expanded?"Settings":""; leftAligned: navigationRail.expanded; Layout.preferredWidth: navigationRail.expanded?navigationRail.shownWidth-32:48; Layout.alignment: navigationRail.expanded ? Qt.AlignLeft : Qt.AlignHCenter; Layout.leftMargin: navigationRail.expanded ? 16 : 0; Layout.bottomMargin: 20; onClicked: settingsDialog.open() }
-        }
-        ColumnLayout {
-            // A navigation bar spans the window and sits against its bottom
-            // edge, so the column gives up its own margins on those sides once
-            // the window is compact.
-            Layout.fillWidth: true; Layout.fillHeight: true
-            Layout.leftMargin: window.compactWindow ? 12 : 0
-            Layout.rightMargin: window.compactWindow ? 0 : 16
-            Layout.topMargin: 16
-            Layout.bottomMargin: window.compactWindow ? 0 : 16
+            // With navigation in the top bar there is no pane down the side,
+            // so the column keeps the same inset on every edge instead of
+            // giving two of them up to a rail and a bar.
+            anchors.fill: parent
+            anchors.margins: window.compactWindow ? 12 : 16
             spacing: 12
-            RowLayout {
-                Layout.fillWidth: true; spacing: 12
+            // Material's small top app bar. The back action leads and the
+            // window's own actions trail. The navigation capsule is centred on
+            // the bar rather than on the gap between those two, so it holds
+            // still as they change width.
+            Item {
+                id: topBar
+                objectName: "topBar"
+                Layout.fillWidth: true
+                Layout.preferredHeight: 64
                 MButton {
-                    objectName: "drawerButton"; symbol: "menu"; tip: "Navigation"
-                    visible: window.compactWindow
-                    onClicked: navigationDrawer.open()
+                    objectName: "backButton"; symbol: "back"; tip: "Back"
+                    anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                    enabled: app.canBack; onClicked: window.navigateBack()
                 }
-                MButton { symbol: "back"; tip: "Back"; enabled: app.canBack; onClicked: window.navigateBack() }
-                Rectangle {
-                    id: searchBox; z: 20
-                    Layout.fillWidth: true; Layout.preferredHeight: 56; Layout.maximumWidth: 640
-                    Layout.horizontalStretchFactor: 20
-                    // Material's search bar sits on surfaceContainerHigh whether
-                    // or not it holds focus; the focus ring does the rest.
-                    color: Theme.high; radius: Theme.shapeExtraLarge
-                    border.width: searchField.activeFocus?2:0; border.color: Theme.focusRing
-                    Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-                    // Material raises the search bar three levels, so it holds
-                    // its own against whatever scrolls beneath it rather than
-                    // sitting in the page with it.
-                    MElevation { objectName: "searchBarShade"; anchors.fill: parent; radius: parent.radius; level: 3 }
-                    RowLayout {
-                        anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 8; spacing: 12
-                        // The leading icon says what the bar is for, so it is
-                        // drawn in the surface ink; the trailing clear button
-                        // is an action on it and stays in the variant.
-                        Icon { name: "search"; ink: Theme.text }
-                        TextField {
-                            font.family: Theme.fontFamily; id: searchField; objectName: "searchField"; Layout.fillWidth: true; Layout.fillHeight: true
-                            placeholderText: app.page==="server"?"Search server":"Search music"; placeholderTextColor: Theme.muted
-                            color: Theme.text; selectionColor: Theme.primaryContainer; selectedTextColor: Theme.text
-                            font.pixelSize: Theme.bodyLarge; background: null; selectByMouse: true
-                            Accessible.name: app.page==="server"?"Search music server":"Search songs, albums, artists, playlists, or paste a YouTube link"
-                            property var suggestions: []
-                            property int highlighted: -1
-                            property bool dismissed: false
-                            function updateSuggestions() {
-                                highlighted=-1;
-                                if(app.page==="server"){suggestions=[];return;}
-                                // Material's search view groups what it offers under
-                                // category labels rather than running it together.
-                                suggestions=text.trim()
-                                    ? app.localMatches(text).map(m=>Object.assign({},m,{group:m.kind==="local"?"Playlists":"Songs"}))
-                                    : app.recentSearches.map(q=>({title:q,recent:true,group:"Recent"}));
-                            }
-                            function submit() {if(app.page==="server"){dismissed=true;app.browseServer("search",text,serverToolbar.searchFilter);content.forceActiveFocus();return;}dismissed=true;window.destination="search";window.localPlaylist="";app.search(text,window.filter);content.forceActiveFocus();}
-                            function choose(index) {
-                                if(index<0 || index>=suggestions.length){submit();return;}
-                                const item=suggestions[index];dismissed=true;
-                                if(item.recent){text=item.title;submit();}
-                                else {app.rememberSearch(text);content.forceActiveFocus();if(item.kind==="local")app.openPlaylist(item.id);else if(item.queueIndex!==undefined && app.queue.get(item.queueIndex).id===item.id)app.playAt(item.queueIndex);else app.playKeepingQueue(item);}
-                            }
-                            onTextEdited: {highlighted=-1;dismissed=false;suggestionDelay.restart();}
-                            onActiveFocusChanged: {if(activeFocus){dismissed=false;updateSuggestions();}else suggestionDelay.stop();}
-                            onAccepted: choose(highlighted)
-                            Keys.onPressed: event=> {
-                                if((event.key===Qt.Key_Down || event.key===Qt.Key_Up) && suggestionDelay.running){suggestionDelay.stop();updateSuggestions();}
-                                if(event.key===Qt.Key_Delete && (event.modifiers&Qt.ShiftModifier) && highlighted>=0 && suggestions[highlighted].recent){
-                                    const previous=highlighted;app.removeRecentSearch(suggestions[highlighted].title);highlighted=Math.min(previous,suggestions.length-1);event.accepted=true;return;
-                                }
-                                if(event.key===Qt.Key_Down && suggestions.length){dismissed=false;highlighted=Math.min(suggestions.length-1,highlighted+1);suggestionList.positionViewAtIndex(highlighted,ListView.Contain);event.accepted=true;}
-                                else if(event.key===Qt.Key_Up && suggestions.length){highlighted=Math.max(-1,highlighted-1);if(highlighted>=0)suggestionList.positionViewAtIndex(highlighted,ListView.Contain);event.accepted=true;}
-                                else if(event.key===Qt.Key_Escape){dismissed=true;highlighted=-1;event.accepted=true;}
-                            }
-                            Timer { id: suggestionDelay; interval: 90; onTriggered: searchField.updateSuggestions() }
-                            Connections { target: app; function onRecentSearchesChanged(){if(searchField.activeFocus)searchField.updateSuggestions();} function onLibraryChanged(){if(searchField.activeFocus)suggestionDelay.restart();} }
-                            Connections { target: app.queue; function onCountChanged(){if(searchField.activeFocus)suggestionDelay.restart();} }
-                        }
-                        MButton { symbol: "close"; tip: "Clear search"; visible: searchField.text.length>0; onClicked: {searchField.clear();searchField.forceActiveFocus();searchField.dismissed=false;searchField.updateSuggestions();} }
-                    }
-                    Popup {
-                        id: searchSuggestions; objectName: "searchSuggestions"; parent: searchBox
-                        // Material docks the search view under the bar when there
-                        // is room and gives it the whole screen when there is not.
-                        readonly property bool fullScreen: window.compactWindow
-                        y: searchBox.height+6; width: searchBox.width
-                        height: fullScreen ? Math.max(120,window.height-190)
-                                           : Math.min(window.height-220,suggestionList.contentHeight+16)
-                        visible: searchField.activeFocus && !searchField.dismissed && searchField.suggestions.length>0
-                        focus: false; padding: 8; closePolicy: Popup.CloseOnPressOutside
-                        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: app.motion?Theme.fast:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-                        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: app.motion?Theme.fast:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-                        onClosed: searchField.dismissed=true
-                        background: Rectangle {
-                            // Material's docked search view is the extra large
-                            // corner, not the step below it.
-                            radius: Theme.shapeExtraLarge; color: Theme.high; border.width: 1; border.color: Theme.outlineVariant
-                            MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
-                        }
-                        contentItem: ListView {
-                            id: suggestionList; objectName: "suggestionList"; clip: true; model: searchField.suggestions; currentIndex: searchField.highlighted
-                            ScrollBar.vertical: ScrollBar {}
-                            delegate: Item {
-                                id: suggestionRow
-                                readonly property bool highlighted: index===searchField.highlighted
-                                required property var modelData; required property int index
-                                // The first row of a category carries its label.
-                                readonly property bool opensGroup: !!modelData.group && (index===0 || searchField.suggestions[index-1].group!==modelData.group)
-                                width: suggestionList.width; height: 56+(opensGroup?28:0)
-                                SungText {
-                                    objectName: "suggestionGroup_"+index
-                                    visible: suggestionRow.opensGroup
-                                    x: 12; width: parent.width-24; height: 28
-                                    verticalAlignment: Text.AlignVCenter
-                                    text: modelData.group || ""; font.pixelSize: Theme.labelMedium; color: Theme.muted
-                                }
-                                Item {
-                                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 56
-                                    Rectangle { anchors.fill: parent; radius: Theme.shapeMedium; color: suggestionRow.highlighted?Theme.secondaryContainer:"transparent" }
-                                    Rectangle {
-                                        objectName: "suggestionStateLayer"; anchors.fill: parent; radius: Theme.shapeMedium
-                                        color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.text
-                                        opacity: suggestionButton.down?Theme.pressedOpacity:suggestionButton.hovered?Theme.hoverOpacity:0
-                                        Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-                                    }
-                                    AbstractButton {
-                                        id: suggestionButton; objectName: "suggestion_"+index; hoverEnabled: true
-                                        anchors.fill: parent; anchors.rightMargin: modelData.recent?40:0; focusPolicy: Qt.NoFocus
-                                        leftPadding: 64; rightPadding: 12
-                                        Accessible.name: modelData.title+(modelData.artist?", "+modelData.artist:"")+(modelData.origin?", "+modelData.origin:"")
-                                        Accessible.selected: suggestionRow.highlighted
-                                        onClicked: searchField.choose(index)
-                                        contentItem: Item {
-                                            Column {
-                                                objectName: "suggestionLabels"
-                                                width: parent.width; anchors.verticalCenter: parent.verticalCenter; spacing: 2
-                                                SungText { width: parent.width; text: modelData.title; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.text; font.pixelSize: Theme.bodyMedium }
-                                                SungText { width: parent.width; visible: !!modelData.origin; text: (modelData.artist?modelData.artist+" · ":"")+(modelData.origin||""); font.pixelSize: Theme.bodySmall; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted }
-                                            }
-                                        }
-                                    }
-                                    // Material gives every row in the view a leading
-                                    // element: the cover where there is one, and the
-                                    // icon for what the row is where there is not.
-                                    Item {
-                                        objectName: "suggestionLeading_"+index
-                                        x: 12; anchors.verticalCenter: parent.verticalCenter; width: 40; height: 40
-                                        Artwork { anchors.fill: parent; visible: !!modelData.art; radius: Theme.shapeSmall; pixels: 120; url: modelData.art || "" }
-                                        Icon {
-                                            anchors.centerIn: parent; visible: !modelData.art
-                                            name: modelData.recent ? "history" : modelData.kind==="local" ? "library" : "disc"
-                                            ink: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted
-                                        }
-                                    }
-                                    MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; implicitWidth: 36; implicitHeight: 36; symbol: "close"; tip: "Remove recent search · Shift+Delete"; focusPolicy: Qt.NoFocus; visible: modelData.recent===true; onClicked: app.removeRecentSearch(modelData.title) }
-                                }
-                            }
-                        }
-                    }
+                Item { id: topBarCentre; anchors.fill: parent }
+                Row {
+                    id: topBarActions
+                    anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4
+                    MButton { objectName: "miniPlayerButton"; symbol: "mini"; tip: "Mini player · Ctrl+M"; onClicked: window.openMiniPlayer() }
+                    MButton { objectName: "settingsButton"; symbol: "settings"; tip: "Settings"; onClicked: settingsDialog.open() }
                 }
-                Item { Layout.fillWidth: true; Layout.horizontalStretchFactor: 1 }
+            }
+            // A compact window cannot centre the capsule between the two sides
+            // and still clear them, so the bar spans the column there, which is
+            // the width Material gives it in the first place.
+            Item {
+                id: narrowNavHost
+                objectName: "narrowNavHost"
+                visible: !window.atLeastMedium
+                Layout.fillWidth: true
+                Layout.preferredHeight: visible ? 64 : 0
             }
             RowLayout {
                 id: contentRow
@@ -891,7 +688,156 @@ ApplicationWindow {
                             }
                             ColumnLayout {
                                 Layout.fillWidth: true; spacing: 6
-                            SungText {heading: true; text: window.serverDisconnected ? "Music server" : window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                                // Material's search bar, on the page it belongs to
+                                // rather than in the window's chrome. Search is one
+                                // of the three destinations, so a bar that is always
+                                // on screen is a second door into the same room and
+                                // says nothing on the two pages that are not it.
+                                // 360dp to 720dp is the width Material gives it.
+                                Rectangle {
+                                    id: searchBox; z: 20
+                                    visible: app.page==="search" || (app.page==="server" && !window.serverDisconnected)
+                                    Layout.fillWidth: true; Layout.preferredHeight: 56
+                                    Layout.minimumWidth: 0; Layout.maximumWidth: 720
+                                    // Material's search bar sits on surfaceContainerHigh whether
+                                    // or not it holds focus; the focus ring does the rest.
+                                    color: Theme.high; radius: Theme.shapeExtraLarge
+                                    border.width: searchField.activeFocus?2:0; border.color: Theme.focusRing
+                                    Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+                                    // Material raises the search bar three levels, so it holds
+                                    // its own against whatever scrolls beneath it rather than
+                                    // sitting in the page with it.
+                                    MElevation { objectName: "searchBarShade"; anchors.fill: parent; radius: parent.radius; level: 3 }
+                                    RowLayout {
+                                        anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 8; spacing: 12
+                                        // The leading icon says what the bar is for, so it is
+                                        // drawn in the surface ink; the trailing clear button
+                                        // is an action on it and stays in the variant.
+                                        Icon { name: "search"; ink: Theme.text }
+                                        TextField {
+                                            font.family: Theme.fontFamily; id: searchField; objectName: "searchField"; Layout.fillWidth: true; Layout.fillHeight: true
+                                            placeholderText: app.page==="server"?"Search server":"Search music"; placeholderTextColor: Theme.muted
+                                            color: Theme.text; selectionColor: Theme.primaryContainer; selectedTextColor: Theme.text
+                                            font.pixelSize: Theme.bodyLarge; background: null; selectByMouse: true
+                                            Accessible.name: app.page==="server"?"Search music server":"Search songs, albums, artists, playlists, or paste a YouTube link"
+                                            property var suggestions: []
+                                            property int highlighted: -1
+                                            property bool dismissed: false
+                                            function updateSuggestions() {
+                                                highlighted=-1;
+                                                if(app.page==="server"){suggestions=[];return;}
+                                                // Material's search view groups what it offers under
+                                                // category labels rather than running it together.
+                                                suggestions=text.trim()
+                                                    ? app.localMatches(text).map(m=>Object.assign({},m,{group:m.kind==="local"?"Playlists":"Songs"}))
+                                                    : app.recentSearches.map(q=>({title:q,recent:true,group:"Recent"}));
+                                            }
+                                            function submit() {if(app.page==="server"){dismissed=true;app.browseServer("search",text,serverToolbar.searchFilter);content.forceActiveFocus();return;}dismissed=true;window.destination="search";window.localPlaylist="";app.search(text,window.filter);content.forceActiveFocus();}
+                                            function choose(index) {
+                                                if(index<0 || index>=suggestions.length){submit();return;}
+                                                const item=suggestions[index];dismissed=true;
+                                                if(item.recent){text=item.title;submit();}
+                                                else {app.rememberSearch(text);content.forceActiveFocus();if(item.kind==="local")app.openPlaylist(item.id);else if(item.queueIndex!==undefined && app.queue.get(item.queueIndex).id===item.id)app.playAt(item.queueIndex);else app.playKeepingQueue(item);}
+                                            }
+                                            onTextEdited: {highlighted=-1;dismissed=false;suggestionDelay.restart();}
+                                            onActiveFocusChanged: {if(activeFocus){dismissed=false;updateSuggestions();}else suggestionDelay.stop();}
+                                            onAccepted: choose(highlighted)
+                                            Keys.onPressed: event=> {
+                                                if((event.key===Qt.Key_Down || event.key===Qt.Key_Up) && suggestionDelay.running){suggestionDelay.stop();updateSuggestions();}
+                                                if(event.key===Qt.Key_Delete && (event.modifiers&Qt.ShiftModifier) && highlighted>=0 && suggestions[highlighted].recent){
+                                                    const previous=highlighted;app.removeRecentSearch(suggestions[highlighted].title);highlighted=Math.min(previous,suggestions.length-1);event.accepted=true;return;
+                                                }
+                                                if(event.key===Qt.Key_Down && suggestions.length){dismissed=false;highlighted=Math.min(suggestions.length-1,highlighted+1);suggestionList.positionViewAtIndex(highlighted,ListView.Contain);event.accepted=true;}
+                                                else if(event.key===Qt.Key_Up && suggestions.length){highlighted=Math.max(-1,highlighted-1);if(highlighted>=0)suggestionList.positionViewAtIndex(highlighted,ListView.Contain);event.accepted=true;}
+                                                else if(event.key===Qt.Key_Escape){dismissed=true;highlighted=-1;event.accepted=true;}
+                                            }
+                                            Timer { id: suggestionDelay; interval: 90; onTriggered: searchField.updateSuggestions() }
+                                            Connections { target: app; function onRecentSearchesChanged(){if(searchField.activeFocus)searchField.updateSuggestions();} function onLibraryChanged(){if(searchField.activeFocus)suggestionDelay.restart();} }
+                                            Connections { target: app.queue; function onCountChanged(){if(searchField.activeFocus)suggestionDelay.restart();} }
+                                        }
+                                        MButton { symbol: "close"; tip: "Clear search"; visible: searchField.text.length>0; onClicked: {searchField.clear();searchField.forceActiveFocus();searchField.dismissed=false;searchField.updateSuggestions();} }
+                                    }
+                                    Popup {
+                                        id: searchSuggestions; objectName: "searchSuggestions"; parent: searchBox
+                                        // Material docks the search view under the bar when there
+                                        // is room and gives it the whole screen when there is not.
+                                        readonly property bool fullScreen: window.compactWindow
+                                        y: searchBox.height+6; width: searchBox.width
+                                        height: fullScreen ? Math.max(120,window.height-190)
+                                                           : Math.min(window.height-220,suggestionList.contentHeight+16)
+                                        visible: searchField.activeFocus && !searchField.dismissed && searchField.suggestions.length>0
+                                        focus: false; padding: 8; closePolicy: Popup.CloseOnPressOutside
+                                        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: app.motion?Theme.fast:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+                                        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: app.motion?Theme.fast:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+                                        onClosed: searchField.dismissed=true
+                                        background: Rectangle {
+                                            // Material's docked search view is the extra large
+                                            // corner, not the step below it.
+                                            radius: Theme.shapeExtraLarge; color: Theme.high; border.width: 1; border.color: Theme.outlineVariant
+                                            MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
+                                        }
+                                        contentItem: ListView {
+                                            id: suggestionList; objectName: "suggestionList"; clip: true; model: searchField.suggestions; currentIndex: searchField.highlighted
+                                            ScrollBar.vertical: ScrollBar {}
+                                            delegate: Item {
+                                                id: suggestionRow
+                                                readonly property bool highlighted: index===searchField.highlighted
+                                                required property var modelData; required property int index
+                                                // The first row of a category carries its label.
+                                                readonly property bool opensGroup: !!modelData.group && (index===0 || searchField.suggestions[index-1].group!==modelData.group)
+                                                width: suggestionList.width; height: 56+(opensGroup?28:0)
+                                                SungText {
+                                                    objectName: "suggestionGroup_"+index
+                                                    visible: suggestionRow.opensGroup
+                                                    x: 12; width: parent.width-24; height: 28
+                                                    verticalAlignment: Text.AlignVCenter
+                                                    text: modelData.group || ""; font.pixelSize: Theme.labelMedium; color: Theme.muted
+                                                }
+                                                Item {
+                                                    anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 56
+                                                    Rectangle { anchors.fill: parent; radius: Theme.shapeMedium; color: suggestionRow.highlighted?Theme.secondaryContainer:"transparent" }
+                                                    Rectangle {
+                                                        objectName: "suggestionStateLayer"; anchors.fill: parent; radius: Theme.shapeMedium
+                                                        color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.text
+                                                        opacity: suggestionButton.down?Theme.pressedOpacity:suggestionButton.hovered?Theme.hoverOpacity:0
+                                                        Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+                                                    }
+                                                    AbstractButton {
+                                                        id: suggestionButton; objectName: "suggestion_"+index; hoverEnabled: true
+                                                        anchors.fill: parent; anchors.rightMargin: modelData.recent?40:0; focusPolicy: Qt.NoFocus
+                                                        leftPadding: 64; rightPadding: 12
+                                                        Accessible.name: modelData.title+(modelData.artist?", "+modelData.artist:"")+(modelData.origin?", "+modelData.origin:"")
+                                                        Accessible.selected: suggestionRow.highlighted
+                                                        onClicked: searchField.choose(index)
+                                                        contentItem: Item {
+                                                            Column {
+                                                                objectName: "suggestionLabels"
+                                                                width: parent.width; anchors.verticalCenter: parent.verticalCenter; spacing: 2
+                                                                SungText { width: parent.width; text: modelData.title; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.text; font.pixelSize: Theme.bodyMedium }
+                                                                SungText { width: parent.width; visible: !!modelData.origin; text: (modelData.artist?modelData.artist+" · ":"")+(modelData.origin||""); font.pixelSize: Theme.bodySmall; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted }
+                                                            }
+                                                        }
+                                                    }
+                                                    // Material gives every row in the view a leading
+                                                    // element: the cover where there is one, and the
+                                                    // icon for what the row is where there is not.
+                                                    Item {
+                                                        objectName: "suggestionLeading_"+index
+                                                        x: 12; anchors.verticalCenter: parent.verticalCenter; width: 40; height: 40
+                                                        Artwork { anchors.fill: parent; visible: !!modelData.art; radius: Theme.shapeSmall; pixels: 120; url: modelData.art || "" }
+                                                        Icon {
+                                                            anchors.centerIn: parent; visible: !modelData.art
+                                                            name: modelData.recent ? "history" : modelData.kind==="local" ? "library" : "disc"
+                                                            ink: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted
+                                                        }
+                                                    }
+                                                    MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; implicitWidth: 36; implicitHeight: 36; symbol: "close"; tip: "Remove recent search · Shift+Delete"; focusPolicy: Qt.NoFocus; visible: modelData.recent===true; onClicked: app.removeRecentSearch(modelData.title) }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            SungText {heading: true; visible: !searchBox.visible; text: window.serverDisconnected ? "Music server" : window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                                 SungText { objectName: "albumArtist"; visible: !!app.albumInfo.artist;opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true; text: app.albumInfo.artist || ""; font.pixelSize: Theme.bodyLarge; color: Theme.muted; maximumLineCount: 2; wrapMode: Text.Wrap }
                                 SungText { objectName: "albumSummary"; visible: !!app.albumInfo.summary;opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true; text: app.albumInfo.summary || ""; font.pixelSize: Theme.appBarSubtitle.medium; color: Theme.muted; wrapMode: Text.Wrap }
                             }
@@ -1097,17 +1043,17 @@ ApplicationWindow {
                                 // lists declared below it take the presses,
                                 // and the button is visible but dead.
                                 z: libraryFab.z
-                                width: libraryFab.inRail ? 0 : libraryFab.width
-                                height: libraryFab.inRail ? 0 : libraryFab.height
+                                width: libraryFab.width
+                                height: libraryFab.height
                             }
                             MFabMenu {
                                 id: libraryFab
                                 objectName: "libraryFab"
-                                readonly property bool inRail: navigationRail.visible
-                                parent: inRail ? railFabSlot : contentFabHost
-                                extended: inRail && navigationRail.expanded
-                                downward: inRail
-                                leadingEdge: inRail
+                                // Material puts the surface's primary action on
+                                // the surface it acts on. With no rail to head,
+                                // the library's own pane is that surface, and
+                                // the slot above reserves the room for it.
+                                parent: contentFabHost
                                 anchors.left: parent.left
                                 anchors.top: parent.top
                                 visible: window.libraryAddApplies
@@ -1374,27 +1320,33 @@ ApplicationWindow {
                     VolumeControl {id:volumeControl;showSlider:window.width>=1160}
                 }
             }
-            MNavigationBar {
-                objectName: "navigationBar"
-                Layout.fillWidth: true
-                Layout.leftMargin: -parent.Layout.leftMargin
-                Layout.topMargin: 4
-                visible: window.compactWindow
-                // A window with little height to spare takes Material's short
-                // bar, which sets each label beside its icon instead of under.
-                shortBar: window.height < 700
-                destinations: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library",badged:app.importingLocal}]
-                current: window.destination
-                onChosen: key => {
-                    if(window.destination===key)return
-                    destinationTransition.fadeThrough(() => {
-                        window.destination=key
-                        if(key==="home")app.home()
-                        else if(key==="search"){app.startSearch();window.focusSearch();}
-                        else window.applyLibrary("favorites")
-                    })
-                }
-            }
+        }
+    }
+    // One navigation bar for every window size. It is the capsule the top bar
+    // centres while there is room to centre it, and the full-width bar of the
+    // specification once there is not, so a window that narrows changes where
+    // the destinations are rather than what they are.
+    MNavigationBar {
+        objectName: "navigationBar"
+        parent: window.atLeastMedium ? topBarCentre : narrowNavHost
+        visible: !window.compactMode && !window.immersive
+        anchors.centerIn: parent
+        hugsContent: window.atLeastMedium
+        width: hugsContent ? implicitWidth : parent.width
+        height: implicitHeight
+        destinations: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library"}]
+        // Importing is pending work inside the library, so the destination
+        // says so while it runs.
+        badgedKeys: app.importingLocal ? ["library"] : []
+        current: window.destination
+        onChosen: key => {
+            if(window.destination===key)return
+            destinationTransition.fadeThrough(() => {
+                window.destination=key
+                if(key==="home")app.home()
+                else if(key==="search"){app.startSearch();window.focusSearch();}
+                else window.applyLibrary("favorites")
+            })
         }
     }
     Component {
@@ -1541,52 +1493,6 @@ ApplicationWindow {
         Item { id: sheetHost; anchors.fill: parent; anchors.margins: 18; anchors.topMargin: 6 }
     }
 
-    MNavigationDrawer {
-        id: navigationDrawer; objectName: "navigationDrawer"
-        parent: window.contentItem
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 4
-            Repeater {
-                model: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library"}]
-                MNavigationItem {
-                    required property var modelData
-                    objectName: "drawerNav_"+modelData.key
-                    expanded: true
-                    Layout.fillWidth: true; Layout.preferredHeight: 56
-                    symbol: modelData.icon; text: modelData.label
-                    selected: window.destination===modelData.key
-                    badged: modelData.key==="library" && app.importingLocal
-                    onClicked: {
-                        navigationDrawer.close()
-                        if(window.destination===modelData.key)return
-                        window.destination=modelData.key
-                        if(modelData.key==="home")app.home()
-                        else if(modelData.key==="search"){app.startSearch();window.focusSearch();}
-                        else window.applyLibrary("favorites")
-                    }
-                }
-            }
-            MDivider { objectName: "drawerDivider"; inset: 16; visible: app.pins.length>0; Layout.fillWidth: true; Layout.topMargin: 4 }
-            SungText { visible: app.pins.length>0; text: "Pinned"; color: Theme.muted; font.pixelSize: Theme.titleSmall; typeRole: "titleSmall"; Layout.leftMargin: 16 }
-            Repeater {
-                model: app.pins.slice(0,6)
-                MNavigationItem {
-                    required property var modelData
-                    required property int index
-                    objectName: "drawerPin_"+index
-                    expanded: true
-                    Layout.fillWidth: true; Layout.preferredHeight: 48
-                    artUrl: modelData.art || ""; text: modelData.title || ""
-                    selected: app.libraryId===modelData.id
-                    onClicked: { navigationDrawer.close(); app.open(modelData) }
-                }
-            }
-            Item { Layout.fillHeight: true }
-            MButton { objectName: "drawerMiniPlayer"; symbol: "mini"; text: "Mini player"; leftAligned: true; Layout.fillWidth: true; onClicked: { navigationDrawer.close(); window.openMiniPlayer() } }
-            MButton { objectName: "drawerSettings"; symbol: "settings"; text: "Settings"; leftAligned: true; Layout.fillWidth: true; onClicked: { navigationDrawer.close(); settingsDialog.open() } }
-        }
-    }
 
     MMenu {
         id: bulkActions; objectName: "bulkActions"
