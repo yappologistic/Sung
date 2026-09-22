@@ -46,8 +46,12 @@ Dialog {
         // The surface itself is the dialog's background and stays; the shadow
         // it casts is a stack of rounded rectangles, and nothing casts one
         // until the dialog has been on the screen.
+        // The shadow carries its own z to sit behind the surface it lifts, and
+        // a holder in front of the surface would put it back in front, tinting
+        // the face of the dialog. The holder takes the z instead.
         Loader {
             anchors.fill: parent
+            z: -1
             active: dialog.built
             sourceComponent: MElevation { radius: dialog.background.radius; level: dialog.fullScreen ? 0 : 3 }
         }
