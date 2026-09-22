@@ -18,12 +18,14 @@ target_link_libraries(sung PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::Q
 target_compile_options(sung PRIVATE -Wall -Wextra -Wpedantic "$<$<CONFIG:Release>:-Oz;-ffunction-sections;-fdata-sections>")
 target_link_options(sung PRIVATE "$<$<CONFIG:Release>:-Oz;-Wl,--gc-sections;-Wl,-z,pack-relative-relocs>")
 set_target_properties(sung PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
-# This small, first-use-only component can compile on demand. Keep the player
-# and animation components precompiled, without embedding unused picker bytecode.
-set_source_files_properties(qml/FileDialogs.qml PROPERTIES QT_QML_SKIP_CACHEGEN TRUE)
+# Every component is precompiled, including the first-use-only picker, because
+# the module below keeps no QML source in the binary for the engine to fall
+# back to. Its bytecode costs less than the source it replaces.
 set_source_files_properties(qml/Theme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 set_target_properties(sung PROPERTIES QT_QMLCACHEGEN_ARGUMENTS "--only-bytecode")
-qt_add_qml_module(sung URI SungUi VERSION 1.0 NO_PLUGIN NO_RESOURCE_TARGET_PATH RESOURCE_PREFIX "/"
+# DISCARD_QML_CONTENTS drops the QML source from the resource. The engine runs
+# the compiled units, so the text was only ever a fallback nothing reaches.
+qt_add_qml_module(sung URI SungUi VERSION 1.0 NO_PLUGIN NO_RESOURCE_TARGET_PATH DISCARD_QML_CONTENTS RESOURCE_PREFIX "/"
  QML_FILES qml/MDockedToolbar.qml qml/MCheckbox.qml qml/MRadioButton.qml qml/MExposedDropdown.qml qml/MCard.qml qml/MBottomSheet.qml qml/MShape.qml qml/MRichTooltip.qml qml/MTooltip.qml qml/MDragHandle.qml qml/MWavyProgress.qml qml/MAppBarRow.qml qml/MElevation.qml qml/MBadge.qml qml/MNavigationBar.qml qml/MNavigationDrawer.qml qml/NavigationRail.qml qml/MPullToRefresh.qml qml/MCarousel.qml qml/MFloatingToolbar.qml qml/MFabMenu.qml qml/MSplitButton.qml qml/PlaylistVersions.qml qml/ListeningStats.qml qml/SingAlong.qml qml/ArtistHero.qml qml/NavigationTransition.qml qml/MSettingRow.qml qml/Onboarding.qml qml/AmbientBackdrop.qml qml/ImmersiveCoverflow.qml qml/AccentPicker.qml qml/PlaybackHud.qml qml/VolumeControl.qml qml/ViewLayoutDialog.qml qml/HomeEditor.qml qml/OutputPicker.qml qml/ListeningSessions.qml qml/PlaylistCoverDialog.qml qml/CommandPalette.qml qml/ArtworkControls.qml qml/MatchText.qml qml/PlayingIndicator.qml qml/TrackPresentation.qml qml/PlaylistCover.qml qml/CatalogSkeleton.qml qml/SmartPlaylistDialog.qml qml/TrackDetailsDialog.qml qml/ShortcutHelp.qml qml/MScrollBar.qml qml/MSmoothWheel.qml qml/MTextField.qml qml/MSearchField.qml qml/MSegmentedControl.qml qml/ServerConnection.qml qml/ServerToolbar.qml qml/MChip.qml qml/LibraryTabs.qml qml/MLoadingIndicator.qml qml/TrackList.qml qml/SelectionBar.qml qml/FileDialogs.qml qml/SettingSlider.qml qml/LyricsView.qml qml/ImmersivePlayer.qml qml/MiniPlayer.qml qml/MMenu.qml qml/MMenuItem.qml qml/MDivider.qml qml/MDialog.qml qml/MSwitch.qml qml/Main.qml qml/Theme.qml qml/Icon.qml qml/MButton.qml qml/MNavigationItem.qml qml/SungText.qml qml/ArtworkViewer.qml qml/PlaybackGlyph.qml qml/Artwork.qml qml/TrackRow.qml qml/ArtCard.qml qml/SeekBar.qml)
 file(GLOB icons CONFIGURE_DEPENDS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" assets/icons/*.svg)
 qt_add_resources(sung assets PREFIX "/" FILES ${icons}
