@@ -404,6 +404,9 @@ public:
   // Material derives every color role from one source color. The result only
   // changes when that color or the theme does, so it is worth remembering.
   Q_INVOKABLE QVariantMap colorScheme(const QColor &source,bool dark) const;
+  // Material's springs, converted to the duration and curve Qt Quick animates
+  // on. Read once per scheme; the physics does not depend on anything else.
+  Q_INVOKABLE QVariantMap motionSprings(bool expressive) const;
   // Material's shape library. `shapeOutline` hands back the radii the named
   // shape carries at `steps` even angles, which is what the loading indicator
   // morphs between and what masks artwork.

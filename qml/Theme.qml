@@ -181,28 +181,30 @@ QtObject {
     readonly property int extendedFabGap: 8
 
     // --- Motion --------------------------------------------------------------
-    // Material replaced easing and duration with springs. Qt Quick animates on
-    // curves, and the specification publishes the curve each spring converts to
-    // for exactly this case, so the tokens below are those conversions.
+    // Material describes motion as springs, published as a damping ratio and a
+    // stiffness, not as a duration and a curve. The conversion lives in
+    // src/m3motion.cpp, which solves each spring's own step response and fits
+    // the curve Qt Quick animates on to it; the duration is the settling time
+    // that falls out of the physics. Nothing here is chosen by eye.
     //
-    // Two schemes. Expressive overshoots its target and settles back, which is
-    // what gives it life; standard eases in without the bounce. Spatial springs
-    // move things, so they may overshoot. Effects springs carry colour and
-    // opacity, where overshooting would mean passing through a wrong value, so
-    // they never do.
+    // Two schemes. Expressive rings; standard barely does. Spatial springs move
+    // things and are underdamped, so they pass their target and come back.
+    // Effects springs carry colour and opacity, where passing the target would
+    // mean showing a wrong value, so they are critically damped and do not.
     readonly property bool expressiveMotion: app.motionScheme !== "standard"
-    readonly property var springFastSpatial: expressiveMotion ? [0.42,1.67,0.21,0.90,1,1] : [0.27,1.06,0.18,1.00,1,1]
-    readonly property var springSpatial: expressiveMotion ? [0.38,1.21,0.22,1.00,1,1] : [0.27,1.06,0.18,1.00,1,1]
-    readonly property var springSlowSpatial: expressiveMotion ? [0.39,1.29,0.35,0.98,1,1] : [0.27,1.06,0.18,1.00,1,1]
-    readonly property var springFastEffects: [0.31,0.94,0.34,1.00,1,1]
-    readonly property var springEffects: [0.34,0.80,0.34,1.00,1,1]
-    readonly property var springSlowEffects: [0.34,0.88,0.34,1.00,1,1]
-    readonly property int springFastSpatialMs: app.motion ? 350 : 0
-    readonly property int springSpatialMs: app.motion ? (expressiveMotion ? 500 : 500) : 0
-    readonly property int springSlowSpatialMs: app.motion ? (expressiveMotion ? 650 : 750) : 0
-    readonly property int springFastEffectsMs: app.motion ? 150 : 0
-    readonly property int springEffectsMs: app.motion ? 200 : 0
-    readonly property int springSlowEffectsMs: app.motion ? 300 : 0
+    readonly property var springs: app.motionSprings(expressiveMotion)
+    readonly property var springFastSpatial: springs.fastSpatial.curve
+    readonly property var springSpatial: springs.defaultSpatial.curve
+    readonly property var springSlowSpatial: springs.slowSpatial.curve
+    readonly property var springFastEffects: springs.fastEffects.curve
+    readonly property var springEffects: springs.defaultEffects.curve
+    readonly property var springSlowEffects: springs.slowEffects.curve
+    readonly property int springFastSpatialMs: app.motion ? springs.fastSpatial.ms : 0
+    readonly property int springSpatialMs: app.motion ? springs.defaultSpatial.ms : 0
+    readonly property int springSlowSpatialMs: app.motion ? springs.slowSpatial.ms : 0
+    readonly property int springFastEffectsMs: app.motion ? springs.fastEffects.ms : 0
+    readonly property int springEffectsMs: app.motion ? springs.defaultEffects.ms : 0
+    readonly property int springSlowEffectsMs: app.motion ? springs.slowEffects.ms : 0
 
     // --- Typography ----------------------------------------------------------
     readonly property string fontFamily: "Google Sans Flex"

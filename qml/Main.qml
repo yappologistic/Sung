@@ -380,11 +380,19 @@ ApplicationWindow {
     readonly property bool sheetMode: !atLeastExpanded
     readonly property bool artistPage: app.page==="artist" || app.page==="local-artist" || (app.page==="server" && app.serverRequest.mode==="artist")
     function confirmQueued() { toastPending=false;toastText="Added to queue";toastPending=true; }
+    // Which destination navigation marks. Pressing one marks it at once, while
+    // the page it leads to changes on the transition's own timing. The two were
+    // the same property, so the indicator sat still for the whole of the
+    // outgoing fade and then finished moving long after the page had settled,
+    // which is what made a destination change feel like two separate events.
+    property string markedDestination: destination
+    onDestinationChanged: markedDestination = destination
     // Both arrangements offer the same three destinations, so they reach them
     // through the same function rather than each keeping its own copy of what
     // arriving somewhere means.
     function goToDestination(key) {
         if(destination===key)return
+        markedDestination=key
         destinationTransition.fadeThrough(() => {
             destination=key
             if(key==="home")app.home()
@@ -543,7 +551,7 @@ ApplicationWindow {
             visible: window.railShowing
             expandedPreference: railSettings.expanded
             roomToExpand: window.atLeastExpanded
-            current: window.destination
+            current: window.markedDestination
             pins: app.pins
             libraryPending: app.importingLocal
             fabApplies: window.libraryAddApplies
@@ -1472,7 +1480,7 @@ ApplicationWindow {
         // Importing is pending work inside the library, so the destination
         // says so while it runs.
         badgedKeys: app.importingLocal ? ["library"] : []
-        current: window.destination
+        current: window.markedDestination
         onChosen: key => window.goToDestination(key)
     }
     // The window's two actions. They trail the top bar in one arrangement and

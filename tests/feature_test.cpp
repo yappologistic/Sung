@@ -2,6 +2,7 @@
 // drives the real application and asserts against what the running window
 // reports, then photographs the result for review.
 #include "uitest.h"
+#include "m3motion.h"
 #include "backend.h"
 #include "m3color.h"
 #include "rowselection.h"
@@ -391,6 +392,68 @@ void runNavigationMotionTests(Backend *b, QQuickWindow *w) {
       return c.finish();
   b->importMusicFolder(QUrl::fromLocalFile(c.directory + "/music"));
   c.check(c.until([&] { return !b->importingLocal(); }, 40000), "import the motion fixture");
+
+  // --- What a destination change actually looks like, frame by frame ---
+  // Switching between the three destinations was reported as jagged. The way
+  // to answer that is to sample the transition rather than describe it: every
+  // frame of one, with the numbers the eye is reacting to.
+  {
+    b->home();
+    c.check(c.until([&] { return !b->busy(); }), "Home is open to switch away from");
+    QTest::qWait(600);
+    auto shell = anyItem(w->contentItem(), "contentColumn");
+    auto arriving = anyItem(w->contentItem(), "navBarIndicator_library");
+    if (shell && arriving) {
+      c.tap("navBar_library");
+      struct Frame { int ms; double opacity, scale, indicator; };
+      QList<Frame> frames;
+      QElapsedTimer clock;
+      clock.start();
+      while (clock.elapsed() < 520) {
+        frames.append({int(clock.elapsed()), shell->opacity(), shell->scale(), arriving->width()});
+        QTest::qWait(16);
+      }
+      // Nothing may jump. A step of more than a fifth of the range in one
+      // frame is a cut rather than a movement, and that is what reads as a
+      // jolt however short the animation is.
+      double worstOpacity = 0, worstScale = 0;
+      for (int i = 1; i < frames.size(); ++i) {
+        worstOpacity = qMax(worstOpacity, qAbs(frames[i].opacity - frames[i - 1].opacity));
+        if (frames[i].opacity > 0.02 && frames[i - 1].opacity > 0.02)
+          worstScale = qMax(worstScale, qAbs(frames[i].scale - frames[i - 1].scale));
+      }
+      int worstGap = 0, atMs = 0;
+      for (int i = 1; i < frames.size(); ++i) {
+        worstGap = qMax(worstGap, frames[i].ms - frames[i - 1].ms);
+        if (qAbs(frames[i].opacity - frames[i - 1].opacity) >= worstOpacity - 1e-9) atMs = frames[i].ms;
+      }
+      c.check(worstOpacity <= 0.34,
+              QString("the view fades rather than cutting (worst step %1 at %2ms, sampled every %3ms at worst, %4 frames)")
+                  .arg(worstOpacity, 0, 'f', 3).arg(atMs).arg(worstGap).arg(frames.size()));
+      c.check(worstScale <= 0.05,
+              QString("and grows rather than snapping (worst step %1)").arg(worstScale, 0, 'f', 3));
+      // The indicator and the view finish together. One still travelling long
+      // after the other has settled is two animations, not one transition.
+      const auto settledAt = [&](std::function<bool(const Frame &)> done) {
+        for (int i = frames.size() - 1; i > 0; --i)
+          if (!done(frames[i - 1]))
+            return frames[i].ms;
+        return 0;
+      };
+      const double full = frames.isEmpty() ? 0 : frames.last().indicator;
+      const int viewDone = settledAt([](const Frame &f) { return f.opacity > 0.99 && f.scale > 0.999; });
+      const int pillDone = settledAt([&](const Frame &f) { return qAbs(f.indicator - full) < 1; });
+      c.check(qAbs(viewDone - pillDone) < 90,
+              QString("the view and its indicator settle together (%1ms and %2ms)")
+                  .arg(viewDone).arg(pillDone));
+      c.shot("00-destination-change");
+    } else {
+      c.check(false, "the content column and the arriving indicator are both there");
+    }
+    b->home();
+    c.check(c.until([&] { return !b->busy(); }), "back to Home");
+    QTest::qWait(400);
+  }
 
   auto column = anyItem(w->contentItem(), "contentColumn");
   auto body = anyItem(w->contentItem(), "contentBody");
@@ -1782,33 +1845,66 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
               .arg(offScale.isEmpty() ? QString() : ", but " + offScale.mid(0, 6).join("; ")));
   c.shot("01-shape-scale");
 
-  // --- Motion: the published spring conversions, and a real overshoot ---
+  // --- Motion: springs, not curves chosen by eye ---
+  // Material publishes a damping ratio and a stiffness. src/m3motion.cpp
+  // solves the spring that describes and fits the curve Qt animates on to it,
+  // so what the window runs has to be that, exactly, rather than a number
+  // typed into the theme that happens to look springy.
   c.check(b->motionScheme() == "expressive",
           "Material recommends the expressive scheme, so it is the default");
   const auto curve = [&c](const QString &token) { return c.evaluate("Theme." + token).toList(); };
-  const auto spatial = curve("springSpatial");
-  c.check(spatial.size() >= 4 && qAbs(spatial[1].toDouble() - 1.21) < 0.001,
-          "the expressive spatial spring is the published conversion");
-  c.check(spatial.size() >= 4 && spatial[1].toDouble() > 1.0,
-          "which overshoots its target, because spatial springs bounce");
-  for (const auto &effects : {"springFastEffects", "springEffects", "springSlowEffects"}) {
-    const auto points = curve(effects);
-    c.check(points.size() >= 4 && points[1].toDouble() <= 1.0 && points[3].toDouble() <= 1.0,
-            QString("%1 never overshoots, because colour and opacity must not").arg(effects));
+  const auto peakOf = [](const QVariantList &points) {
+    double top = 0;
+    for (int i = 1; i < points.size(); i += 2)
+      top = qMax(top, points[i].toDouble());
+    return top;
+  };
+  const QList<QPair<QString, QString>> derived{{"springFastSpatial", "fastSpatial"},
+                                               {"springSpatial", "defaultSpatial"},
+                                               {"springSlowSpatial", "slowSpatial"},
+                                               {"springFastEffects", "fastEffects"},
+                                               {"springEffects", "defaultEffects"},
+                                               {"springSlowEffects", "slowEffects"}};
+  for (const auto &pair : derived) {
+    const auto tokens = m3::springTokens(true, pair.second);
+    const auto expected = m3::spring(tokens.damping, tokens.stiffness);
+    c.check(curve(pair.first) == expected.curve,
+            QString("Theme.%1 is the curve %2's spring solves to").arg(pair.first, pair.second));
+    c.check(c.evaluate("Theme." + pair.first + "Ms").toInt() == expected.durationMs,
+            QString("and runs for its settling time, %1ms (%2)")
+                .arg(expected.durationMs)
+                .arg(c.evaluate("Theme." + pair.first + "Ms").toInt()));
   }
-  c.check(c.evaluate("Theme.springSpatialMs").toInt() == 500 &&
-              c.evaluate("Theme.springFastEffectsMs").toInt() == 150,
-          "the spring durations are the published ones");
+  // A spatial spring passes its target and an effects spring does not, which
+  // is the whole reason Material separates them.
+  const double spatialPeak = peakOf(curve("springSpatial"));
+  c.check(spatialPeak > 1.0,
+          QString("the spatial spring passes its target (%1)").arg(spatialPeak, 0, 'f', 3));
+  // And it passes it by the margin the physics gives, not by a third. An
+  // overshoot several times Material's is what reads as a jolt rather than a
+  // settle, which is what the hand-picked curves here used to do.
+  c.check(spatialPeak < 1.05,
+          QString("by Material's own margin rather than a chosen one (%1)")
+              .arg(spatialPeak, 0, 'f', 3));
+  for (const auto &effects : {"springFastEffects", "springEffects", "springSlowEffects"})
+    c.check(peakOf(curve(effects)) <= 1.0 + 1e-6,
+            QString("%1 never overshoots, because colour and opacity must not").arg(effects));
 
-  // Switching the scheme reaches the tokens, and the standard scheme settles
-  // rather than bouncing.
+  // Switching the scheme reaches the tokens, and the standard scheme rings
+  // less than the expressive one because its spatial springs are tighter.
   b->setMotionScheme("standard");
   QTest::qWait(200);
   const auto settled = curve("springSpatial");
-  c.check(settled.size() >= 4 && qAbs(settled[1].toDouble() - 1.06) < 0.001,
+  const auto standardTokens = m3::springTokens(false, "defaultSpatial");
+  c.check(settled == m3::spring(standardTokens.damping, standardTokens.stiffness).curve,
           "the standard scheme swaps in its own spatial spring");
-  c.check(settled[1].toDouble() < spatial[1].toDouble(),
-          "which overshoots less than the expressive one");
+  c.check(peakOf(settled) < spatialPeak,
+          QString("which overshoots less than the expressive one (%1 against %2)")
+              .arg(peakOf(settled), 0, 'f', 3).arg(spatialPeak, 0, 'f', 3));
+  c.check(c.evaluate("Theme.springSpatialMs").toInt() <
+              m3::spring(m3::springTokens(true, "defaultSpatial").damping,
+                         m3::springTokens(true, "defaultSpatial").stiffness).durationMs,
+          "and settles sooner, because a tighter spring is done sooner");
   b->setMotionScheme("expressive");
   QTest::qWait(200);
 
