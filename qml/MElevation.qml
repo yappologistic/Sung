@@ -40,17 +40,24 @@ Item {
         return out
     }
 
-    Repeater {
-        model: shade.rings
-        delegate: Rectangle {
-            objectName: "elevationRing"
-            required property var modelData
-            x: -modelData.reach
-            y: -modelData.reach + modelData.drop
-            width: shade.width + modelData.reach*2
-            height: shade.height + modelData.reach*2
-            radius: shade.radius + modelData.reach
-            color: Qt.rgba(0, 0, 0, modelData.alpha)
+    // A surface at level zero casts nothing, and most of the surfaces in a
+    // window sit at level zero. The repeater and the model behind it are not
+    // built until there is a shadow for them to draw.
+    Loader {
+        anchors.fill: parent
+        active: shade.step > 0
+        sourceComponent: Repeater {
+            model: shade.rings
+            delegate: Rectangle {
+                objectName: "elevationRing"
+                required property var modelData
+                x: -modelData.reach
+                y: -modelData.reach + modelData.drop
+                width: shade.width + modelData.reach*2
+                height: shade.height + modelData.reach*2
+                radius: shade.radius + modelData.reach
+                color: Qt.rgba(0, 0, 0, modelData.alpha)
+            }
         }
     }
 }

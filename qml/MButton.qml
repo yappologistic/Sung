@@ -187,12 +187,17 @@ AbstractButton {
             }
             SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; font.pixelSize: control.labelSize; labelRole: true; emphasized: control.size==="large"; width: control.leftAligned ? Math.max(0,control.width-(control.symbol.length || control.busy?control.sizedIcon+control.sizedGap+8:0)-control.contentInset-(control.trailingSymbol.length?36:18)) : implicitWidth; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
         }
-        Icon {
-            objectName: "buttonTrailingIcon"
-            visible: control.trailingSymbol.length > 0
+        // Most buttons carry no trailing symbol, and a button is built more
+        // often than anything else in the window, so the glyph waits until one
+        // is asked for rather than sitting in every button empty.
+        Loader {
+            active: control.trailingSymbol.length > 0
             anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
-            besideText: control.text.length ? control.labelSize : 0
-            name: control.trailingSymbol; ink: control.ink; Accessible.ignored: true
+            sourceComponent: Icon {
+                objectName: "buttonTrailingIcon"
+                besideText: control.text.length ? control.labelSize : 0
+                name: control.trailingSymbol; ink: control.ink; Accessible.ignored: true
+            }
         }
     }
     scale: down ? 0.96 : 1
