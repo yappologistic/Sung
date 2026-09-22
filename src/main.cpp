@@ -98,6 +98,19 @@ int main(int argc, char **argv) {
     qputenv("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", ",");
   if (!qEnvironmentVariableIsSet("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES"))
     qputenv("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", ",");
+  // Qt Quick packs small images into one texture atlas per window, sized by
+  // default to the window rounded up to a power of two. For the default window
+  // on a 1.6x display that is 2048x2048, allocated whole with the first image,
+  // and the NVIDIA driver keeps a copy in the process besides: 16 MiB of heap
+  // and 15 MiB pinned, for symbols that filled a tenth of it. The symbols are
+  // nearly all that goes in, and a tour of the interface at 1.6x peaks at
+  // 0.80 Mpx of them, which 1024x1024 holds. An image that does not fit is
+  // given a texture of its own, so a fuller atlas costs batching, not pixels.
+  // https://doc.qt.io/qt-6/qtquick-visualcanvas-scenegraph-renderer.html#texture-atlas
+  if (!qEnvironmentVariableIsSet("QSG_ATLAS_WIDTH"))
+    qputenv("QSG_ATLAS_WIDTH", "1024");
+  if (!qEnvironmentVariableIsSet("QSG_ATLAS_HEIGHT"))
+    qputenv("QSG_ATLAS_HEIGHT", "1024");
   QGuiApplication app(argc, argv);
   app.setApplicationName("sung");
   app.setApplicationDisplayName("Sung");

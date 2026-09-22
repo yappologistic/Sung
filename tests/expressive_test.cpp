@@ -1715,5 +1715,12 @@ void runFootprintTests(Backend *b, QQuickWindow *w) {
   delete row;
   QTest::qWait(100);
 
+  // --- The texture atlas starts at the size the symbols need ---
+  // Only a GPU renderer builds an atlas, so offscreen this can only see the
+  // default being in place before the window exists. A value brought in by
+  // the environment still wins over it.
+  c.check(qgetenv("QSG_ATLAS_WIDTH") == "1024" && qgetenv("QSG_ATLAS_HEIGHT") == "1024",
+          "the texture atlas defaults to 1024 by 1024");
+
   c.finish();
 }
