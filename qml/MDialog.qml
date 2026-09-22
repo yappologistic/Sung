@@ -29,18 +29,36 @@ Dialog {
     readonly property bool moreBelow: !!scrollSource && scrollSource.contentHeight > scrollSource.height+1
                                       && scrollSource.contentY < scrollSource.contentHeight-scrollSource.height-1
     focus: true
+    // A dialog's chrome is not built until the first time it opens. A dialog is
+    // off the screen until something asks for it, so building a header, a
+    // button bar and a background with the window spends memory and startup
+    // time on a tree nobody is looking at. It stays built afterwards: a dialog
+    // reopened is the common case, and rebuilding would cost a frame at exactly
+    // the moment it is being watched. aboutToShow runs before the enter
+    // transition, so the sizes below are in place for the first frame of it.
+    property bool built: false
+    onAboutToShow: built = true
     onOpened: if (initialFocus) initialFocus.forceActiveFocus(Qt.TabFocusReason)
     padding: 24
     anchors.centerIn: parent
     background: Rectangle {
         color: Theme.high; radius: dialog.fullScreen ? 0 : Theme.shapeExtraLarge
-        MElevation { anchors.fill: parent; radius: parent.radius; level: dialog.fullScreen ? 0 : 3 }
+        // The surface itself is the dialog's background and stays; the shadow
+        // it casts is a stack of rounded rectangles, and nothing casts one
+        // until the dialog has been on the screen.
+        Loader {
+            anchors.fill: parent
+            active: dialog.built
+            sourceComponent: MElevation { radius: dialog.background.radius; level: dialog.fullScreen ? 0 : 3 }
+        }
     }
     // Material gives a basic dialog an optional icon, and centres the headline
     // under it when there is one. It is for a prompt that has to be read before
     // it is answered, which is usually one that cannot be undone.
     property string symbol: ""
-    header: Item {
+    header: Loader {
+      active: dialog.built
+      sourceComponent: Item {
         // A full-screen dialog is headed by a 56dp bar carrying the close
         // affordance and the headline beside it, ruled off from the content.
         implicitHeight: dialog.fullScreen ? 56
@@ -77,10 +95,14 @@ Dialog {
             anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
             height: 1; color: Theme.outlineVariant
         }
+      }
     }
     footer: DialogButtonBox {
         visible: dialog.standardButtons !== Dialog.NoButton
-        standardButtons: dialog.standardButtons
+        // Qt finds a dialog's accept and reject by casting the footer to a
+        // DialogButtonBox, so the box itself stays; asking it for no buttons
+        // until the dialog is built keeps the buttons out of the startup tree.
+        standardButtons: dialog.built ? dialog.standardButtons : DialogButtonBox.NoButton
         alignment: Qt.AlignRight
         buttonLayout: DialogButtonBox.AndroidLayout
         // Material's full-screen dialog puts its actions on a 56dp bar at the
