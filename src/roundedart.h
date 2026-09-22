@@ -34,6 +34,9 @@ public:
     if (m_radius == r)
       return;
     m_radius = r;
+    // A rounded edge is masked into the render target and needs the item's
+    // own resolution, so gaining or losing one changes what the target may be.
+    fitTextureSize();
     emit radiusChanged();
     update();
   }
@@ -42,6 +45,7 @@ public:
     if (m_shape == s)
       return;
     m_shape = s;
+    fitTextureSize();
     emit shapeChanged();
     update();
   }
@@ -93,6 +97,9 @@ private:
   void refresh();
   void imageReady();
   void soften();
+  // Keeps the render target no larger than the picture it carries.
+  void fitTextureSize();
+  void geometryChange(const QRectF &, const QRectF &) override;
   const QImage &shown() const;
   void finishTransition();
   bool m_crossfade=false,m_previousFit=false;

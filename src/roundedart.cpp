@@ -13,7 +13,9 @@
 #include <QPainterPath>
 #include <QStandardPaths>
 #include <QThread>
+#include <QQuickWindow>
 #include <QThreadPool>
+#include <QtMath>
 #include <QtConcurrentRun>
 #include <utility>
 
@@ -110,7 +112,7 @@ void RoundedArt::setAnimation(MotionArtwork *animation) {
   if(m_animation==animation)return;
   if(m_animation)disconnect(m_animation,nullptr,this,nullptr);
   m_animation=animation;
-  if(animation)connect(animation,&MotionArtwork::frameChanged,this,[this]{emit readyChanged();update();});
+  if(animation)connect(animation,&MotionArtwork::frameChanged,this,[this]{fitTextureSize();emit readyChanged();update();});
   emit animationChanged();emit readyChanged();update();
 }
 void RoundedArt::soften() {
@@ -126,16 +128,18 @@ void RoundedArt::setBlur(int radius) {
     return;
   m_blur = radius;
   soften();
+  fitTextureSize();
   emit blurChanged();
   update();
 }
 void RoundedArt::finishTransition(){
   if(m_fade)m_fade->stop();
-  m_previous={};m_softPrevious={};m_mix=1;emit transitionChanged();emit readyChanged();update();
+  m_previous={};m_softPrevious={};m_mix=1;fitTextureSize();emit transitionChanged();emit readyChanged();update();
 }
 void RoundedArt::setCrossfade(bool value){if(value==m_crossfade)return;m_crossfade=value;if(!value)finishTransition();emit crossfadeChanged();}
 void RoundedArt::imageReady(){
   soften();
+  fitTextureSize();
   if(m_crossfade && !m_previous.isNull() && !m_image.isNull()){
     if(!m_fade){m_fade=std::make_unique<QVariantAnimation>();m_fade->setDuration(220);m_fade->setStartValue(0.0);m_fade->setEndValue(1.0);m_fade->setEasingCurve(QEasingCurve::InOutCubic);
       connect(m_fade.get(),&QVariantAnimation::valueChanged,this,[this](const QVariant &value){m_mix=value.toReal();update();});
@@ -167,7 +171,7 @@ void RoundedArt::reload(bool preserve) {
   // Whatever a running decode was reading is no longer what this surface
   // shows, so its result is discarded when it arrives.
   ++m_decode;
-  if(!preserve){m_image = {};m_softImage = {};}
+  if(!preserve){m_image = {};m_softImage = {};fitTextureSize();}
   emit readyChanged();
   update();
   if (m_source.isEmpty())
@@ -267,6 +271,47 @@ void RoundedArt::reload(bool preserve) {
     if(m_image.isNull() && resized && !m_originalSizeFallback){m_originalSizeFallback=true;reload();return;}
     imageReady();
   });
+}
+// A painted surface keeps a render target the size of the item, and the scene
+// graph a texture beside it. Neither needs more pixels than the picture drawn
+// into them: a cover decoded at `pixels`, or softened down to a wash, carries
+// no detail above its own resolution, and rasterising it into a buffer several
+// times that size costs the difference twice over for nothing. The ambient
+// backdrop is the case that pays: a 160px cover filling a window was taking a
+// multi-megabyte target at both ends.
+//
+// The cap only applies where the item has no rounded or shaped edge. That edge
+// is masked into the same target, and it is the one thing in the surface that
+// does need the item's own resolution to stay crisp.
+void RoundedArt::fitTextureSize() {
+  const qreal dpr = window() ? window()->effectiveDevicePixelRatio() : 1.0;
+  const QSize full(qCeil(width() * dpr), qCeil(height() * dpr));
+  // Nothing drawn needs no target at all. A surface waiting on its cover, or
+  // one whose cover never arrives, was still being given a buffer the size of
+  // the item at both ends; a single pixel stretched over it is the same
+  // transparency, and the real target is put back the moment a picture lands.
+  const QImage &art = m_animation && !m_animation->frame().isNull() ? m_animation->frame() : shown();
+  const QImage &behind = m_blur > 0 && !m_softPrevious.isNull() ? m_softPrevious : m_previous;
+  if (art.isNull() && behind.isNull()) {
+    setTextureSize(QSize(1, 1));
+    return;
+  }
+  if (art.isNull() || full.isEmpty() || m_radius > 0 || m3::hasShape(m_shape)) {
+    setTextureSize({});
+    return;
+  }
+  const int carried = qMax(art.width(), art.height());
+  const int spans = qMax(full.width(), full.height());
+  if (carried >= spans) {
+    setTextureSize({});
+    return;
+  }
+  setTextureSize(QSize(qMax(1, full.width() * carried / spans),
+                       qMax(1, full.height() * carried / spans)));
+}
+void RoundedArt::geometryChange(const QRectF &current, const QRectF &previous) {
+  QQuickPaintedItem::geometryChange(current, previous);
+  fitTextureSize();
 }
 void RoundedArt::paint(QPainter *p) {
   const auto &image=m_animation && !m_animation->frame().isNull()?m_animation->frame():shown();
