@@ -22,6 +22,7 @@
 #include <QQuickImageProvider>
 #include <QQuickPaintedItem>
 #include <QEventLoop>
+#include <QAbstractAnimation>
 #include <QtMath>
 #include <QQuickStyle>
 #include <QQuickWindow>
@@ -261,6 +262,55 @@ int main(int argc, char **argv) {
       fflush(stdout);app.quit();
     },Qt::QueuedConnection);
     QTimer::singleShot(10000,&app,[&]{app.exit(2);});
+    return app.exec();
+  }
+  // What keeps the process awake while nothing is happening. Counts the frames
+  // drawn over the window given in SUNG_IDLE_PROBE seconds, then names every
+  // animation and timer still running, so an idle cost can be traced to the
+  // thing causing it rather than guessed at.
+  if (qEnvironmentVariableIsSet("SUNG_IDLE_PROBE")) {
+    const int seconds = qMax(2, qEnvironmentVariableIntValue("SUNG_IDLE_PROBE"));
+    auto *frames = new int(0);
+    QObject::connect(window, &QQuickWindow::frameSwapped, &app, [frames] { ++*frames; });
+    QTimer::singleShot(seconds * 1000, &app, [&app, &engine, frames, seconds] {
+      fprintf(stdout, "IDLE_FRAMES %d over %ds (%.1f/s)\n", *frames, seconds, *frames / double(seconds));
+      const auto path = [](QObject *o) {
+        QStringList parts;
+        for (QObject *n = o; n && parts.size() < 5; n = n->parent())
+          parts.prepend(n->objectName().isEmpty() ? QString::fromLatin1(n->metaObject()->className())
+                                                  : n->objectName());
+        return parts.join('/');
+      };
+      // A QML animation is not a QAbstractAnimation; QQuickAbstractAnimation
+      // owns one. So the declarative types are found by their own property.
+      QHash<QString, int> animations, timers;
+      std::function<void(QObject *)> walk = [&](QObject *o) {
+        const QByteArray type = o->metaObject()->className();
+        if (auto *a = qobject_cast<QAbstractAnimation *>(o)) {
+          if (a->state() == QAbstractAnimation::Running)
+            ++animations[QString("%1  [%2]").arg(path(o), QString::fromLatin1(type))];
+        } else if (auto *t = qobject_cast<QTimer *>(o)) {
+          if (t->isActive()) ++timers[QString("%1 every %2ms").arg(path(o)).arg(t->interval())];
+        } else if (o->metaObject()->indexOfProperty("running") >= 0 &&
+                   o->property("running").toBool()) {
+          if (type.contains("Timer"))
+            ++timers[QString("%1 every %2ms").arg(path(o)).arg(o->property("interval").toInt())];
+          else if (type.contains("Animation") || type.contains("Behavior") ||
+                   type.contains("Transition"))
+            ++animations[QString("%1  [%2]").arg(path(o), QString::fromLatin1(type))];
+        }
+        for (auto *child : o->children()) walk(child);
+      };
+      for (auto *root : engine.rootObjects()) walk(root);
+      fprintf(stdout, "RUNNING_ANIMATIONS %d\n", int(animations.size()));
+      for (auto it = animations.cbegin(); it != animations.cend(); ++it)
+        fprintf(stdout, "  %dx %s\n", it.value(), qPrintable(it.key()));
+      fprintf(stdout, "RUNNING_TIMERS %d\n", int(timers.size()));
+      for (auto it = timers.cbegin(); it != timers.cend(); ++it)
+        fprintf(stdout, "  %dx %s\n", it.value(), qPrintable(it.key()));
+      fflush(stdout);
+      app.quit();
+    });
     return app.exec();
   }
   if (args.contains("--benchmark")) {
