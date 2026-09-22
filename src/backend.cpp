@@ -81,7 +81,8 @@ Backend::Backend(QObject *parent) : QObject(parent) {
   });
   m_saveTimer.setSingleShot(true);
   m_saveTimer.setInterval(600);
-  connect(&m_saveTimer, &QTimer::timeout, this, &Backend::save);
+  connect(&m_saveTimer, &QTimer::timeout, this, &Backend::saveInBackground);
+  m_saver.setMaxThreadCount(1);
   m_sleepFadeStart.setSingleShot(true);
   m_sleepFadeTick.setInterval(100);
   connect(&m_sleepFadeStart,&QTimer::timeout,this,[this]{updateSleepGain();m_sleepFadeTick.start();});
@@ -1394,26 +1395,45 @@ void Backend::load() {
   m_index = qBound(-1, d.value("index", -1).toInt(), m_queue.count() - 1);
   m_savedPosition=qMax<qint64>(0,d.value("position").toLongLong());
 }
-void Backend::save() {
-  if(!m_storageHealthy)return;
-  QDir().mkpath(dataPath());
-  QSaveFile f(dataPath() + "/library.json");
-  if (!f.open(QIODevice::WriteOnly)) {
-    notifyError("Could not save your library.");
-    return;
-  }
+QVariantMap Backend::libraryDocument() const {
+  return {{"musicFolders",m_musicFolders},{"localTracks",m_localTracks},{"favorites", m_favorites},
+          {"history", m_history},{"lastPlayed",m_lastPlayed},{"plays",m_plays},{"playlistVersions",m_playlistVersions},
+          {"sessions",m_sessions},{"playlists", m_playlists},{"pins",m_pins},{"lyricOffsets",m_lyricOffsets},
+          {"queue", m_queue.rows},
+          {"index", m_index},{"position",position()}};
+}
+// Safe away from the thread that owns the library: every value in the document
+// is implicitly shared, and an edit made meanwhile detaches its own copy.
+// https://doc.qt.io/qt-6/threads-modules.html#threads-and-implicitly-shared-classes
+static bool writeLibrary(const QString &path, const QVariantMap &document) {
+  QSaveFile f(path);
+  if (!f.open(QIODevice::WriteOnly))
+    return false;
   f.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-  f.write(QJsonDocument::fromVariant(QVariantMap{{"musicFolders",m_musicFolders},{"localTracks",m_localTracks},{"favorites", m_favorites},
-                                                 {"history", m_history},{"lastPlayed",m_lastPlayed},{"plays",m_plays},{"playlistVersions",m_playlistVersions},
-                                                 {"sessions",m_sessions},{"playlists", m_playlists},{"pins",m_pins},{"lyricOffsets",m_lyricOffsets},
-                                                 {"queue", m_queue.rows},
-                                                 {"index", m_index},{"position",position()}})
-              .toJson(QJsonDocument::Compact));
-  if (!f.commit())
-    notifyError("Could not save your library.");
+  f.write(QJsonDocument::fromVariant(document).toJson(QJsonDocument::Compact));
+  const bool written = f.commit();
   // Writing builds the whole document in memory, several times the size of the
   // file, and none of it outlives this function.
   returnFreedMemory();
+  return written;
+}
+void Backend::save() {
+  if(!m_storageHealthy)return;
+  // Whoever asks by name wants the file now: tests reading it back, and the
+  // last save before exit. A background write still under way goes first, so
+  // the state taken here is the one that lands last.
+  m_saver.waitForDone();
+  QDir().mkpath(dataPath());
+  if (!writeLibrary(dataPath() + "/library.json", libraryDocument()))
+    notifyError("Could not save your library.");
+}
+void Backend::saveInBackground() {
+  if(!m_storageHealthy)return;
+  QDir().mkpath(dataPath());
+  m_saver.start([this, path = dataPath() + "/library.json", document = libraryDocument()] {
+    if (!writeLibrary(path, document))
+      QMetaObject::invokeMethod(this, [this] { notifyError("Could not save your library."); }, Qt::QueuedConnection);
+  });
 }
 void Backend::recordHistory() {
   if(m_historyPaused){m_skipHistoryToken=m_trackToken;return;}

@@ -8,6 +8,7 @@
 #include <QSettings>
 #include <QTimer>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QVariantMap>
 #include <QColor>
 #include <functional>
@@ -832,6 +833,13 @@ private:
   void adoptHandoff(int index);
   bool finishGapless();
   QTimer m_saveTimer, m_sleepTimer, m_sleepTick, m_sleepFadeStart, m_sleepFadeTick;
+  // The saves that follow an edit are written on a thread of their own. Turning
+  // a large library into JSON takes a third of a second, and doing it here held
+  // up every frame for that long each time a song changed. One thread, so the
+  // writes land in the order they were asked for.
+  QThreadPool m_saver;
+  QVariantMap libraryDocument() const;
+  void saveInBackground();
   double m_userVolume=0.65, m_sleepGain=1.0, m_normalizationGain=1.0, m_normalizationDb=0.0, m_trim=0.0;
   bool m_sleepAtQueueEnd=false;
   QString m_normalizationSource;
