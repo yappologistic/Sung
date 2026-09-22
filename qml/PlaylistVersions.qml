@@ -103,7 +103,7 @@ MDialog {
             }
             Column {
                 anchors.centerIn: parent
-                spacing: 10
+                spacing: 12
                 visible: list.count === 0
                 SungText {
                     objectName: "playlistVersionsEmpty"

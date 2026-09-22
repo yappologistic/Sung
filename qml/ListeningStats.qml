@@ -78,7 +78,7 @@ MDialog {
                     color: Theme.primaryFixed
                     ColumnLayout {
                         anchors.fill: parent
-                        anchors.margins: 14
+                        anchors.margins: 16
                         spacing: 2
                         SungText { text: figure.modelData.label; color: Theme.primaryFixedVariantText; font.pixelSize: Theme.labelMedium }
                         SungText {
@@ -180,8 +180,8 @@ MDialog {
                 color: index % 2 === 0 ? Theme.container : "transparent"
                 RowLayout {
                     anchors.fill: parent
-                    anchors.leftMargin: 14
-                    anchors.rightMargin: 14
+                    anchors.leftMargin: 16
+                    anchors.rightMargin: 16
                     spacing: 12
                     SungText {
                         text: String(parent.parent.index+1)

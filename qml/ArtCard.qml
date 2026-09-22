@@ -36,9 +36,9 @@ Item {
         onClicked: {if(card.openHandler)card.openHandler(card.track,art);else app.open(card.track);}
         background: Rectangle { radius: art.radius; border.width: openCard.activeFocus?3:0; border.color: Theme.focusRing; color: "transparent"; opacity: 1; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } }
     }
-    MButton { id: cardAction; objectName: "cardAction"; anchors.right: art.right; anchors.bottom: art.bottom; anchors.margins: 10; busy: card.loadingCover; symbol: card.playableCover ? "play" : "chevron"; tip: (card.playableCover ? "Play " : "Open ") + (card.track.title || ""); filled: true; opacity: hover.hovered || openCard.activeFocus || cardAction.activeFocus || card.loadingCover ? 1 : 0; visible: opacity>0; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } onClicked: {if(card.playableCover)app.playCover(card.track);else app.open(card.track);} }
+    MButton { id: cardAction; objectName: "cardAction"; anchors.right: art.right; anchors.bottom: art.bottom; anchors.margins: 12; busy: card.loadingCover; symbol: card.playableCover ? "play" : "chevron"; tip: (card.playableCover ? "Play " : "Open ") + (card.track.title || ""); filled: true; opacity: hover.hovered || openCard.activeFocus || cardAction.activeFocus || card.loadingCover ? 1 : 0; visible: opacity>0; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } onClicked: {if(card.playableCover)app.playCover(card.track);else app.open(card.track);} }
     MButton {
-        anchors.right: art.right; anchors.top: art.top; anchors.margins: 10
+        anchors.right: art.right; anchors.top: art.top; anchors.margins: 12
         symbol: "pin"; tonal: true; toggle: true; selected: {app.pins;return app.isPinned(card.track);}
         tip: selected?"Unpin from Home":"Pin to Home"
         visible: !String(card.track.kind).startsWith("local-") && !(card.track.videoId || card.track.localPath) && (hover.hovered || openCard.activeFocus || activeFocus || selected)

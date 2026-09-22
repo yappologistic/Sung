@@ -7,7 +7,7 @@ import QtQuick.Layouts
 Flow {
     id: picker
     objectName: "accentPicker"
-    spacing: 10
+    spacing: 12
     readonly property var seeds: ["","#6750a4","#386a20","#00658e","#8f4c38","#7d5260","#6b5f00"]
     readonly property var names: ["Default","Purple","Green","Blue","Terracotta","Mauve","Olive"]
     Repeater {

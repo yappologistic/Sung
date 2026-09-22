@@ -1845,6 +1845,36 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
               .arg(offScale.isEmpty() ? QString() : ", but " + offScale.mid(0, 6).join("; ")));
   c.shot("01-shape-scale");
 
+  // --- Spacing: the grid, not numbers picked by eye ---
+  // Material lays out on a 4dp grid, so every gap between things on a page has
+  // to be a step on it. Components are the exception, and Material's own token
+  // files say so: a split button holds 2dp between its halves and several
+  // components hold 6dp between an icon and the label beside it. Those two are
+  // allowed because the specification publishes them, not because they look
+  // close enough.
+  {
+    QStringList offGrid;
+    for (auto item : w->findChildren<QQuickItem *>()) {
+      if (!item->isVisible())
+        continue;
+      const auto property = QQmlProperty(item, "spacing", qmlContext(item));
+      if (!property.isValid())
+        continue;
+      const double gap = property.read().toDouble();
+      if (gap <= 0 || gap == 6 || gap == 2)
+        continue;
+      if (int(gap) % 4 != 0 || qAbs(gap - int(gap)) > 0.01)
+        offGrid.append(QString("%1 on %2")
+                           .arg(gap, 0, 'f', 1)
+                           .arg(item->objectName().isEmpty() ? QString(item->metaObject()->className())
+                                                             : item->objectName()));
+    }
+    c.check(offGrid.isEmpty(),
+            offGrid.isEmpty()
+                ? QStringLiteral("every gap on screen is a step on Material's 4dp grid")
+                : QString("every gap on screen is a step on the grid, but %1").arg(offGrid.mid(0, 6).join("; ")));
+  }
+
   // --- Motion: springs, not curves chosen by eye ---
   // Material publishes a damping ratio and a stiffness. src/m3motion.cpp
   // solves the spring that describes and fits the curve Qt animates on to it,
@@ -5089,6 +5119,40 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
     }
     w->resize(full);
     QTest::qWait(900);
+  }
+
+  // --- A press does not wobble under the finger ---
+  // Material morphs a button's container squarer while it is held and gives
+  // that morph the effects spring on purpose, saying so in as many words: a
+  // spatial spring would ring, and a control answering a finger must not move
+  // under it after the finger has stopped.
+  {
+    QTest::qWait(300);
+    auto pressed = shownItem(w->contentItem(), "settingsButton");
+    auto surface = pressed ? pressed->property("background").value<QQuickItem *>() : nullptr;
+    c.check(pressed && surface, "a button is on screen to press");
+    if (pressed && surface) {
+      const double resting = surface->property("radius").toReal();
+      const auto point = pressed->mapToScene(pressed->boundingRect().center()).toPoint();
+      QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, point);
+      double lowest = resting, settled = resting;
+      QElapsedTimer clock;
+      clock.start();
+      while (clock.elapsed() < 400) {
+        settled = surface->property("radius").toReal();
+        lowest = qMin(lowest, settled);
+        QTest::qWait(8);
+      }
+      QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, point);
+      QTest::qWait(400);
+      c.check(settled < resting - 0.5,
+              QString("holding it morphs the container squarer (%1 from %2)")
+                  .arg(settled, 0, 'f', 1).arg(resting, 0, 'f', 1));
+      // Ringing would carry it past the squarer corner and back.
+      c.check(lowest >= settled - 0.5,
+              QString("and settles there without ringing past it (%1 against %2)")
+                  .arg(lowest, 0, 'f', 1).arg(settled, 0, 'f', 1));
+    }
   }
 
   // --- A segment marks a choice, so it takes the secondary container ---

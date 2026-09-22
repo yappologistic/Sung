@@ -91,7 +91,7 @@ Item {
             }
             RowLayout {
                 objectName: "artistHeroActions"
-                spacing: 10
+                spacing: 12
                 opacity: 1-hero.collapse
                 Layout.maximumHeight: implicitHeight*(1-hero.collapse)
                 clip: true

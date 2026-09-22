@@ -29,6 +29,19 @@ QtObject {
         for(let i=0;i<=100;++i){const color=blend(seed,end,i/100);if(surfaces.every(s=>contrast(color,s)>=4.5))return color;}
         return end;
     }
+    // --- Spacing --------------------------------------------------------------
+    // Material lays out on a 4dp grid and names the steps it uses. A gap that
+    // is not one of these is a number somebody picked, and the interface audit
+    // says so. Two values below the grid are Material's own: components hold
+    // 6dp between an icon and the label beside it, which several component
+    // token files publish, and a hairline is a hairline.
+    readonly property var spacingScale: [4,8,12,16,24,32,40,48,56,64]
+    readonly property int spaceSmall: 4
+    readonly property int space: 8
+    readonly property int spaceMedium: 12
+    readonly property int spaceLarge: 16
+    readonly property int spaceExtraLarge: 24
+
     // --- Shape ---------------------------------------------------------------
     // Material's ten step corner radius scale. Components map to a step by how
     // round they should look, not by how big they are, and `full` is a real

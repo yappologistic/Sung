@@ -13,7 +13,7 @@ MDialog {
     onClosed: preview=""
     standardButtons: Dialog.NoButton
     ColumnLayout {
-        anchors.fill: parent; spacing: 10
+        anchors.fill: parent; spacing: 12
         Item {
             id: crop; Layout.fillWidth:true; Layout.fillHeight:true; clip:true
             Item {

@@ -747,7 +747,7 @@ ApplicationWindow {
                         // transform keeps that off the layout's own geometry.
                         property real shift: 0
                         transform: Translate { x: contentColumn.shift }
-                        anchors.fill: parent; anchors.margins: localGroups.visible?Math.max(12,window.paneMargin-8):window.paneMargin; spacing: app.page==="server"?8:localGroups.visible?12:18
+                        anchors.fill: parent; anchors.margins: localGroups.visible?Math.max(12,window.paneMargin-8):window.paneMargin; spacing: app.page==="server"?8:localGroups.visible?12:16
                         ArtistHero {
                             objectName: "artistHero"
                             Layout.fillWidth: true
@@ -874,7 +874,7 @@ ApplicationWindow {
                             // open; the row takes them back as it collapses, so
                             // exactly one Play is ever on screen.
                             visible: tracks.selection.count===0 && app.results.count>0 && !window.feedShowing && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong) && (!window.artistPage || content.compactHeader)
-                            Layout.fillWidth: true; spacing: 10
+                            Layout.fillWidth: true; spacing: 12
                             MSplitButton {
                                 objectName: "collectionPlay"
                                 text: "Play"; symbol: "play"; filled: true
@@ -1077,7 +1077,7 @@ ApplicationWindow {
                                     MButton { objectName:"loadMoreButton"; anchors.centerIn: parent; text: app.busy ? "Loading…" : "Load more"; busy: app.busy; enabled: !app.busy; tonal: true; visible: app.canMore && tracks.count>0; onClicked: app.more() }
                                 }
                                 Column {
-                                    objectName: "collectionEmptyState"; anchors.centerIn: parent; width: Math.min(parent.width,320); spacing: 14
+                                    objectName: "collectionEmptyState"; anchors.centerIn: parent; width: Math.min(parent.width,320); spacing: 16
                                     visible: app.collection.count===0 && !app.busy && !window.serverDisconnected
                                     Icon { anchors.horizontalCenter: parent.horizontalCenter; name: app.error?"refresh":app.collection.query || app.page==="search"?"search":"library"; size: 36; ink: Theme.muted }
                                     SungText { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"No local music yet":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "No songs yet" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: Theme.bodyLarge }
@@ -1119,7 +1119,7 @@ ApplicationWindow {
                                     }
                                 }
                                 Column {
-                                    anchors.centerIn: parent; spacing: 18; visible: app.playlists.length===0
+                                    anchors.centerIn: parent; spacing: 16; visible: app.playlists.length===0
                                     Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "library"; size: 36; ink: Theme.muted }
                                     SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "No playlists yet"; color: Theme.muted; font.pixelSize: Theme.bodyLarge }
                                     MButton { anchors.horizontalCenter: parent.horizontalCenter; text: "New playlist"; symbol: "plus"; filled: true; onClicked: {window.playlistAction="create";playlistName.clear();playlistDialog.open();} }
@@ -1205,7 +1205,12 @@ ApplicationWindow {
                     }
                     MButton { symbol: "heart"; tip: app.liked?"Unlike":"Like"; toggle: true; selected: app.liked; enabled: app.currentIndex>=0; visible: window.width>=1050; onClicked: app.toggleLike(app.current) }
                     ColumnLayout {
-                        Layout.fillWidth: true; Layout.maximumWidth: 520; spacing: 0
+                        // The transport and the seek bar share this column. It
+                        // was held to 520 and a spacer beside it took the rest,
+                        // so on a wide window the bar stayed a few hundred
+                        // pixels long while the bar it sits in was over a
+                        // thousand. A minute of music was a handful of pixels.
+                        Layout.fillWidth: true; Layout.maximumWidth: 960; spacing: 0
                         RowLayout {
                             Layout.alignment: Qt.AlignHCenter; spacing: 6
                             MButton { objectName: "playerShuffle"; symbol: "shuffle"; tip: "Shuffle"; toggle: true; selected: app.shuffle; onClicked: app.shuffle=!app.shuffle; visible: window.width>=980 }
@@ -1215,13 +1220,13 @@ ApplicationWindow {
                             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; toggle: true; selected: app.repeat>0; onClicked: app.repeat=(app.repeat+1)%3; visible: window.width>=980 }
                         }
                         RowLayout {
-                            Layout.fillWidth: true; spacing: 10
+                            Layout.fillWidth: true; spacing: 12
                             SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34 }
                             SeekBar { Layout.fillWidth: true; objectName: "seekBar" }
                             SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
                         }
                     }
-                    Item { Layout.fillWidth: true; visible: window.width>=1320 }
+
                     MButton { symbol: "lyrics"; tip: "Lyrics · Ctrl+Y"; toggle: true; selected: window.side==="lyrics"; enabled: app.currentIndex>=0; onClicked: window.activateSide("lyrics") }
                     MButton {
                         objectName: "queueButton"; symbol: "queue"; tip: "Queue · Ctrl+L"
@@ -1297,7 +1302,7 @@ ApplicationWindow {
         // sitting in the page with it.
         MElevation { objectName: "searchBarShade"; anchors.fill: parent; radius: parent.radius; level: 3 }
         RowLayout {
-            anchors.fill: parent; anchors.leftMargin: 18; anchors.rightMargin: 8; spacing: 12
+            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 8; spacing: 12
             // The leading icon says what the bar is for, so it is
             // drawn in the surface ink; the trailing clear button
             // is an action on it and stays in the variant.
@@ -1550,7 +1555,7 @@ ApplicationWindow {
                 onActivate: (row,item)=>app.playKeepingQueue(item)
                 onMenuRequested: (item,index,anchor)=>window.trackMenu(item,index,anchor,false)
                 onAddSelected: window.addBatch(recentList)
-                Column { anchors.centerIn: parent; spacing: 14; visible: app.recentlyPlayed.count===0
+                Column { anchors.centerIn: parent; spacing: 16; visible: app.recentlyPlayed.count===0
                     Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "history"; size: 36; ink: Theme.muted }
                     SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "Nothing played yet"; color: Theme.muted }
                 }
@@ -1568,7 +1573,7 @@ ApplicationWindow {
                 onMenuRequested: (item,index,anchor)=>window.trackMenu(item,index,anchor,true)
                 onRemoveSelected: app.removeQueueRows(sourceRows())
                 onAddSelected: window.addBatch(queueList)
-                Column { anchors.centerIn: parent; spacing: 14; visible: app.queue.count===0
+                Column { anchors.centerIn: parent; spacing: 16; visible: app.queue.count===0
                     Icon { anchors.horizontalCenter: parent.horizontalCenter; name: "queue"; size: 36; ink: Theme.muted }
                     SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "Your queue is empty"; color: Theme.muted }
                     MButton { anchors.horizontalCenter: parent.horizontalCenter; text: "Search music"; tonal: true; onClicked: window.focusSearch() }
@@ -1599,7 +1604,7 @@ ApplicationWindow {
             id: nowScroll
             contentWidth: availableWidth; clip: true
             ColumnLayout {
-                width: nowScroll.availableWidth; spacing: 18
+                width: nowScroll.availableWidth; spacing: 16
                 Artwork { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(320,nowScroll.availableWidth); Layout.preferredHeight: width; url: app.current.art || ""; motionUrl: app.currentMotionArt || ""; radius: Theme.shapeExtraLarge; pixels: 650; highResolution:true;crossfade:true; fit:app.currentArtworkFit }
                 SungText { text: app.current.title || "Nothing playing"; Layout.fillWidth: true; font.pixelSize: Theme.headlineSmall; font.weight: Font.Medium; wrapMode: Text.Wrap; elide: Text.ElideNone }
                 SungText { text: app.current.artist || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; color: Theme.muted }
@@ -1650,7 +1655,7 @@ ApplicationWindow {
         modal: true
         open: window.sheetMode && !!window.side && !window.immersive && !window.compactMode
         onClosed: window.side=""
-        Item { id: sheetHost; anchors.fill: parent; anchors.margins: 18; anchors.topMargin: 6 }
+        Item { id: sheetHost; anchors.fill: parent; anchors.margins: 16; anchors.topMargin: 6 }
     }
 
 
@@ -1803,7 +1808,7 @@ ApplicationWindow {
                         required property var modelData; width: ListView.view.width; height: 76; spacing: 12
                         opacity: (cleanupContent.removeDuplicates&&modelData.duplicate)||(cleanupContent.removeMissing&&modelData.missing)?1:0.6
                         ColumnLayout {
-                            Layout.fillWidth: true; spacing: 3
+                            Layout.fillWidth: true; spacing: 4
                             SungText { text: modelData.title; Layout.fillWidth: true; elide: Text.ElideRight }
                             SungText { text: [modelData.duplicate?"Duplicate":"",modelData.missing?"Missing file":""].filter(Boolean).join(" · "); color: Theme.muted; font.pixelSize: Theme.labelMedium }
                         }
@@ -2122,7 +2127,7 @@ ApplicationWindow {
             trim=app.trackTrim(trackId);open();
         }
         contentItem: ColumnLayout {
-            spacing: 10
+            spacing: 12
             SungText { objectName: "trimTitle"; text: trimDialog.track.title || ""; Layout.fillWidth: true; elide: Text.ElideRight; color: Theme.muted; font.pixelSize: Theme.bodyMedium }
             SungText { objectName: "trimValue"; text: (trimDialog.trim>0?"+":"")+Number(trimDialog.trim).toFixed(1)+" dB"; font.pixelSize: Theme.headlineLarge; Layout.alignment: Qt.AlignHCenter }
             SettingSlider {
@@ -2268,7 +2273,7 @@ ApplicationWindow {
             active: rateDialog.contentReady
             sourceComponent: Component {
         ColumnLayout {
-            anchors.fill: parent; spacing: 10
+            anchors.fill: parent; spacing: 12
             SungText { text: Number(app.playbackRate.toFixed(2))+"×"; font.pixelSize: Theme.headlineLarge; Layout.alignment: Qt.AlignHCenter }
             SettingSlider { objectName: "playbackRateSlider"; from: 0.5; to: 2; stepSize: 0.05; value: app.playbackRate; Layout.fillWidth: true; onMoved: app.playbackRate=value; Accessible.name: "Playback speed" }
             RowLayout {
