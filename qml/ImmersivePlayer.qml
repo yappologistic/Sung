@@ -27,7 +27,19 @@ Item {
     readonly property var artistTarget: app.relatedCollection(app.current,"artist")
     readonly property var albumTarget: app.relatedCollection(app.current,"album")
     readonly property real coverflowReserve: coverflowVisible ? upNext.reserved+16 : 0
-    readonly property real coverSize: Math.max(80,Math.min(displayedLayout==="artwork"?520:420,width*(displayedLayout==="artwork"?0.55:0.34),height-500-coverflowReserve))
+    // How wide the column holding the cover and its details is. Material has
+    // nothing to say about a now-playing cover, so this is a share of the
+    // window: most of it when the cover is the screen, about a third when it
+    // is sharing with the words. The cover's own size is not set here. It is
+    // the largest square that fits the room the column has left after the
+    // title, artist and album, which the layout works out rather than a
+    // constant guessing at it.
+    readonly property real coverColumnWidth: Math.max(80,width*(displayedLayout==="artwork"?0.55:0.34))
+    readonly property real coverSize: immersiveArt.width
+    // What sits against the bottom of this view, so anything that has to clear
+    // it knows how much to clear. A snackbar is the one that has to.
+    readonly property real bottomChrome: controlsShown
+        ? transport.height + seekRow.height + shell.spacing + shell.anchors.margins : 0
     signal exitRequested()
     signal speedRequested()
     signal timingRequested()
@@ -78,48 +90,64 @@ Item {
     NumberAnimation on opacity { from: 0; to: 1; duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve }
     AmbientBackdrop { anchors.fill: parent; url: app.current.art || "" }
     ColumnLayout {
-        anchors.fill: parent; anchors.margins: player.width<900?24:40; spacing: 20
+        id: shell
+        // Material's page margins for the window size class, the same ones the
+        // rest of the application insets its panes by.
+        anchors.fill: parent; anchors.margins: player.width<600?16:24; spacing: 20
         RowLayout {
+            id: topControls
             objectName: "immersiveTopControls"
             Layout.fillWidth: true; opacity: player.controlsShown?1:0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
             MButton { objectName: "exitImmersiveButton"; symbol: "back"; tip: "Exit immersive · Esc"; onClicked: player.exitRequested() }
             Item { Layout.fillWidth: true }
-            MButton {id:layoutButton;objectName:"immersiveLayoutButton";symbol:"more";tip:"Immersive layout";selected:layoutMenu.visible;onClicked:layoutMenu.popup(layoutButton,width-layoutMenu.width,height+4)}
+            // Material keeps an app bar to a few trailing actions and folds the
+            // rest behind one overflow. Five of them sat here, one of which
+            // already wore the overflow glyph while opening a layout menu, so
+            // the icon that means "more actions" did not. There is one now,
+            // and it means it.
             MButton { objectName: "immersiveLyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; enabled: player.hasLyrics && player.displayedLayout!=="singalong"; onClicked: player.showLyricsSearch() }
-            MButton { text: Number(app.playbackRate.toFixed(2))+"×"; tip: "Playback speed"; onClicked: player.speedRequested() }
-            MButton { symbol: "settings"; tip: "Lyric timing · saved for this song"; visible: app.lyricLines.length>0; onClicked: player.timingRequested() }
             MButton { symbol: "heart"; selected: app.liked; tip: app.liked?"Unlike":"Like"; enabled: app.currentIndex>=0; onClicked: app.toggleLike(app.current) }
+            MButton {id:layoutButton;objectName:"immersiveLayoutButton";symbol:"more";tip:"More actions";selected:layoutMenu.visible;onClicked:layoutMenu.popup(layoutButton,width-layoutMenu.width,height+4)}
         }
         RowLayout {
             id: body; objectName:"immersiveBody"
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: Math.max(24,player.width*0.055)
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
             ColumnLayout {
+                id: coverColumn
                 visible:player.displayedLayout!=="lyrics" && player.displayedLayout!=="singalong"
-                Layout.preferredWidth: player.coverSize; Layout.minimumWidth: player.coverSize; Layout.maximumWidth: player.coverSize; Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: 12
-                Item { Layout.fillHeight: true }
-                Artwork { id: immersiveArt; objectName: "immersiveArtwork"; Layout.preferredWidth: player.coverSize; Layout.preferredHeight: player.coverSize; Layout.maximumHeight: player.coverSize; url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; opacity: player.coverHidden?0:1; radius: Theme.shapeExtraLarge; pixels: 850; highResolution: true; fit:app.currentArtworkFit
-                    AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested();background:Rectangle {color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}}
+                Layout.preferredWidth: player.coverColumnWidth; Layout.minimumWidth: player.coverColumnWidth; Layout.maximumWidth: player.coverColumnWidth
+                Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: 12
+                // The cover takes the room the details do not, as the largest
+                // square that fits it. A window with more height to give
+                // therefore reaches the cover instead of stopping at a cap.
+                Item {
+                    id: coverSlot; objectName: "immersiveCoverSlot"
+                    Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
+                    Artwork { id: immersiveArt; objectName: "immersiveArtwork"; anchors.centerIn: parent
+                        width: Math.max(80,Math.min(parent.width,parent.height)); height: width
+                        url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; opacity: player.coverHidden?0:1; radius: Theme.shapeExtraLarge; pixels: 850; highResolution: true; fit:app.currentArtworkFit
+                        AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested();background:Rectangle {color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}}
+                    }
                 }
-                SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade*player.detailsOpacity; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: player.width<900?22:30; font.weight: Font.DemiBold; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade*player.detailsOpacity; transform: Translate { x: presentation.offset } Layout.fillWidth: true; Layout.maximumWidth: immersiveArt.width; Layout.alignment: Qt.AlignHCenter; font.pixelSize: player.width<900?22:30; font.weight: Font.DemiBold; wrapMode: Text.Wrap; maximumLineCount: 2 }
                 AbstractButton {
-                    objectName:"immersiveArtistButton";Layout.fillWidth:true;implicitHeight:48;leftPadding:0;rightPadding:8
+                    objectName:"immersiveArtistButton";Layout.fillWidth:true;Layout.maximumWidth:immersiveArt.width;Layout.alignment:Qt.AlignHCenter;implicitHeight:48;leftPadding:0;rightPadding:8
                     enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
-                    Accessible.name: "Open artist · "+(app.current.artist || "")
+                    Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
                     onClicked: player.collectionRequested(player.artistTarget)
                     contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
                     background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}
                 }
                 AbstractButton {
-                    objectName:"immersiveAlbumButton";Layout.fillWidth:true;implicitHeight:40;leftPadding:0;rightPadding:8;visible:!!app.current.album
+                    objectName:"immersiveAlbumButton";Layout.fillWidth:true;Layout.maximumWidth:immersiveArt.width;Layout.alignment:Qt.AlignHCenter;implicitHeight:40;leftPadding:0;rightPadding:8;visible:!!app.current.album
                     enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
-                    Accessible.name: "Open album · "+(app.current.album || "")
+                    Accessible.name: "Open album \u00b7 "+(app.current.album || "")
                     onClicked: player.collectionRequested(player.albumTarget)
                     contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
                     background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}
                 }
-                Item { Layout.fillHeight: true }
             }
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
             LyricsView { id: immersiveLyrics; expanded: true; visible:player.displayedLayout!=="artwork" && player.displayedLayout!=="singalong"; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0 }
@@ -140,9 +168,9 @@ Item {
         // the standard colour style: a vibrant bar over an arbitrary cover
         // would fight whatever colour the artwork happens to be.
         MFloatingToolbar {
+            id: transport
             objectName: "immersiveToolbar"
             Layout.alignment: Qt.AlignHCenter
-            implicitHeight: 80
             opacity: player.controlsShown?1:0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
             content: [
@@ -153,14 +181,27 @@ Item {
             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; onClicked: app.repeat=(app.repeat+1)%3 }
             ]
         }
+        // The bar itself is what sits on the window's centre line, not the row
+        // carrying it. Hanging the queue and volume actions off one end pushed
+        // the bar off centre while the row stayed centred, which is the kind of
+        // thing that reads as crooked without being obviously wrong. The empty
+        // slot at the leading end mirrors them, so the two ends weigh the same.
         RowLayout {
-            Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(800,player.width-80); spacing: 12; opacity:player.controlsShown?1:0
+            id: seekRow; objectName: "immersiveSeekRow"
+            Layout.fillWidth: true; spacing: 12; opacity:player.controlsShown?1:0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
+            Item { Layout.preferredWidth: seekTrailing.implicitWidth; Layout.preferredHeight: 1 }
+            Item { Layout.fillWidth: true }
             SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40 }
-            SeekBar { Layout.fillWidth: true }
+            SeekBar { objectName: "immersiveSeek"; Layout.fillWidth: true; Layout.maximumWidth: 640 }
             SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight }
-            MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue · Ctrl+L";onClicked:player.queueRequested()}
-            VolumeControl {id:immersiveVolume;showSlider:false}
+            Item { Layout.fillWidth: true }
+            RowLayout {
+                id: seekTrailing
+                spacing: 12
+                MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue \u00b7 Ctrl+L";onClicked:player.queueRequested()}
+                VolumeControl {id:immersiveVolume;showSlider:false}
+            }
         }
     }
     MMenu {
@@ -173,6 +214,11 @@ Item {
                 enabled:modelData.key!=="singalong" || player.hasTimedLyrics
                 checked:player.preferredLayout===modelData.key;onTriggered:player.layoutRequested(modelData.key)}
         }
+        MDivider {}
+        // The two actions that used to be buttons of their own. The speed one
+        // carried its value on its face, so the line says it instead.
+        MMenuItem {objectName:"immersiveSpeed";symbol:"history";text:"Playback speed · "+Number(app.playbackRate.toFixed(2))+"×";onTriggered:player.speedRequested()}
+        MMenuItem {objectName:"immersiveTiming";symbol:"settings";text:"Lyric timing";enabled:app.lyricLines.length>0;onTriggered:player.timingRequested()}
         MDivider {}
         MMenuItem {objectName:"immersiveCoverflowToggle";text:"Up next covers";checkable:true;checked:player.coverflow;onTriggered:player.coverflowRequested(!player.coverflow)}
         MMenuItem {objectName:"immersiveAutoHide";text:"Auto-hide controls";checkable:true;checked:player.autoHideControls;onTriggered:player.autoHideRequested(!player.autoHideControls)}

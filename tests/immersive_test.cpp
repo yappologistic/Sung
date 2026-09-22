@@ -168,13 +168,80 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   shot("shortcut-feedback");QTest::qWait(1300);check(hud&&!hud->isVisible(),"HUD dismisses after inactivity");
   click("immersiveLyricSearchButton");const auto before=b->position();QTest::keyClick(w,Qt::Key_Left);
   check(b->position()==before,"text editing does not seek playback");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  // --- The immersive view's own proportions ---
+  // The complaint about this screen was never a missing feature: it was that
+  // the pieces do not line up and the artwork does not use the room it has.
+  // These are the measurements that say so.
+  choose("artwork");QTest::qWait(500);
+  {
+    auto top=visibleItem(w->contentItem(),"immersiveTopControls");
+    auto bar=visibleItem(w->contentItem(),"immersiveToolbar");
+    auto art=visibleItem(w->contentItem(),"immersiveArtwork");
+    auto row=visibleItem(w->contentItem(),"immersiveSeekRow");
+    check(top&&bar&&art&&row,"the immersive view has its four bands on screen");
+    if(top&&bar&&art&&row){
+      // Material's floating toolbar is 64dp. The immersive view used to set
+      // its own height and quietly made the component taller than the token.
+      check(qAbs(bar->height()-64)<0.5,
+            qPrintable(QString("the transport is Material's 64dp floating toolbar (%1)")
+                       .arg(bar->height(),0,'f',0)));
+      // Everything stacked down the middle shares one centre line. It did not:
+      // the seek row carried the queue and volume buttons on its end, which
+      // pushed the bar itself off centre while the row stayed centred.
+      const auto centreOf=[&](QQuickItem *item){return item->mapToScene(QPointF(item->width()/2,0)).x();};
+      const double middle=w->width()/2.0;
+      check(qAbs(centreOf(art)-middle)<1.5,
+            qPrintable(QString("the artwork is centred (%1 of %2)").arg(centreOf(art),0,'f',1).arg(middle)));
+      check(qAbs(centreOf(bar)-middle)<1.5,
+            qPrintable(QString("so is the transport (%1)").arg(centreOf(bar),0,'f',1)));
+      auto seek=visibleItem(w->contentItem(),"immersiveSeek");
+      if(seek)
+        check(qAbs(centreOf(seek)-middle)<1.5,
+              qPrintable(QString("and so is the seek bar itself (%1)").arg(centreOf(seek),0,'f',1)));
+      // The margin on one side is the margin on the other.
+      const double left=top->mapToScene(QPointF(0,0)).x();
+      const double right=w->width()-(top->mapToScene(QPointF(top->width(),0)).x());
+      check(qAbs(left-right)<1.5,
+            qPrintable(QString("the page margins match (%1 and %2)").arg(left,0,'f',0).arg(right,0,'f',0)));
+    }
+    // A taller window has to reach the artwork. It was capped by a constant,
+    // so past a certain height the view stopped using the room it was given.
+    // The stage pins the window so its captures match; lift that to ask the
+    // layout what it does with more room, then pin it back.
+    // And it stays square and inside the body, rather than growing past it.
+    if(art){
+      check(qAbs(art->width()-art->height())<1.5,"the artwork stays square");
+      auto body=visibleItem(w->contentItem(),"immersiveBody");
+      check(body&&art->height()<=body->height()+1,
+            qPrintable(QString("and inside the body it sits in (%1 of %2)")
+                       .arg(art->height(),0,'f',0).arg(body?body->height():0,0,'f',0)));
+    }
+    // A snackbar sits above whatever is anchored at the foot of the window
+    // rather than over it. In this view that is the transport, and a constant
+    // margin tuned for the ordinary player landed straight on it.
+    b->toast("Immersive placement");
+    if(waitFor([&]{auto t=visibleItem(w->contentItem(),"toastBar");return t&&t->height()>1;})){
+      auto toast=visibleItem(w->contentItem(),"toastBar");
+      auto bar=visibleItem(w->contentItem(),"immersiveToolbar");
+      if(toast&&bar)
+        check(toast->mapToScene(QPointF(0,toast->height())).y()<=bar->mapToScene(QPointF(0,0)).y()+0.5,
+              qPrintable(QString("the notification clears the transport (ends %1, transport starts %2)")
+                         .arg(toast->mapToScene(QPointF(0,toast->height())).y(),0,'f',0)
+                         .arg(bar->mapToScene(QPointF(0,0)).y(),0,'f',0)));
+      else check(false,"the notification and the transport are both on screen");
+    } else check(false,"a notification appears to place");
+    shot("proportions");
+  }
   b->setTheme("light");shot("light");b->setMotion(false);
   choose("artwork");check(player->property("displayedLayout")=="artwork","reduced motion applies layout immediately");
   choose("split");b->setTheme("dark");
   w->setProperty("immersive",false);QTest::qWait(150);w->showNormal();w->setMinimumSize({780,580});w->setMaximumSize({780,580});w->resize(780,580);w->setProperty("immersive",true);QTest::qWait(250);
   player=visibleItem(w->contentItem(),"immersivePlayer");shot("compact");
-  const auto art=visibleItem(w->contentItem(),"immersiveArtwork");const auto seek=visibleItem(w->contentItem(),"seekBar");
-  check(art&&seek&&art->mapToScene({0,art->height()}).y()<seek->mapToScene({0,0}).y(),"compact artwork stays above transport");
+  const auto art=visibleItem(w->contentItem(),"immersiveArtwork");const auto seek=visibleItem(w->contentItem(),"immersiveSeek");
+  check(art&&seek&&art->mapToScene({0,art->height()}).y()<seek->mapToScene({0,0}).y(),
+        qPrintable(QString("compact artwork stays above transport (%1 against %2)")
+                   .arg(art?art->mapToScene(QPointF(0,art->height())).y():-1,0,'f',0)
+                   .arg(seek?seek->mapToScene(QPointF(0,0)).y():-1,0,'f',0)));
   QMetaObject::invokeMethod(w,"openMiniPlayer");QTest::qWait(350);
   auto mini=qvariant_cast<QQuickWindow*>(w->property("miniPlayer"));check(mini&&mini->isVisible(),"mini player opens");
   if(mini){

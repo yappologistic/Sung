@@ -371,6 +371,12 @@ ApplicationWindow {
     // is the arrangement the top bar replaced. The rail needs a window wide
     // enough to sit beside the content; below that the same bar Material puts
     // against the bottom edge takes over, as it did before.
+    // What a snackbar has to clear at the foot of the window. Material puts it
+    // above whatever is anchored there rather than over it, and what is
+    // anchored there is not the same thing in every view.
+    readonly property real bottomChrome: immersive
+        ? (immersiveLoader.item ? immersiveLoader.item.bottomChrome : 0)
+        : compactMode ? 0 : playbackBar.height + 16
     readonly property bool sidebarNav: app.sidebarNavigation
     readonly property bool railShowing: sidebarNav && !compactWindow
     readonly property bool bottomBarShowing: sidebarNav && compactWindow
@@ -1181,6 +1187,7 @@ ApplicationWindow {
                 }
             }
             Rectangle {
+                id: playbackBar
                 objectName: "playbackBar"
                 Accessible.role: Accessible.Pane
                 Accessible.name: "Playback"
@@ -2155,7 +2162,8 @@ ApplicationWindow {
     // the smallest corner on the scale rather than a panel's rounding. A
     // snackbar can also be pushed aside, which is what the drag below is for.
     Rectangle {
-        anchors.bottom: parent.bottom; anchors.bottomMargin: 140; anchors.horizontalCenter: parent.horizontalCenter; z: 40
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 16 + window.bottomChrome; anchors.horizontalCenter: parent.horizontalCenter; z: 40
+        Behavior on anchors.bottomMargin { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         id: toastBar; objectName: "toastBar"
         width: Math.min(window.width-48,720,toastLabel.implicitWidth+(window.toastHasUndo?168:40))
         // Material brings a component in by expanding it away from the edge it
