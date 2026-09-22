@@ -1,7 +1,28 @@
 import QtQuick
 import QtQuick.Controls
-Dialog {
+import QtQuick.Controls.impl
+import QtQuick.Templates as T
+// Built on the template rather than on the style's Dialog. The style declares a
+// header label and a footer button box of its own, and a template defers only
+// its background and content item, so every dialog built both and then set
+// them aside for the ones below; a replaced header or footer is unparented,
+// not destroyed. Qt's guidance for a control whose delegates are all replaced
+// is to derive from the template:
+// https://doc.qt.io/qt-6/qtquickcontrols-customize.html
+// What the style gave that is still wanted is carried over as the style
+// writes it: the implicit size and the two scrims.
+T.Dialog {
     id: dialog
+    implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
+                            implicitContentWidth + leftPadding + rightPadding,
+                            implicitHeaderWidth,
+                            implicitFooterWidth)
+    implicitHeight: Math.max(implicitBackgroundHeight + topInset + bottomInset,
+                             implicitContentHeight + topPadding + bottomPadding
+                             + (implicitHeaderHeight > 0 ? implicitHeaderHeight + spacing : 0)
+                             + (implicitFooterHeight > 0 ? implicitFooterHeight + spacing : 0))
+    T.Overlay.modal: Rectangle { color: Color.transparent(dialog.palette.shadow, 0.5) }
+    T.Overlay.modeless: Rectangle { color: Color.transparent(dialog.palette.shadow, 0.12) }
     // A compact window has no room to float a dialog inside it, so Material
     // gives the dialog the window: square corners, no inset, and the actions
     // pinned to the bottom edge rather than centred in the middle of nowhere.
@@ -37,7 +58,13 @@ Dialog {
     // the moment it is being watched. aboutToShow runs before the enter
     // transition, so the sizes below are in place for the first frame of it.
     property bool built: false
-    onAboutToShow: built = true
+    onAboutToShow: {
+        // A dialog that brings a footer of its own keeps it. This does not wait
+        // on built: a dialog that fills its body before opening sets that
+        // itself, and would otherwise open without its buttons.
+        if (!footer) footer = buttonBar.createObject(dialog)
+        built = true
+    }
     onOpened: if (initialFocus) initialFocus.forceActiveFocus(Qt.TabFocusReason)
     padding: 24
     anchors.centerIn: parent
@@ -101,12 +128,14 @@ Dialog {
         }
       }
     }
-    footer: DialogButtonBox {
+    // The button bar arrives with the rest of the chrome, on first open. Qt
+    // wires accept and reject to whichever footer is a DialogButtonBox and
+    // hands it the dialog's standardButtons as it is set, so a box built with
+    // the window got its buttons from the dialog during startup and dropped
+    // them again, and a box that is not there yet is handed them when it
+    // becomes the footer.
+    readonly property Component buttonBar: DialogButtonBox {
         visible: dialog.standardButtons !== Dialog.NoButton
-        // Qt finds a dialog's accept and reject by casting the footer to a
-        // DialogButtonBox, so the box itself stays; asking it for no buttons
-        // until the dialog is built keeps the buttons out of the startup tree.
-        standardButtons: dialog.built ? dialog.standardButtons : DialogButtonBox.NoButton
         alignment: Qt.AlignRight
         buttonLayout: DialogButtonBox.AndroidLayout
         // Material's full-screen dialog puts its actions on a 56dp bar at the

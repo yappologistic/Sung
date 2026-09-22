@@ -2118,7 +2118,8 @@ ApplicationWindow {
     MDialog {
         id: trimDialog; objectName: "trimDialog"; anchors.centerIn: parent
         width: 380; title: "Adjust volume"; modal: true; standardButtons: Dialog.Close
-        implicitHeight: header.implicitHeight+contentItem.implicitHeight+footer.implicitHeight+topPadding+bottomPadding
+        // The footer is MDialog's button bar, which arrives on first open.
+        implicitHeight: header.implicitHeight+contentItem.implicitHeight+(footer ? footer.implicitHeight : 0)+topPadding+bottomPadding
         property var track: ({})
         property string trackId: ""
         property real trim: 0
