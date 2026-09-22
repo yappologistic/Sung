@@ -1725,6 +1725,12 @@ void runFootprintTests(Backend *b, QQuickWindow *w) {
   c.check(qgetenv("QSG_ATLAS_WIDTH") == "1024" && qgetenv("QSG_ATLAS_HEIGHT") == "1024",
           "the texture atlas defaults to 1024 by 1024");
 
+  // --- The interface loads while the backend starts ---
+  // Loading the interface's types on the engine's thread overlaps the audio
+  // outputs and the library read instead of queueing behind them.
+  c.check(qApp->property("interfaceLoadedWithBackend").toBool(),
+          "the interface was already loading while the backend was built");
+
   // --- Memory freed in use goes back once the application is not in use ---
   // A busy session frees memory in pieces between allocations that stay, and
   // glibc cannot give those pages back by itself. This builds that shape on

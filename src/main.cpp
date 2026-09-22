@@ -18,6 +18,7 @@
 #include <QNetworkDiskCache>
 #include <QPainter>
 #include <QQmlApplicationEngine>
+#include <QQmlComponent>
 #include <QQmlContext>
 #include <QQmlNetworkAccessManagerFactory>
 #include <QQuickImageProvider>
@@ -39,6 +40,7 @@ void runBenchmark(Backend *, QQuickWindow *);
 #include <cstdio>
 #include <algorithm>
 #include <functional>
+#include <optional>
 
 class Symbols : public QQuickImageProvider {
 public:
@@ -149,7 +151,26 @@ int main(int argc, char **argv) {
   qmlRegisterType<RoundedArt>("Sung.Native", 1, 0, "RoundedArt");
   MotionArtwork motionArtwork;
   qmlRegisterUncreatableType<MotionArtwork>("Sung.Native",1,0,"MotionArtwork","Shared current artwork");
-  Backend backend;
+  // The backend is built after the engine has started on the interface, and
+  // still has to outlive it: the interface binds to it until it is torn down.
+  std::optional<Backend> backendStorage;
+  DesktopTheme desktopTheme;
+  WindowResources windowResources;
+  QQmlApplicationEngine engine;
+  // The interface's types load on the QML engine's own thread while the
+  // backend opens the audio outputs and reads the library, rather than after
+  // it; load() below picks up whatever is still in flight instead of starting
+  // over. From main() to the interface loaded, on the desktop: 231.8 to
+  // 213.7 ms with an empty library; offscreen with 10,000 songs, 392.7 to
+  // 370.0 ms.
+  // https://doc.qt.io/qt-6/qqmlcomponent.html#CompilationMode-enum
+  QQmlComponent interfaceTypes(&engine, QUrl("qrc:/qml/Main.qml"), QQmlComponent::Asynchronous);
+  Backend &backend = backendStorage.emplace();
+#ifdef SUNG_DIAGNOSTICS
+  // The footprint stage reads this: whether the interface was already on its
+  // way by the time the backend had been built.
+  app.setProperty("interfaceLoadedWithBackend", interfaceTypes.isLoading() || interfaceTypes.isReady());
+#endif
   // Tests, smoke runs and screenshots start from a clean profile; none of
   // them should have to dismiss the first-run flow.
   if (args.contains("--isolated")) backend.setOnboarded(true);
@@ -157,15 +178,12 @@ int main(int argc, char **argv) {
   RoundedArt::resolveVideoFrame=[&backend](const QUrl &frame){return backend.albumCoverFor(frame);};
   QObject::connect(&backend,&Backend::videoCoversChanged,&app,[]{RoundedArt::refreshFrames();});
   QObject::connect(backend.server(),&MusicServer::accountChanged,&app,[]{RoundedArt::clearCaches();});
-  DesktopTheme desktopTheme;
   QObject::connect(&backend,&Backend::artworkCacheCleared,&app,[]{RoundedArt::clearCaches();});
   bool exposeMpris = !args.contains("--isolated");
 #ifdef SUNG_DIAGNOSTICS
   exposeMpris = exposeMpris || args.contains("--mpris-test");
 #endif
   if (exposeMpris) registerMpris(&backend);
-  WindowResources windowResources;
-  QQmlApplicationEngine engine;
   engine.rootContext()->setContextProperty("windowResources", &windowResources);
   engine.addImageProvider("symbols", new Symbols);
   engine.rootContext()->setContextProperty("app", &backend);
