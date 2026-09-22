@@ -199,13 +199,19 @@ int main(int argc, char **argv) {
   // surface's render target should be no larger than the picture in it.
   if (qEnvironmentVariableIsSet("SUNG_OBJECT_PROBE")) {
     const int floor = qEnvironmentVariableIntValue("SUNG_OBJECT_PROBE");
-    QObject::connect(window,&QQuickWindow::frameSwapped,&app,[&] {
+    QMetaObject::Connection objectProbe;
+    objectProbe=QObject::connect(window,&QQuickWindow::frameSwapped,&app,[&] {
+      // Opening a popup below renders more frames inside the settling loop.
+      // Observe only the first frame, rather than recursively reopening it.
+      QObject::disconnect(objectProbe);
       // SUNG_PROBE_OPEN names a dialog to open first, which is how a deferred
       // part is confirmed to arrive when it is finally asked for.
       if (qEnvironmentVariableIsSet("SUNG_PROBE_OPEN")) {
         const auto name = qEnvironmentVariable("SUNG_PROBE_OPEN");
         if (auto *dialog = window->findChild<QObject *>(name)) {
+          QElapsedTimer opening;opening.start();
           QMetaObject::invokeMethod(dialog,"open");
+          fprintf(stdout,"DIALOG_OPEN_MS %s %.3f\n",qPrintable(name),opening.nsecsElapsed()/1e6);
           QEventLoop settle;QTimer::singleShot(900,&settle,&QEventLoop::quit);settle.exec();
           fprintf(stdout,"OPENED %s visible=%d built=%d headline=%d\n",qPrintable(name),
                   dialog->property("visible").toBool(),dialog->property("built").toBool(),
