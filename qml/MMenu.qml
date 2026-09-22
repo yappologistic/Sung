@@ -2,15 +2,18 @@ import QtQuick
 import QtQuick.Controls
 // Material 3 menu.
 //
-// Two things beyond the standard menu. A vibrant menu takes the tertiary
-// container, for one opened over something a surface would disappear into. A
-// segmented menu draws its items as one run on a group container of their own,
-// which is the shape Material gives a menu that is a choice between peers
-// rather than a list of actions.
+// MenuTokens puts the container on surfaceContainer and lifts it two levels.
+// It has one colour, and it is not a palette accent: a menu that took the
+// tertiary container followed the source hue around the wheel and landed on a
+// colour the rest of the window had never heard of, which over a warm cover
+// came out green.
+//
+// One thing beyond the standard menu. A segmented menu draws its items as one
+// run on a group container of their own, which is the shape Material gives a
+// menu that is a choice between peers rather than a list of actions.
 Menu {
     id: menu
 
-    property bool vibrant: false
     property bool segmented: false
 
     // The items learn where they sit in the run from the menu, because a
@@ -20,7 +23,6 @@ Menu {
             const item = menu.itemAt(i)
             if (!item || item.segmented === undefined) continue
             item.segmented = menu.segmented
-            item.vibrant = menu.vibrant
             item.firstInRun = i === 0
             item.lastInRun = i === menu.count-1
         }
@@ -40,11 +42,8 @@ Menu {
         ScrollBar.vertical: MScrollBar { objectName: "menuScrollBar" }
     }
     background: Rectangle {
-        // Material puts a menu on the low surface container, whether its items
-        // are a run or a list, and a vibrant one on the tertiary container.
-        // The plain menu was a step higher, which made it the same surface as
-        // the sheets and dialogs it opens over.
-        color: menu.vibrant ? Theme.tertiaryContainer : Theme.surfaceLow
+        // MenuTokens.ContainerColor, whether the items are a run or a list.
+        color: Theme.container
         radius: menu.segmented ? Theme.shapeLarge : Theme.shapeLargeIncreased
         border.color: Theme.outlineVariant
         MElevation { anchors.fill: parent; radius: parent.radius; level: 2 }

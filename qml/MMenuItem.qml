@@ -18,26 +18,23 @@ MenuItem {
     property bool segmented: false
     property bool firstInRun: false
     property bool lastInRun: false
-    // A vibrant menu takes the tertiary container, for a menu opened over
-    // something a surface would disappear into.
-    property bool vibrant: false
-    // Material's menu marks a chosen item with the tertiary container, not the
-    // secondary one that marks a chosen anything else, and a vibrant menu,
-    // already tertiary, deepens to the tertiary role itself.
+    // MenuTokens marks a chosen item with the secondary pair, the same one
+    // that marks a chosen anything else: ListItemSelectedContainerColor is the
+    // secondary container and ListItemSelectedLabelTextColor the ink on it.
+    // This asked for the tertiary pair, which is the source hue rotated and so
+    // belongs to no other surface in the window.
     //
-    // That deepening is the item's own container, and only a segmented menu
-    // draws one. Asking for on-tertiary ink without it put the dark ink meant
-    // for a light fill straight onto the tertiary container the menu already
-    // sits on: 1.54:1 in the dark scheme, so the chosen row was the one nobody
-    // could read. Without the fill the row keeps the container's own ink and
-    // the tick alone marks the choice.
+    // Only a segmented menu draws the item a container of its own, so only
+    // there is there a secondary container for that ink to sit on. Elsewhere
+    // the row keeps the menu's own ink and the tick alone marks the choice,
+    // which is how Material's list marks a selection without a container.
     readonly property color ink: !control.enabled ? Theme.muted
-                               : control.vibrant ? (control.checked && control.segmented ? Theme.tertiaryText : Theme.tertiaryContainerText)
-                               : control.checked ? Theme.tertiaryContainerText : Theme.text
+                               : control.checked && control.segmented ? Theme.secondaryContainerText
+                               : Theme.text
     // The leading icon is the variant ink until the item is chosen, when it
     // takes the ink of the container it has been given.
     readonly property color leadingInk: !control.enabled ? Theme.muted
-                                      : control.vibrant || control.checked ? ink : Theme.muted
+                                      : control.checked ? ink : Theme.muted
 
     readonly property bool showsTick: checkable && checked
     readonly property bool hasLeading: showsTick || symbol.length > 0
@@ -96,8 +93,9 @@ MenuItem {
             topRightRadius: topLeftRadius
             bottomLeftRadius: taken || control.lastInRun ? Theme.menuItemTaken : Theme.shapeSmall
             bottomRightRadius: bottomLeftRadius
-            color: control.checked ? (control.vibrant ? Theme.tertiary : Theme.tertiaryContainer)
-                                   : (control.vibrant ? Theme.tertiaryContainer : Theme.surfaceLow)
+            // The run sits on the menu's own container, so an item in it takes
+            // the step above to read as a container rather than a hole.
+            color: control.checked ? Theme.secondaryContainer : Theme.high
             Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
         Rectangle {
