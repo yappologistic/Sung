@@ -16,6 +16,14 @@ qt_policy(SET QTP0004 NEW)
 qt_add_executable(sung src/windowresources.h src/artworkurl.h src/scrobbler.cpp src/scrobbler.h src/m3color.cpp src/m3color.h src/m3motion.cpp src/m3motion.h src/m3shape.cpp src/m3shape.h src/desktoptheme.cpp src/desktoptheme.h src/main.cpp src/roundedart.cpp src/roundedart.h src/motionartwork.cpp src/motionartwork.h src/musicserver.cpp src/musicserver.h src/offlinestore.cpp src/offlinestore.h src/jellyfin.cpp src/jellyfin.h src/backendserver.cpp src/subsonic.cpp src/subsonic.h src/backend.cpp src/productfeatures.cpp src/presentationfeatures.cpp src/backend.h src/collectionview.h src/rowselection.h src/mpris.cpp src/mpris.h src/playbacknotifier.cpp src/playbacknotifier.h)
 target_link_libraries(sung PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Multimedia Qt6::Network Qt6::DBus Qt6::Svg Qt6::Concurrent)
 target_compile_options(sung PRIVATE -Wall -Wextra -Wpedantic "$<$<CONFIG:Release>:-Oz;-ffunction-sections;-fdata-sections>")
+# Nothing here throws or catches. Qt itself does not throw, it reports errors
+# through return values, and an exception leaving a slot is undefined
+# behaviour, so one could only ever end the process. The landing pads and
+# exception tables for it were 201 KB of the binary. Unwind tables stay, so
+# backtraces and crash reports still walk these frames, and Qt's headers
+# follow the flag through QT_NO_EXCEPTIONS.
+# https://doc.qt.io/qt-6/exceptionsafety.html
+target_compile_options(sung PRIVATE -fno-exceptions)
 target_link_options(sung PRIVATE "$<$<CONFIG:Release>:-Oz;-Wl,--gc-sections;-Wl,-z,pack-relative-relocs>")
 set_target_properties(sung PROPERTIES CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
 # Every component is precompiled, including the first-use-only picker, because
