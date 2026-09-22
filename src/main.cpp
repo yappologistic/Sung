@@ -1,6 +1,7 @@
 #include "backend.h"
 #include "rowselection.h"
 #include "desktoptheme.h"
+#include "freedmemory.h"
 #include "mpris.h"
 #include "roundedart.h"
 #include "windowresources.h"
@@ -163,6 +164,15 @@ int main(int argc, char **argv) {
   if (engine.rootObjects().isEmpty())
     return 1;
   auto window = qobject_cast<QQuickWindow *>(engine.rootObjects().first());
+  // Reading the library and building the interface free a good deal of what
+  // they allocate on the way; with 10,000 songs, 16 MiB on the desktop and 24
+  // offscreen were still held for nothing once the window was up. The first
+  // frame marks the end of that work.
+  QMetaObject::Connection startupSettled;
+  startupSettled = QObject::connect(window, &QQuickWindow::frameSwapped, &app, [&startupSettled] {
+    QObject::disconnect(startupSettled);
+    returnFreedMemory();
+  }, Qt::QueuedConnection);
   QObject::connect(&backend, &Backend::raiseRequested, window, [window] {
     QMetaObject::invokeMethod(window,"restorePlayer");
     window->raise();

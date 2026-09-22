@@ -1,5 +1,6 @@
 #include "backend.h"
 #include "artworkurl.h"
+#include "freedmemory.h"
 #include "librarydata.h"
 #include <QLocale>
 #include <QMediaMetaData>
@@ -1410,6 +1411,9 @@ void Backend::save() {
               .toJson(QJsonDocument::Compact));
   if (!f.commit())
     notifyError("Could not save your library.");
+  // Writing builds the whole document in memory, several times the size of the
+  // file, and none of it outlives this function.
+  returnFreedMemory();
 }
 void Backend::recordHistory() {
   if(m_historyPaused){m_skipHistoryToken=m_trackToken;return;}
