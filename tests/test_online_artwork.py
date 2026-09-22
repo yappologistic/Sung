@@ -215,9 +215,13 @@ large.m3u8
         with self.assertRaises(ValueError):art.validate_movie(video)
 
     def test_negative_cache_and_failure_backoff(self):
-        with patch.object(art,'fetch',return_value=b'{"results":[]}') as fetch:
+        # Both providers must answer from fixtures. Leaving the archive side
+        # live turned a negative-cache test into a network-dependent retry.
+        with patch.object(art,'fetch',return_value=b'{"results":[]}') as fetch, \
+             patch.object(art,'fetch_cover',return_value=b'{"recordings":[]}') as covers:
             self.assertEqual(art.lookup(self.track)['status'],'unavailable');art.lookup(self.track)
             self.assertEqual(fetch.call_count,2)
+            self.assertEqual(covers.call_count,1)
         self.track['title']='Another song'
         with patch.object(art,'fetch',side_effect=OSError('offline')) as fetch:
             first=art.lookup(self.track);self.assertEqual(first['status'],'retry')
@@ -280,7 +284,8 @@ large.m3u8
                 self.assertEqual(art.lookup(self.track)['retryAfter'],30)
                 self.assertEqual(fetch.call_count,1)
             clock.time.return_value=1031
-            with patch.object(art,'fetch',return_value=b'{"results":[]}') as fetch:
+            with patch.object(art,'fetch',return_value=b'{"results":[]}') as fetch, \
+                 patch.object(art,'fetch_cover',return_value=b'{"recordings":[]}'):
                 self.assertEqual(art.lookup(self.track)['status'],'unavailable')
                 self.assertGreater(fetch.call_count,0)
         self.assertFalse((self.root/'cache/retry-after-v2').exists())
