@@ -32,6 +32,31 @@ static QByteArray solid(int width,int height,Qt::GlobalColor color) {
 class ArtworkTest : public QObject {
   Q_OBJECT
 private slots:
+  void concurrentLocalCoversSharePixels() {
+    QTemporaryDir dir;
+    const auto path=dir.filePath("shared.png");
+    QImage source(1024,1024,QImage::Format_RGB32);source.fill(Qt::red);
+    QVERIFY(source.save(path));RoundedArt::clearCaches();
+    std::vector<std::unique_ptr<RoundedArt>> views;
+    for(int i=0;i<32;++i) {
+      auto view=std::make_unique<RoundedArt>();view->setPixels(1024);
+      view->setSource(QUrl::fromLocalFile(path));views.push_back(std::move(view));
+    }
+    // Destruction and reuse must not cancel a decode other views still need.
+    views.back().reset();views.pop_back();views.back()->setSource({});
+    for(size_t i=0;i+1<views.size();++i)QTRY_VERIFY(views[i]->ready());
+    const auto *pixels=views.front()->m_image.constBits();
+    for(size_t i=0;i+1<views.size();++i)QCOMPARE(views[i]->m_image.constBits(),pixels);
+    QVERIFY(!views.back()->ready());
+    // A refresh during an outstanding read must not let that read poison
+    // the fresh cache, or cancel the views subscribed to the old read.
+    RoundedArt::clearCaches();
+    views.back()->setSource(QUrl::fromLocalFile(path));
+    source.fill(Qt::blue);QVERIFY(source.save(path));
+    views.back()->refresh();QTRY_VERIFY(views.back()->ready());
+    QCOMPARE(views.back()->m_image.pixelColor(0,0),QColor(Qt::blue));
+    QCOMPARE(views.front()->m_image.pixelColor(0,0),QColor(Qt::red));
+  }
   void coverCrossfade() {
     QTemporaryDir dir;QStringList files;for(const auto color:{Qt::red,Qt::blue,Qt::green}){QImage image(128,128,QImage::Format_RGB32);image.fill(color);const auto path=dir.filePath(QString::number(files.size())+".png");QVERIFY(image.save(path));files<<path;}
     RoundedArt art;art.setWidth(100);art.setHeight(100);art.setPixels(128);art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(files[0]));QVERIFY(!art.transitioning());

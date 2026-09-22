@@ -22,6 +22,10 @@
 std::function<QNetworkRequest(const QUrl &)> RoundedArt::resolveServerArt;
 std::function<QUrl(const QUrl &)> RoundedArt::resolveVideoFrame;
 static QCache<QString, QImage> cache(8 * 1024 * 1024);
+// Accessed only on the GUI thread. Views requesting the same local cover
+// subscribe to one decode; QImage then shares its pixels without copying.
+// https://doc.qt.io/qt-6/threads-modules.html#threads-and-implicitly-shared-classes
+static QHash<QString, QFutureWatcher<QImage> *> localLoads;
 // Every surface alive right now, so a change in what a URL stands for can
 // reach the ones already drawing it. Surfaces live on the GUI thread only.
 static QSet<RoundedArt *> &liveArt() { static QSet<RoundedArt *> set; return set; }
@@ -36,8 +40,9 @@ static QThreadPool *decodePool() {
   }
   return pool;
 }
+static QNetworkAccessManager *artNetwork = nullptr;
 static QNetworkAccessManager *manager() {
-  static QNetworkAccessManager *n = nullptr;
+  auto &n = artNetwork;
   if (!n) {
     n = new QNetworkAccessManager(QCoreApplication::instance());
     auto c = new QNetworkDiskCache(n);
@@ -193,15 +198,28 @@ void RoundedArt::reload(bool preserve) {
     // deliver. A reused delegate that has moved on to another cover, or a
     // surface being destroyed, leaves its earlier decode with a stale token.
     const quint64 token=++m_decode;
-    auto *watcher=new QFutureWatcher<QImage>(this);
-    connect(watcher,&QFutureWatcherBase::finished,this,[this,watcher,key,token]{
-      watcher->deleteLater();
+    auto *watcher=localLoads.value(key);
+    const bool start = !watcher;
+    if (start) {
+      watcher=new QFutureWatcher<QImage>(QCoreApplication::instance());
+      localLoads.insert(key,watcher);
+      connect(watcher,&QFutureWatcherBase::finished,watcher,[watcher,key]{
+        // A cache clear or explicit refresh can retire a request while its
+        // worker is still finishing. Do not repopulate the cache with it.
+        if(localLoads.value(key)==watcher) {
+          localLoads.remove(key);
+          const auto image=watcher->result();
+          if(!image.isNull())cache.insert(key,new QImage(image),image.sizeInBytes());
+        }
+        watcher->deleteLater();
+      });
+    }
+    connect(watcher,&QFutureWatcherBase::finished,this,[this,watcher,token]{
       if(token!=m_decode)return;
       m_image=watcher->result();
-      if(!m_image.isNull())cache.insert(key,new QImage(m_image),m_image.sizeInBytes());
       imageReady();
     });
-    watcher->setFuture(QtConcurrent::run(decodePool(),[path,pixels]{
+    if(start)watcher->setFuture(QtConcurrent::run(decodePool(),[path,pixels]{
       const QFileInfo file(path);
       if(file.size()>2*1024*1024)return QImage();
       QImageReader reader(file.absoluteFilePath());reader.setAutoTransform(true);
@@ -337,7 +355,11 @@ void RoundedArt::paint(QPainter *p) {
   p->restore();
 }
 
-void RoundedArt::clearCaches() { cache.clear(); if(manager()->cache())manager()->cache()->clear(); }
+void RoundedArt::clearCaches() {
+  cache.clear();localLoads.clear();
+  // Clearing local data must not start the network stack as a side effect.
+  if(artNetwork && artNetwork->cache())artNetwork->cache()->clear();
+}
 void RoundedArt::refreshFrames() {
   for(auto *art:std::as_const(liveArt()))if(!artworkurl::videoId(art->m_source).isEmpty())art->refresh();
 }
@@ -345,7 +367,9 @@ void RoundedArt::refreshFrames() {
 // so the reload cannot answer from memory, and keep the old picture up, as a
 // crossfade origin where there is one, until the new one arrives.
 void RoundedArt::refresh() {
-  cache.remove(m_source.toString()+QLatin1Char('|')+QString::number(m_pixels));
+  const auto key=m_source.toString()+QLatin1Char('|')+QString::number(m_pixels);
+  cache.remove(key);
+  localLoads.remove(key);
   if(m_fade)m_fade->stop();
   if(m_crossfade && !m_image.isNull()){m_previous=m_image;m_softPrevious=m_softImage;m_previousFit=m_fit;m_mix=0;}
   m_originalSizeFallback=false;emit transitionChanged();
