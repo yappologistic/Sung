@@ -36,7 +36,6 @@ Item {
             anchors.fill: parent
             visible: icon.fill < 1
             source: icon.live ? "image://symbols/" + icon.name + "_outline/" + Math.round(icon.size) + "/" + icon.ink.toString().substring(1) : ""
-            cache: false
             sourceSize: Qt.size(icon.size * Screen.devicePixelRatio, icon.size * Screen.devicePixelRatio)
             fillMode: Image.PreserveAspectFit
             smooth: true
@@ -47,8 +46,16 @@ Item {
         anchors.fill: parent
         opacity: icon.hasOutline ? icon.fill : 1
         source: icon.live ? "image://symbols/" + icon.name + "/" + Math.round(icon.size) + "/" + icon.ink.toString().substring(1) : ""
-        // Fresh textures on window re-entry also support Qt's software renderer.
-        cache: false
+        // Every symbol drawn at one size in one ink is the same picture, and
+        // Qt's pixmap cache gives those one raster and one texture between
+        // them. Uncached, each of the several hundred icons in a session asked
+        // the provider again and took its own slot in the window's texture
+        // atlas: a tour of the interface held 1.67 Mpx there, against 0.80 Mpx
+        // shared. Caching is what Image.cache is for, "small 'ui element'
+        // images": https://doc.qt.io/qt-6/qml-qtquick-image.html#cache-prop
+        // A hidden window does not need private copies to come back. Qt's
+        // basic render loop keeps its textures across a hide, and a scene
+        // graph that is released rebuilds them from the cached picture.
         sourceSize: Qt.size(icon.size * Screen.devicePixelRatio, icon.size * Screen.devicePixelRatio)
         fillMode: Image.PreserveAspectFit
         smooth: true

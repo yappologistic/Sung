@@ -58,8 +58,9 @@ public:
     const int points = parts.value(1).toInt();
     if (points > 0 && points <= 22) name += "_20";
     else if (points > 32) name += "_40";
-    // Cache the untinted raster, not the QML texture. Window remapping still gets
-    // fresh textures, while theme transitions reuse the same SVG coverage mask.
+    // Cache the untinted raster: every ink a symbol is drawn in is painted
+    // from one SVG coverage mask, so a theme transition does not parse the
+    // file again. The tinted picture is Qt's pixmap cache's to share.
     QMutexLocker lock(&m_mutex);
     const QString key=name+":"+QString::number(s.width())+"x"+QString::number(s.height());
     QImage img;
@@ -359,6 +360,7 @@ int main(int argc, char **argv) {
   if(args.contains("--tour")){QTimer::singleShot(0,&app,[&]{runTourCapture(&backend,window);});return app.exec();}
   if(args.contains("--interface-audit-test")){QTimer::singleShot(0,&app,[&]{runInterfaceAuditTests(&backend,window);});return app.exec();}
   if(args.contains("--playback-memory-test")){QTimer::singleShot(0,&app,[&]{runPlaybackMemoryTests(&backend,window);});return app.exec();}
+  if(args.contains("--footprint-test")){QTimer::singleShot(0,&app,[&]{runFootprintTests(&backend,window);});return app.exec();}
   if(args.contains("--library-exchange-test")){QTimer::singleShot(0,&app,[&]{runLibraryExchangeTests(&backend,window);});return app.exec();}
   if(args.contains("--backdrop-pulse-test")){QTimer::singleShot(0,&app,[&]{runBackdropPulseTests(&backend,window);});return app.exec();}
   if(args.contains("--home-rail-test")){QTimer::singleShot(0,&app,[&]{runHomeRailTests(&backend,window);});return app.exec();}

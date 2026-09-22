@@ -57,6 +57,7 @@ void runOnboardingTests(Backend*,QQuickWindow*);
 void runLibraryExchangeTests(Backend*,QQuickWindow*);
 void runBackdropPulseTests(Backend*,QQuickWindow*);
 void runPlaybackMemoryTests(Backend*,QQuickWindow*);
+void runFootprintTests(Backend*,QQuickWindow*);
 void runInterfaceAuditTests(Backend*,QQuickWindow*);
 
 void runTourCapture(Backend*,QQuickWindow*);

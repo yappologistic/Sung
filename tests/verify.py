@@ -100,6 +100,8 @@ if ready:
     stage("backdrop-pulse",[str(build/"sung"),"--isolated","--backdrop-pulse-test"],240,e)
     e=profile("playback-memory-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"playback-memory"))
     stage("playback-memory",[str(build/"sung"),"--isolated","--playback-memory-test"],420,e)
+    e=profile("footprint-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"footprint"))
+    stage("footprint",[str(build/"sung"),"--isolated","--footprint-test"],120,e)
     for name,flag in [("dynamic-color","--dynamic-color-test"),("navigation-motion","--navigation-motion-test"),
                       ("artist-hero","--artist-hero-test"),("singalong","--singalong-test"),
                       ("crossfade-ui","--crossfade-ui-test"),("track-details","--track-details-test"),

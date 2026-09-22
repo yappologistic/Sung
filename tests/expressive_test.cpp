@@ -7,10 +7,13 @@
 #include <QImage>
 #include <QPainter>
 #include <QProcess>
+#include <QQmlComponent>
 #include <QQmlContext>
+#include <QQmlEngine>
 #include <QQmlExpression>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSGTextureProvider>
 #include <QSettings>
 #include <QTest>
 #include <QWheelEvent>
@@ -1661,5 +1664,56 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   QMetaObject::invokeMethod(settings, "close");
   QTest::qWait(300);
   b->setTheme("dark");
+  c.finish();
+}
+
+// What the application costs to run rather than what it shows: the memory
+// it holds and the work before its first frame. Each check here fails if
+// the change it guards is taken out.
+void runFootprintTests(Backend *b, QQuickWindow *w) {
+  Harness c{b, w, qEnvironmentVariable("SUNG_TEST_OUTPUT")};
+  QDir().mkpath(c.directory);
+  QWindowSystemInterface::handleFocusWindowChanged(w);
+  w->resize(1180, 800);
+  QTest::qWait(400);
+
+  // --- Identical symbols share one picture ---
+  // Two icons at one size in one ink are the same image. The pixmap cache
+  // hands both the one texture, where each used to ask for its own.
+  QQmlComponent pair(qmlEngine(w));
+  pair.setData("import QtQuick\n"
+               "Row { spacing: 8; x: 24; y: 24; z: 1000\n"
+               "  Icon { objectName: \"sharedA\"; name: \"queue\"; size: 24 }\n"
+               "  Icon { objectName: \"sharedB\"; name: \"queue\"; size: 24 }\n"
+               "  Icon { objectName: \"otherInk\"; name: \"queue\"; size: 24; ink: \"#ff0000\" }\n"
+               "}\n",
+               QUrl("qrc:/qml/MemoryProbe.qml"));
+  auto *row = qobject_cast<QQuickItem *>(pair.create(qmlContext(w)));
+  c.check(row, "icons can be built beside the interface");
+  if (!row) {
+    fprintf(stdout, "%s\n", qPrintable(pair.errorString()));
+    return c.finish();
+  }
+  row->setParentItem(w->contentItem());
+  QTest::qWait(300);
+  const auto texture = [&](const QString &name) -> QSGTexture * {
+    QQuickItem *icon = nullptr;
+    for (auto *child : row->childItems())
+      if (child->objectName() == name) icon = child;
+    QQuickItem *fill = nullptr;
+    if (icon)
+      for (auto *child : icon->childItems())
+        if (child->objectName() == "iconFill") fill = child;
+    auto *provider = fill ? fill->textureProvider() : nullptr;
+    return provider ? provider->texture() : nullptr;
+  };
+  auto *first = texture("sharedA"), *second = texture("sharedB"), *other = texture("otherInk");
+  c.check(first && second && other, "each icon has a texture to draw");
+  c.check(first == second, "two identical icons draw from one texture");
+  c.check(first != other, "an icon in another ink draws from a texture of its own");
+  c.shot("01-shared-symbols");
+  delete row;
+  QTest::qWait(100);
+
   c.finish();
 }
