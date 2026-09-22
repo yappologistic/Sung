@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <sys/resource.h>
 #include <atomic>
+#include <mutex>
 
 static double cpuSeconds() {
   rusage u{}; getrusage(RUSAGE_SELF,&u);
@@ -99,7 +100,14 @@ void runBenchmark(Backend *b,QQuickWindow *w) {
     auto swapchain=static_cast<QRhiSwapChain*>(visible->rendererInterface()->getResource(visible,QSGRendererInterface::RhiSwapchainResource));
     if(swapchain && swapchain->currentFrameCommandBuffer()){const auto elapsed=swapchain->currentFrameCommandBuffer()->lastCompletedGpuTime();if(elapsed>0){gpuSeconds.fetch_add(elapsed);++gpuSamples;}}
   },Qt::DirectConnection);
-  auto connection=QObject::connect(visible,&QQuickWindow::frameSwapped,visible,[&]{++frames;},Qt::DirectConnection);
+  QElapsedTimer frameClock;frameClock.start();
+  std::mutex frameMutex;QList<qint64> intervals;qint64 lastFrame=-1;
+  auto connection=QObject::connect(visible,&QQuickWindow::frameSwapped,visible,[&]{
+    std::lock_guard lock(frameMutex);
+    const auto now=frameClock.nsecsElapsed();
+    if(lastFrame>=0)intervals.append(now-lastFrame);
+    lastFrame=now;++frames;
+  },Qt::DirectConnection);
   QElapsedTimer timer;timer.start();const auto start=cpuSeconds();const auto position=b->position();
   // Use the real event loop. QTest::qWait polling would add artificial CPU wakeups.
   QEventLoop loop;QTimer finish;finish.setSingleShot(true);finish.setTimerType(Qt::PreciseTimer);
@@ -110,6 +118,17 @@ void runBenchmark(Backend *b,QQuickWindow *w) {
   QJsonObject result{{"mode",mode},{"seconds",elapsed},{"cpu_percent_one_core",(cpuSeconds()-start)/elapsed*100},{"frames_per_second",frames.load()/elapsed},{"position_delta_ms",b->position()-position},{"width",visible->width()},{"height",visible->height()},{"dpr",visible->devicePixelRatio()},{"qobjects",w->findChildren<QObject*>().size()}};
   result["graphics_api"]=int(visible->rendererInterface()->graphicsApi());
   result["exposed"]=visible->isExposed();
+  {
+    std::lock_guard lock(frameMutex);
+    if(!intervals.isEmpty()) {
+      std::sort(intervals.begin(),intervals.end());
+      const auto percentile=[&](double p){return intervals[qMin(intervals.size()-1,qsizetype(p*(intervals.size()-1)))]/1e6;};
+      result["frame_interval_p50_ms"]=percentile(.5);
+      result["frame_interval_p95_ms"]=percentile(.95);
+      result["frame_interval_p99_ms"]=percentile(.99);
+      result["frame_interval_max_ms"]=intervals.constLast()/1e6;
+    }
+  }
   result["persistent_scene_graph"]=visible->isPersistentSceneGraph();
   if(gpuSamples>0){result["gpu_ms_per_frame"]=gpuSeconds.load()*1000/gpuSamples.load();result["gpu_samples"]=gpuSamples.load();}
   if(frames>0)result["cpu_ms_per_frame"]=(cpuSeconds()-start)*1000/frames.load();
