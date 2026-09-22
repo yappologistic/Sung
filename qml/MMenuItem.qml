@@ -50,6 +50,10 @@ MenuItem {
     readonly property bool hasLeading: showsTick || symbol.length > 0
     readonly property real leadingSpace: 32
 
+    // No menu here opens a submenu, and the style's arrow for one is built for
+    // every item unless the item says it has none.
+    arrow: null
+
     implicitHeight: segmented ? 44 : 48
     height: visible ? implicitHeight : 0
     leftPadding: 14; rightPadding: 14
