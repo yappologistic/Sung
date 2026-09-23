@@ -57,6 +57,13 @@ AbstractButton {
     Timer { id: confirmation; interval: 1100; onTriggered: control.confirmed=false }
     onVisibleChanged: if(!visible){confirmation.stop();confirmed=false;}
     readonly property bool needsTooltip: tip.length > 0 && (!text.length || tip !== text || buttonLabel.truncated)
+    // BasicTooltip.kt:188-199 dismisses the popup when its anchor is pressed,
+    // and :262-280 waits for another pointer Enter before showing it again.
+    // A keyboard press re-arms on focus exit instead of pointer exit.
+    property int tooltipRearm: 0 // 0 armed, 1 wait for hover exit, 2 wait for focus exit
+    onDownChanged: if (down && needsTooltip) tooltipRearm = visualFocus ? 2 : 1
+    onHoveredChanged: if (!hovered && tooltipRearm === 1) tooltipRearm = 0
+    onVisualFocusChanged: if (!visualFocus && tooltipRearm === 2) tooltipRearm = 0
     // The background's corners, which optical centering reads.
     property real startRadius: 0
     property real endRadius: 0
@@ -118,7 +125,7 @@ AbstractButton {
     Accessible.description: busy ? "Loading" : confirmed ? "Added to queue" : ""
     Loader {
         id: tooltipLoader
-        readonly property bool wanted: (control.hovered || control.visualFocus) && control.needsTooltip
+        readonly property bool wanted: control.tooltipRearm === 0 && (control.hovered || control.visualFocus) && control.needsTooltip
         // Keep the popup alive until its exit transition has finished.
         active: false
         function releaseIfIdle() { if (!wanted && (!item || !item.visible)) active=false; }

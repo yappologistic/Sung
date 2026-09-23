@@ -2347,6 +2347,72 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return b->results()->count() == 6; }), "the library is listed");
   QTest::qWait(500);
 
+  // BasicTooltip.kt:188-199 dismisses on a press outside the tooltip Popup,
+  // while :262-280 shows it again on a later pointer Enter. An MButton press
+  // must cancel both a visible tooltip and one waiting through its delay.
+  {
+    QQmlComponent buttonSource(qmlEngine(w), QUrl("qrc:/qml/MButton.qml"));
+    QScopedPointer<QObject> made(buttonSource.create(qmlContext(w)));
+    auto button = qobject_cast<QQuickItem *>(made.data());
+    c.check(button, "a tooltip button can be driven through the window");
+    if (button) {
+      button->setParentItem(w->contentItem());
+      button->setX(1000); button->setY(400); button->setZ(100);
+      button->setProperty("symbol", QString("more"));
+      button->setProperty("tip", QString("Tooltip fixture"));
+      const auto point = button->mapToScene(button->boundingRect().center()).toPoint();
+      auto tip = [&] { return button->findChild<QObject *>("buttonTip"); };
+      auto showing = [&] { auto popup = tip(); return popup && popup->property("visible").toBool(); };
+      QTest::mouseMove(w, point);
+      c.check(c.until(showing, 3000), "hover shows the button tooltip after its delay");
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+      QTest::qWait(80);
+      c.check(!showing(), "a real click dismisses an open button tooltip");
+      QTest::qWait(750);
+      c.check(!showing(), "the tooltip stays dismissed while the pointer remains");
+      QTest::mouseMove(w, QPoint(20, 20));
+      QTest::qWait(100);
+      QTest::mouseMove(w, point);
+      c.check(c.until(showing, 3000), "hovering again shows the tooltip after Exit and Enter");
+      QTest::mouseMove(w, QPoint(20, 20));
+      QTest::qWait(100);
+      QTest::mouseMove(w, point);
+      QTest::qWait(150);
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+      QTest::qWait(750);
+      c.check(!showing(), "a press also cancels the pending tooltip delay");
+      QTest::mouseMove(w, QPoint(20, 20));
+      auto focusSeed = shownItem(w->contentItem(), "settingsButton");
+      c.check(focusSeed, "Settings provides a focus stop before the tooltip button");
+      if (focusSeed) focusSeed->forceActiveFocus(Qt::TabFocusReason);
+      c.check(!button->hasActiveFocus(), "focus leaves the clicked button before Tab returns");
+      for (int i = 0; i < 120 && !button->hasActiveFocus(); ++i)
+        QTest::keyClick(w, Qt::Key_Tab);
+      c.check(button->hasActiveFocus(), "Tab reaches the tooltip button");
+      c.check(c.until(showing, 3000),
+              QString("Tab focus shows its tooltip (visual %1, rearm %2)")
+                  .arg(button->property("visualFocus").toBool())
+                  .arg(button->property("tooltipRearm").toInt()));
+      QTest::keyClick(w, Qt::Key_Space);
+      QTest::qWait(80);
+      c.check(!showing(), "Space dismisses the focused button tooltip");
+      QTest::qWait(750);
+      c.check(!showing(), "the focused tooltip stays dismissed until focus leaves");
+      QTest::keyClick(w, Qt::Key_Tab);
+      c.check(!button->hasActiveFocus(), "Tab leaves the activated button");
+      for (int i = 0; i < 120 && !button->hasActiveFocus(); ++i)
+        QTest::keyClick(w, Qt::Key_Tab);
+      c.check(button->hasActiveFocus(), "Tab can return to the tooltip button");
+      c.check(c.until(showing, 3000),
+              QString("returning by Tab re-arms the tooltip (visual %1, rearm %2)")
+                  .arg(button->property("visualFocus").toBool())
+                  .arg(button->property("tooltipRearm").toInt()));
+      c.shot("00-button-tooltip-rearmed");
+      button->setVisible(false);
+      button->setParentItem(nullptr);
+    }
+  }
+
   // --- Split button: one control, two targets, asymmetric corners ---
   auto split = shownItem(w->contentItem(), "collectionPlay");
   c.check(split, "the collection action is a split button");

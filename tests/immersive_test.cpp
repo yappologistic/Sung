@@ -153,6 +153,26 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   if(!player){QCoreApplication::exit(1);return;}
   check(!player->property("autoHideControls").toBool()&&player->property("controlsShown").toBool(),"controls remain visible by default");
   auto menuOpen=[&]{auto menu=w->findChild<QObject*>("immersiveLayoutMenu");return menu&&menu->property("visible").toBool();};
+  // BasicTooltip.kt:188-199 dismisses the tooltip Popup when its anchor is
+  // pressed, and :262-280 waits for another mouse Enter before showing it.
+  auto more=visibleItem(w->contentItem(),"immersiveLayoutButton");
+  check(more,"More actions is available for the tooltip check");
+  if(more){
+    const auto point=more->mapToScene(more->boundingRect().center()).toPoint();
+    auto showing=[&]{auto tip=more->findChild<QObject*>("buttonTip");return tip&&tip->property("visible").toBool();};
+    QTest::mouseMove(w,point);
+    check(waitFor(showing),"hovering More actions shows its tooltip");
+    click("immersiveLayoutButton");
+    check(waitFor(menuOpen),"More actions opens its menu");
+    check(!showing(),"clicking More actions clears the tooltip above its menu");
+    shot("menu-after-click");
+    QTest::keyClick(w,Qt::Key_Escape);
+    check(waitFor([&]{return !menuOpen();}),"the tooltip check closes its menu");
+    QTest::mouseMove(w,QPoint(20,20));QTest::qWait(120);
+    QTest::mouseMove(w,point);
+    check(waitFor(showing),"a new hover shows More actions again");
+    QTest::mouseMove(w,QPoint(20,20));QTest::qWait(120);
+  }
   click("immersiveLayoutButton");
   check(waitFor(menuOpen),"layout menu opens");
   click("immersiveAutoHide");
