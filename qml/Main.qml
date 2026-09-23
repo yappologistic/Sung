@@ -520,7 +520,14 @@ ApplicationWindow {
                 onQueueRequested:window.showQueue()
                 onCollectionRequested:item=>window.openImmersiveCollection(item); onExitRequested: window.toggleImmersive(); onSpeedRequested: rateDialog.open(); onArtworkRequested:artworkViewer.inspect(app.current.art)
                 onTimingRequested: lyricTimingDialog.open() } } }
-    PlaybackHud {id:playbackHud;anchors.horizontalCenter:parent.horizontalCenter;anchors.bottom:parent.bottom;anchors.bottomMargin:window.immersive?172:128;z:90}
+    PlaybackHud {
+        id:playbackHud;anchors.horizontalCenter:parent.horizontalCenter
+        // ImmersivePlayer's compact/regular margins are 16/24dp. The 48dp
+        // top actions follow IconButton.kt:242-249; an 8dp gap puts feedback
+        // below them and above the lyric measure at every window width.
+        y:window.immersive?(window.width<600?16:24)+48+8:window.height-height-128
+        z:90
+    }
     Drawer {
         id:immersiveQueue;objectName:"immersiveQueueSheet";edge:Qt.RightEdge
         width:Math.min(420,window.width-32);height:window.height;modal:true;dim:true;focus:true;interactive:false

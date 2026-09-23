@@ -362,6 +362,33 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   w->resize(1180, 800);
   QTest::qWait(250);
 
+  // IconButton.kt:242-249 gives the top controls a 48dp target. The HUD is
+  // below it, and its text never covers readable player text in either theme.
+  auto hud = shownItem(w->contentItem(), "playbackHud");
+  for (const auto &theme : {"dark", "light"}) {
+    b->setTheme(theme);
+    for (const int width : {480, 600, 840, 1024, 1440, 2560}) {
+      w->resize(width, 800);
+      QTest::qWait(90);
+      player->forceActiveFocus(Qt::TabFocusReason);
+      QTest::keyClick(w, Qt::Key_Right);
+      c.until([&] { return shownItem(w->contentItem(), "playbackHud") != nullptr; }, 1200);
+      hud = shownItem(w->contentItem(), "playbackHud");
+      const auto hudRect = hud ? hud->mapRectToScene(hud->boundingRect()) : QRectF();
+      bool clear = hud && hudRect.top() >= (width < 600 ? 72 : 80) - 1;
+      for (auto text : player->findChildren<QQuickItem *>()) {
+        if (!text->inherits("QQuickText") || !text->isVisible() || text->opacity() <= 0 ||
+            text->property("text").toString().isEmpty()) continue;
+        if (hudRect.intersects(text->mapRectToScene(text->boundingRect()))) clear = false;
+      }
+      c.check(clear, QString("immersive HUD clears text at %1 %2").arg(width).arg(theme));
+      c.shot(QString("03-hud-%1-%2").arg(width).arg(theme));
+    }
+  }
+  b->setTheme("dark");
+  w->resize(1180, 800);
+  QTest::qWait(150);
+
   w->setProperty("immersive", false);
   QTest::qWait(300);
   w->setProperty("immersive", true);
