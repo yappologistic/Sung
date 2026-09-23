@@ -21,7 +21,10 @@ T.Dialog {
                              implicitContentHeight + topPadding + bottomPadding
                              + (implicitHeaderHeight > 0 ? implicitHeaderHeight + spacing : 0)
                              + (implicitFooterHeight > 0 ? implicitFooterHeight + spacing : 0))
-    T.Overlay.modal: Rectangle { color: Color.transparent(dialog.palette.shadow, 0.5) }
+    // A modal dialog dims the window with Material's scrim at 32%
+    // (ScrimTokens), the same as the sheets and the drawer, rather than the
+    // style's half-black shadow.
+    T.Overlay.modal: Rectangle { color: Theme.scrimColor() }
     T.Overlay.modeless: Rectangle { color: Color.transparent(dialog.palette.shadow, 0.12) }
     // A compact window has no room to float a dialog inside it, so Material
     // gives the dialog the window: square corners, no inset, and the actions
@@ -62,11 +65,21 @@ T.Dialog {
         // A dialog that brings a footer of its own keeps it. This does not wait
         // on built: a dialog that fills its body before opening sets that
         // itself, and would otherwise open without its buttons.
-        if (!footer) footer = buttonBar.createObject(dialog)
+        if (!footer) { footer = buttonBar.createObject(dialog); standardFooter = true }
         built = true
     }
     onOpened: if (initialFocus) initialFocus.forceActiveFocus(Qt.TabFocusReason)
+    // Compose's alert dialog is padded 24dp all round, with 16dp under the
+    // headline and 24dp between the body and the actions (AlertDialog.kt,
+    // dialogPadding, TitlePadding, textPadding). The header below carries the
+    // 16 and the standard button bar the 24, so a floating dialog's body
+    // takes no padding of its own next to them; stacked, they made 48dp gaps.
+    // A dialog that brings its own footer measured it against the padding
+    // and keeps it.
+    property bool standardFooter: false
     padding: 24
+    topPadding: fullScreen ? 24 : 0
+    bottomPadding: !fullScreen && standardFooter && footer && footer.visible ? 0 : 24
     anchors.centerIn: parent
     background: Rectangle {
         color: Theme.high; radius: dialog.fullScreen ? 0 : Theme.shapeExtraLarge
@@ -93,7 +106,7 @@ T.Dialog {
         // A full-screen dialog is headed by a 56dp bar carrying the close
         // affordance and the headline beside it, ruled off from the content.
         implicitHeight: dialog.fullScreen ? 56
-                      : Math.max(72, titleLabel.implicitHeight + 48 + (dialogIcon.visible ? 40 : 0))
+                      : 24 + (dialogIcon.visible ? dialogIcon.height + 16 : 0) + titleLabel.implicitHeight + 16
         MButton {
             id: closeAffordance
             objectName: "dialogClose"
@@ -106,18 +119,21 @@ T.Dialog {
             id: dialogIcon
             objectName: "dialogIcon"
             visible: !dialog.fullScreen && dialog.symbol.length > 0
-            name: dialog.symbol; size: 24; ink: Theme.primary
+            // DialogTokens.IconColor is secondary, not the accent.
+            name: dialog.symbol; size: 24; ink: Theme.secondary
             anchors.horizontalCenter: parent.horizontalCenter
             y: 24
         }
+        // DialogTokens.HeadlineFont is headline small as it stands, without
+        // the emphasized weight.
         SungText {
             id: titleLabel; heading: true; objectName: "dialogTitle"
             x: dialog.fullScreen ? closeAffordance.x+closeAffordance.width+8 : 24
             width: parent.width-x-24
             y: dialogIcon.visible ? dialogIcon.y+dialogIcon.height+16
-                                  : (parent.height-implicitHeight)/2
+                                  : dialog.fullScreen ? (parent.height-implicitHeight)/2 : 24
             horizontalAlignment: dialogIcon.visible ? Text.AlignHCenter : Text.AlignLeft
-            text: dialog.title; font.pixelSize: Theme.headlineSmall; emphasized: true
+            text: dialog.title; font.pixelSize: Theme.headlineSmall
             wrapMode: Text.Wrap; maximumLineCount: 2
         }
         Rectangle {
