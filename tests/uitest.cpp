@@ -1196,6 +1196,10 @@ void runQolTests(Backend *b,QQuickWindow *w) {
   if(tracks){tracks->forceActiveFocus();}
   QTest::keyClick(w,Qt::Key_F1);QTest::qWait(400);
   check(help&&help->property("visible").toBool(),"F1 opens shortcut reference");shot("02-shortcuts");
+  auto keys=findItem(w->contentItem(),"shortcutKeys");
+  QQmlExpression mutedColor(qmlContext(w),w,"Theme.muted");
+  check(keys&&keys->property("color").value<QColor>()==mutedColor.evaluate().value<QColor>(),
+        "shortcut combinations use the trailing supporting text color");
   QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(250);check(help&&!help->property("visible").toBool(),"Escape closes shortcut reference");
   if(tracks){tracks->forceActiveFocus();}
   QTest::keyClick(w,Qt::Key_Question);QTest::qWait(300);check(help&&help->property("visible").toBool(),"question mark opens help outside text fields");

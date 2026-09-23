@@ -41,7 +41,9 @@ MDialog {
             required property var modelData
             width: shortcuts.width-12; height: Math.max(48,description.implicitHeight+16); spacing: 16
             SungText { id: description; text: modelData[0]; Layout.fillWidth: true; wrapMode: Text.Wrap; font.pixelSize: Theme.bodyMedium }
-            SungText { text: modelData[1]; Layout.preferredWidth: 155; horizontalAlignment: Text.AlignRight; color: Theme.primary; font.pixelSize: Theme.labelLarge; labelRole: true }
+            // ListTokens.kt:341-342 sets ItemTrailingSupportingTextColor to OnSurfaceVariant;
+            // these key combinations support the action label at the row end.
+            SungText { objectName: "shortcutKeys"; text: modelData[1]; Layout.preferredWidth: 155; horizontalAlignment: Text.AlignRight; color: Theme.muted; font.pixelSize: Theme.labelLarge; labelRole: true }
         }
         footer: SungText { width: shortcuts.width-16; text: "¹ Outside text fields and controls. ² With the song list focused."; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.bodySmall; topPadding: 16 }
     }
