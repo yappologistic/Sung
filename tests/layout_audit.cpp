@@ -136,25 +136,7 @@ bool focusCovers(QQuickItem *focus, QQuickItem *candidate) {
   return false;
 }
 
-QObject *frontModal(QQuickWindow *window) {
-  QObject *frontModal = nullptr;
-  qreal frontZ = -1e9;
-  for (auto popup : window->findChildren<QObject *>()) {
-    if (!popup->inherits("QQuickPopup") || !popup->property("visible").toBool() ||
-        !popup->property("modal").toBool())
-      continue;
-    const auto z = popup->property("z").toReal();
-    if (z >= frontZ) {
-      frontZ = z;
-      frontModal = popup;
-    }
-  }
-  return frontModal;
-}
-
-QQuickItem *auditRoot(QQuickWindow *window, QObject *popup) {
-  if (!popup)
-    return window->contentItem();
+QQuickItem *popupFrame(QObject *popup) {
   auto item = popup->property("contentItem").value<QQuickItem *>();
   // A modal popup blocks the controls behind its scrim. Its PopupItem holds
   // the header, body and footer, so the audit follows that focus scope.
@@ -162,6 +144,44 @@ QQuickItem *auditRoot(QQuickWindow *window, QObject *popup) {
     if (typeName(parent).contains("PopupItem"))
       return parent;
   }
+  return item;
+}
+
+QObject *frontModal(QQuickWindow *window) {
+  QObject *front = nullptr;
+  QQuickItem *frontFrame = nullptr;
+  int frontOrder = -1;
+  for (auto popup : window->findChildren<QObject *>()) {
+    if (!popup->inherits("QQuickPopup") || !popup->property("visible").toBool() ||
+        !popup->property("modal").toBool())
+      continue;
+    auto frame = popupFrame(popup);
+    auto parent = frame ? frame->parentItem() : nullptr;
+    const int order = parent ? parent->childItems().indexOf(frame) : -1;
+    // Popups opened later sit later among the overlay's children. QObject
+    // creation order can instead select a dialog still open behind them.
+    if (!front || (frame && frontFrame &&
+                   (frame->z() > frontFrame->z() ||
+                    (frame->z() == frontFrame->z() && order >= frontOrder)))) {
+      front = popup;
+      frontFrame = frame;
+      frontOrder = order;
+    }
+  }
+  if (front)
+    return front;
+  // MBottomSheet is an Item, not a Popup. Its scrim blocks the page too.
+  auto sheet = window->findChild<QQuickItem *>("panelSheet");
+  return sheet && sheet->property("modal").toBool() && sheet->property("open").toBool() &&
+                 sheet->isVisible() ? sheet : nullptr;
+}
+
+QQuickItem *auditRoot(QQuickWindow *window, QObject *popup) {
+  if (!popup)
+    return window->contentItem();
+  if (popup->objectName() == "panelSheet")
+    return qobject_cast<QQuickItem *>(popup);
+  auto item = popupFrame(popup);
   return item ? item : window->contentItem();
 }
 
