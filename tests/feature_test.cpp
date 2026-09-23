@@ -5483,7 +5483,25 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
     QTest::qWait(500);
     c.check(b->listPaneId().isEmpty() && !pane->isVisible(),
             "and leaving the library clears the pane rather than stranding it");
+    // Another tab of the library leaves the detail too. The pane used to stay
+    // beside Mixes and History with the albums it no longer had a use for.
+    QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("local-albums")));
+    c.check(c.until([&] { return b->results()->count() == 2; }), "back in the album grid");
+    QTest::qWait(500);
+    auto again = shownItem(w->contentItem(), "openCollectionCard");
+    if (again) {
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier,
+                        again->mapToScene(again->boundingRect().center()).toPoint());
+      c.check(c.until([&] { return b->page() == "local-album" && pane->isVisible(); }),
+              "an album opened from it brings the pane back");
+      QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("mixes")));
+      c.check(c.until([&] { return b->listPaneId().isEmpty(); }),
+              "choosing another library tab puts the pane away");
+      QTest::qWait(500);
+      c.check(!pane->isVisible(), "rather than leaving it beside a list it did not come from");
+      c.shot("08-other-tab");
+    }
   }
-  c.shot("08-restored");
+  c.shot("09-restored");
   c.finish();
 }

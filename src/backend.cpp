@@ -1532,6 +1532,10 @@ QVariantList Backend::playlists() const {
   return result;
 }
 void Backend::library(const QString &kind) {
+  // The list pane is the grid a detail was opened from. Choosing a library
+  // tab leaves that detail, so the pane goes with it rather than standing
+  // beside Mixes or History, which it has nothing to do with.
+  clearListPane();
   if(kind=="local-albums" || kind=="local-artists"){
     navigate("library",kind=="local-albums"?"Albums":"Artists",m_page!="library","library:"+kind);
     m_libraryId=kind;m_results.assign(localGroups(kind));emit catalogChanged();return;
