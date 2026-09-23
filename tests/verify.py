@@ -122,6 +122,8 @@ if ready:
         stage(name,[str(build/"sung"),"--isolated",flag],420,e)
     e=profile("interface-audit-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"interface-audit"))
     stage("interface-audit",[str(build/"sung"),"--isolated","--interface-audit-test"],300,e)
+    e=profile("layout-audit-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"layout-audit"))
+    stage("layout-audit",[str(build/"sung"),"--isolated","--layout-audit-test"],480,e)
     if a.offline:
         rows.append(dict(stage='live-ui-and-audit',status='skipped',detail='--offline selected; streaming and live catalog not verified'))
     else:

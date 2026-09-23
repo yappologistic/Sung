@@ -2,6 +2,7 @@
 // the section it photographs is really on screen, so a missing view fails the
 // run instead of quietly producing an empty picture.
 #include "uitest.h"
+#include "tour.h"
 #include "backend.h"
 #include <QColor>
 #include <QDir>
@@ -27,12 +28,25 @@ QQuickItem *shownItem(QQuickItem *root, const QString &name) {
   return nullptr;
 }
 
+QQuickItem *shownButtonWithText(QQuickItem *root, const QString &text) {
+  if (!root->isVisible())
+    return nullptr;
+  if (root->inherits("QQuickAbstractButton") && root->property("text").toString() == text)
+    return root;
+  for (auto child : root->childItems())
+    if (auto found = shownButtonWithText(child, text))
+      return found;
+  return nullptr;
+}
+
 struct Tour {
   Backend *backend;
   QQuickWindow *window;
   QString directory;
   int failures = 0;
   int stop = 0;
+  TourCapture capture;
+  TourFinish complete;
 
   void check(bool ok, const QString &label) {
     fprintf(stdout, "%s %s\n", ok ? "PASS" : "FAIL", qPrintable(label));
@@ -48,15 +62,20 @@ struct Tour {
     return predicate();
   }
   // Every stop names the section it expects to find before it photographs it.
-  void shot(const QString &name, const QString &expect = {}) {
-    QTest::qWait(300);
+  void shot(const QString &name, const QString &expect = {}, QQuickWindow *target = nullptr) {
+    if (!target)
+      target = window;
+    QTest::qWait(capture ? 60 : 300);
     if (!expect.isEmpty())
-      check(shownItem(window->contentItem(), expect), name + " shows " + expect);
+      check(shownItem(target->contentItem(), expect), name + " shows " + expect);
+    if (capture) {
+      check(capture(target, name, ++stop), "capture " + name);
+      return;
+    }
     const auto file = QString("%1/%2-%3.png").arg(directory).arg(++stop, 2, 10, QChar('0')).arg(name);
-    check(window->grabWindow().save(file), "capture " + name);
+    check(target->grabWindow().save(file), "capture " + name);
   }
-  void click(const QString &name) {
-    auto item = shownItem(window->contentItem(), name);
+  void click(QQuickItem *item, const QString &name) {
     check(item, "find " + name);
     if (!item)
       return;
@@ -65,6 +84,13 @@ struct Tour {
     QTest::qWait(60);
     QTest::mouseClick(window, Qt::LeftButton, Qt::NoModifier, point);
     QTest::qWait(320);
+  }
+  void click(const QString &name) {
+    click(shownItem(window->contentItem(), name), name);
+  }
+  void type(const QString &value) {
+    for (const QChar letter : value)
+      QTest::keyClick(window, letter.toLatin1());
   }
   QObject *dialog(const QString &name, const QString &method = "open") {
     auto found = window->findChild<QObject *>(name);
@@ -81,6 +107,8 @@ struct Tour {
     QTest::qWait(320);
   }
   void finish() {
+    if (complete)
+      failures += complete();
     fprintf(stdout, "RESULT %d failures\n", failures);
     fflush(stdout);
     QCoreApplication::exit(failures ? 1 : 0);
@@ -119,15 +147,16 @@ bool encodeTrack(Tour &c, const QString &path, const QString &title, const QStri
 }
 } // namespace
 
-void runTourCapture(Backend *b, QQuickWindow *w) {
-  Tour c{b, w, qEnvironmentVariable("SUNG_TEST_OUTPUT")};
+void runGuidedTour(Backend *b, QQuickWindow *w, const TourCapture &capture,
+                   const TourFinish &complete, bool motion) {
+  Tour c{b, w, qEnvironmentVariable("SUNG_TEST_OUTPUT"), 0, 0, capture, complete};
   QDir().mkpath(c.directory + "/music/Still Water");
   QDir().mkpath(c.directory + "/music/Night Ferry");
   QWindowSystemInterface::handleFocusWindowChanged(w);
   w->resize(1440, 900);
   QTest::qWait(600);
   b->setTheme("dark");
-  b->setMotion(true);
+  b->setMotion(motion);
   b->setVolume(0);
   b->setAutoplay(false);
   b->setPrepareNext(false);
@@ -221,11 +250,16 @@ void runTourCapture(Backend *b, QQuickWindow *w) {
 
   b->open(b->results()->get(0));
   c.check(c.until([&] { return !b->busy() && b->collection()->count() == 3; }), "an album opens");
+  c.check(b->listPaneId() == "local-albums", "the album keeps its list pane");
   c.shot("album-detail", "tracksView");
 
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("local-artists")));
   c.check(c.until([&] { return b->results()->count() == 2; }), "two artists group");
   c.shot("library-local-artists", "localGroups");
+
+  b->open(b->results()->get(0));
+  c.check(c.until([&] { return !b->busy() && b->collection()->count() == 3; }), "an artist opens");
+  c.shot("artist-detail", "tracksView");
 
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("mixes")));
   c.check(c.until([&] { return b->results()->count() > 0; }), "mixes are offered");
@@ -311,7 +345,29 @@ void runTourCapture(Backend *b, QQuickWindow *w) {
             "settings offers the " + categories[i] + " category");
     c.shot("settings-" + categories[i], "settingsOptions");
   }
-  c.closeDialog(settings);
+
+  // Search puts the two appearance rows on screen before each real click.
+  c.click("settingsSearch");
+  c.type("Current view layout");
+  c.check(c.until([&] { return shownItem(w->contentItem(), "viewLayoutButton") != nullptr; }),
+          "settings search finds Current view layout");
+  c.click("viewLayoutButton");
+  auto viewLayout = w->findChild<QObject *>("viewLayoutDialog");
+  c.check(viewLayout && viewLayout->property("visible").toBool(), "the view layout dialog opens from Settings");
+  c.shot("view-layout");
+  c.closeDialog(viewLayout);
+
+  c.dialog("settingsDialog");
+  c.click("settingsSearch");
+  QTest::keyClick(w, Qt::Key_A, Qt::ControlModifier);
+  c.type("Current artwork");
+  auto artworkRow = shownButtonWithText(w->contentItem(), "Current artwork");
+  c.check(artworkRow, "settings search finds Current artwork");
+  c.click(artworkRow, "Current artwork");
+  auto artwork = w->findChild<QObject *>("artworkControls");
+  c.check(artwork && artwork->property("visible").toBool(), "the artwork dialog opens from Settings");
+  c.shot("artwork-controls");
+  c.closeDialog(artwork);
 
   // --- Dialogs and secondary surfaces ---
   auto palette = c.dialog("commandPalette");
@@ -390,10 +446,7 @@ void runTourCapture(Backend *b, QQuickWindow *w) {
   c.check(mini && mini->isVisible(), "the mini player opens");
   if (mini) {
     QTest::qWait(400);
-    c.check(mini->grabWindow().save(QString("%1/%2-mini-player.png")
-                                        .arg(c.directory)
-                                        .arg(++c.stop, 2, 10, QChar('0'))),
-            "capture mini-player");
+    c.shot("mini-player", {}, mini);
   }
   QMetaObject::invokeMethod(w, "restorePlayer");
   QTest::qWait(600);
@@ -401,4 +454,8 @@ void runTourCapture(Backend *b, QQuickWindow *w) {
   b->stop();
   b->clearQueue();
   c.finish();
+}
+
+void runTourCapture(Backend *b, QQuickWindow *w) {
+  runGuidedTour(b, w, {}, {}, true);
 }
