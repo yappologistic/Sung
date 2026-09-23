@@ -1474,7 +1474,32 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
   b->collection()->setQuery("Aurora night");QTest::qWait(250);auto row=findItem(w->contentItem(),"trackRow_0");auto label=row?findItem(row,"trackTitle"):nullptr;
   check(label&&label->property("text").toString().contains("<b>Aurora")&&label->property("text").toString().contains("&lt;"),"matches highlighted while metadata markup is escaped");shot("02-search-matches");
   check(label&&label->property("truncated").toBool(),"fixture title is truncated before hovering");
-  if(label){QTest::mouseMove(w,label->mapToScene(QPointF(40,label->height()/2)).toPoint());QTest::qWait(750);auto tip=label->findChild<QObject*>("fullTitleTip");check(tip&&tip->property("visible").toBool(),"truncated title reveals on hover");shot("03-full-title");}
+  if(label){
+    QTest::mouseMove(w,label->mapToScene(QPointF(40,label->height()/2)).toPoint());
+    auto showing=[&]{auto tip=label->findChild<QObject*>("fullTitleTip");return tip&&tip->property("visible").toBool();};
+    const bool shown=until(showing);
+    check(shown,qPrintable(QString("truncated title reveals on hover (hover %1, rearm %2, enabled %3, focus %4)")
+                           .arg(label->property("hoveredForTooltip").toBool()).arg(label->property("tooltipRearm").toInt())
+                           .arg(label->property("tooltipEnabled").toBool()).arg(label->property("revealFocused").toBool())));
+    shot("03-full-title");
+  }
+  // BasicTooltip.kt:188-199 dismisses the Popup on an anchor press, and
+  // :262-280 waits for the next pointer Enter before showing it again.
+  if(label){
+    const auto point=label->mapToScene(QPointF(40,label->height()/2)).toPoint();
+    auto showing=[&]{auto tip=label->findChild<QObject*>("fullTitleTip");return tip&&tip->property("visible").toBool();};
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);QTest::qWait(80);
+    check(!showing(),"pressing the track title dismisses its reveal");
+    QTest::qWait(750);
+    check(!showing(),"the title stays dismissed while the pointer remains");
+    QTest::mouseMove(w,QPoint(1100,80));QTest::qWait(120);
+    QTest::mouseMove(w,point);
+    const bool shown=until(showing);
+    check(shown,qPrintable(QString("a later pointer Enter re-arms the title reveal (hover %1, rearm %2, focus %3)")
+                           .arg(label->property("hoveredForTooltip").toBool()).arg(label->property("tooltipRearm").toInt())
+                           .arg(label->property("revealFocused").toBool())));
+    shot("03-title-rearmed");
+  }
   if(label){
     QTest::mouseMove(w,QPoint(1100,80));QTest::qWait(450);
     check(!label->findChild<QObject*>("fullTitleTip"),"closed title tooltip releases its objects");

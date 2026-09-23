@@ -6,6 +6,20 @@ SungText {
     property string query: ""
     property bool revealFocused: false
     property bool tooltipEnabled: true
+    // A row's MouseArea receives pointer events before this label does. Its
+    // position is passed in where needed; other MatchText users keep HoverHandler.
+    property bool pointerHovered: false
+    readonly property bool hoveredForTooltip: hover.hovered || pointerHovered
+    // BasicTooltip.kt:188-199 dismisses a tooltip on its anchor's press;
+    // :262-280 starts mouse display again on Enter. A row can keep focus after
+    // a click, so pointer dismissal waits for Exit and then the next Enter.
+    property int tooltipRearm: 0 // 0 armed, 1 wait for Exit, 2 wait for Enter, 3 wait for focus exit
+    function dismissTooltip() { tooltipRearm = hoveredForTooltip ? 1 : 3 }
+    onRevealFocusedChanged: if (!revealFocused && tooltipRearm === 3) tooltipRearm = 0
+    onHoveredForTooltipChanged: {
+        if (!hoveredForTooltip && tooltipRearm === 1) tooltipRearm = 2
+        else if (hoveredForTooltip && tooltipRearm === 2) tooltipRearm = 0
+    }
     function escapeText(value) {return value.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
     function marked(value,search) {
         const words=search.toLowerCase().trim().split(/\s+/).filter(w=>w.length>0);
@@ -22,7 +36,7 @@ SungText {
     HoverHandler { id: hover }
     Loader {
         id: tooltipLoader
-        readonly property bool wanted: label.tooltipEnabled && label.truncated && label.visible && (hover.hovered || label.revealFocused)
+        readonly property bool wanted: label.tooltipRearm === 0 && label.tooltipEnabled && label.truncated && label.visible && (label.hoveredForTooltip || label.revealFocused)
         // Keep the popup alive until its exit transition has finished.
         active: false
         function releaseIfIdle() { if (!wanted && (!item || !item.visible)) active=false; }

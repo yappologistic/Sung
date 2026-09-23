@@ -12,6 +12,10 @@ ItemDelegate {
     property bool selected: selection ? (selection.revision,selection.contains(selectionIndex)) : false
     property bool selectable: selection && !!(track.videoId || track.localPath || track.serverSong) && track.available!==false
     property bool keyboardCurrent: activeFocus || (listOwner && listOwner.activeFocus && listOwner.currentIndex===selectionIndex)
+    // A mouse press also gives this row active focus. Its title tooltip then
+    // follows pointer Enter until focus leaves, instead of reopening on Exit.
+    property bool tooltipFocusFromPointer: false
+    onKeyboardCurrentChanged: if (!keyboardCurrent) tooltipFocusFromPointer = false
     property bool selectionVisible: selectable && (hovered || pointer.containsMouse || keyboardCurrent || selection.count>0)
     property bool motionRaised: false
     z: motionRaised && app.motion ? 2 : 0
@@ -47,6 +51,10 @@ ItemDelegate {
     property bool firstInRun: true
     property bool lastInRun: true
     readonly property bool pointerOver: pointer.containsMouse
+    function pointerInside(item) {
+        const p = item.mapFromItem(pointer, pointer.mouseX, pointer.mouseY)
+        return pointer.containsMouse && p.x >= 0 && p.x < item.width && p.y >= 0 && p.y < item.height
+    }
     // Material's swipe to dismiss. A queue row can be pushed aside to drop it,
     // revealing the action behind it as it goes; past a third of the row the
     // release commits. Reordering still owns any drag that is mostly vertical.
@@ -56,7 +64,7 @@ ItemDelegate {
     signal dismissRequested()
     property bool active: queueMode ? rowIndex===app.currentIndex : app.current.id !== undefined && app.current.id === track.id
     signal menuRequested(var item, int index, var anchor)
-    ListView.onReused: {motionRaised=false;opacity=Qt.binding(()=>enabled?1:Theme.disabledContentOpacity);}
+    ListView.onReused: {motionRaised=false;tooltipFocusFromPointer=false;opacity=Qt.binding(()=>enabled?1:Theme.disabledContentOpacity);}
     // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
     Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;objectName:"trackRowResizeMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
     Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}
@@ -150,7 +158,7 @@ ItemDelegate {
     MouseArea {
         id: pointer; anchors.fill: parent; anchors.rightMargin: 60
         enabled: !!row.selection; acceptedButtons: Qt.LeftButton | Qt.RightButton; hoverEnabled: true; preventStealing: true
-        onPressed: mouse=> {if(mouse.button===Qt.RightButton){if(row.track.kind!=="smart")row.menuRequested(row.track,row.rowIndex,row);return;}row.pressPoint=Qt.point(mouse.x,mouse.y);row.pressModifiers=mouse.modifiers;row.dragging=false;row.forceActiveFocus();row.listOwner.currentIndex=row.selectionIndex;}
+        onPressed: mouse=> {titleLabel.dismissTooltip();supportLabel.dismissTooltip();if(mouse.button===Qt.RightButton){if(row.track.kind!=="smart")row.menuRequested(row.track,row.rowIndex,row);return;}row.tooltipFocusFromPointer=true;row.pressPoint=Qt.point(mouse.x,mouse.y);row.pressModifiers=mouse.modifiers;row.dragging=false;row.forceActiveFocus();row.listOwner.currentIndex=row.selectionIndex;}
         onPositionChanged: mouse=> {
             if(!(pressedButtons&Qt.LeftButton) || !row.selectable)return;
             const dx=mouse.x-row.pressPoint.x, dy=mouse.y-row.pressPoint.y;
@@ -224,10 +232,10 @@ ItemDelegate {
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
             // ListTokens.ItemLabelTextFont is BodyLarge at its own weight.
-            MatchText { objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; typeRole: "bodyLarge"; color: row.titleInk }
+            MatchText { id: titleLabel; objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent && !row.tooltipFocusFromPointer; pointerHovered: row.pointerInside(titleLabel); sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; typeRole: "bodyLarge"; color: row.titleInk }
             // ListTokens.ItemSupportingTextFont is BodyMedium. Album rows omit
             // only the artist already stated in the album heading.
-            MatchText { objectName: "trackSupport"; visible: row.track.kind==="smart" || !row.repeatedAlbumArtist; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.kind==="smart" ? (row.track.description || "") : row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
+            MatchText { id: supportLabel; objectName: "trackSupport"; visible: row.track.kind==="smart" || !row.repeatedAlbumArtist; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent && !row.tooltipFocusFromPointer; pointerHovered: row.pointerInside(supportLabel); sourceText: row.track.kind==="smart" ? (row.track.description || "") : row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
         }
         // Qt Loader.active releases the inactive indicator. Keep this Loader
         // invisible too, so RowLayout adds no spacing before the duration.
