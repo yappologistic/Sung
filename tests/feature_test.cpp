@@ -3813,6 +3813,39 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
     c.check(shown + hidden == liveActions.size(),
             QString("and nothing is dropped on the way (%1 shown, %2 in the menu)")
                 .arg(shown).arg(hidden));
+    // PaneScaffoldDirective.kt:58-70 gives an expanded window two panes.
+    // Resize the real layout so it, rather than the test, sets the row width.
+    for (const auto &caseSize : {QPair<int, bool>{480, false}, {840, true}}) {
+      w->resize(caseSize.first, caseSize.first == 480 ? 620 : 800);
+      w->setProperty("side", caseSize.second ? "queue" : "");
+      QTest::qWait(750);
+      const auto folded = appBar->property("hidden").toList();
+      auto overflow = shownItem(appBar, "appBarOverflow");
+      auto pane = shownItem(w->contentItem(), "detailPane");
+      auto play = shownItem(w->contentItem(), "collectionPlay");
+      auto tools = shownItem(w->contentItem(), "collectionToolsButton");
+      auto count = shownItem(w->contentItem(), "collectionTrackCount");
+      const QRectF paneRect = pane ? pane->mapRectToScene(pane->boundingRect()) : QRectF{};
+      const QRectF barRect = appBar->mapRectToScene(appBar->boundingRect());
+      c.check(appBar->property("overflowing").toBool() && overflow &&
+                  !folded.isEmpty() && folded.last().toMap().value("key") == "rescan" &&
+                  appBar->property("shownCount").toInt() + folded.size() == liveActions.size() &&
+                  pane && barRect.right() <= paneRect.right() - w->property("paneMargin").toReal() + 1 &&
+                  play && tools && count,
+              QString("%1px Local files folds actions inside the detail after Play, tools and count")
+                  .arg(caseSize.first));
+      if (overflow) {
+        c.clickWithin(appBar, "appBarOverflow");
+        c.check(shownItem(w->contentItem(), "appBarMenuAction_rescan"),
+                QString("%1px real overflow click reaches the folded Rescan action").arg(caseSize.first));
+        c.shotNow(QString("12-local-files-tools-%1-overflow").arg(caseSize.first));
+        QTest::keyClick(w, Qt::Key_Escape);
+        QTest::qWait(300);
+      }
+    }
+    w->setProperty("side", "");
+    w->resize(1400, 900);
+    QTest::qWait(500);
   }
   // What the row does when it is given less than it asks for.
   QQmlComponent rowSource(qmlEngine(w), QUrl("qrc:/qml/MAppBarRow.qml"));

@@ -949,10 +949,12 @@ ApplicationWindow {
                             }
                             Item { Layout.fillWidth: true }
                             MButton { objectName: "collectionToolsButton"; symbol: "filter"; tip: "Find and sort songs"; selected: window.collectionTools || !!app.collection.query || app.collection.sortKey!=="original"; onClicked: {window.collectionTools=!window.collectionTools;if(window.collectionTools)Qt.callLater(()=>collectionSearch.forceActiveFocus());} }
-                            SungText { visible: !app.albumInfo.summary || content.compactHeader || !!app.collection.query; text: app.collection.query ? app.collection.count+" / "+app.results.count : window.countText(app.results.count); color: Theme.muted; font.pixelSize: Theme.bodySmall }
-                            // MAppBarRow keeps Folders then Rescan in order and
-                            // folds whichever does not fit beside the list tools.
-                            MAppBarRow { objectName:"collectionFolderActions"; visible:app.page==="library" && app.libraryId==="files"; Layout.preferredWidth:implicitWidth; Layout.preferredHeight:48
+                            SungText { objectName:"collectionTrackCount"; visible: !app.albumInfo.summary || content.compactHeader || !!app.collection.query; text: app.collection.query ? app.collection.count+" / "+app.results.count : window.countText(app.results.count); color: Theme.muted; font.pixelSize: Theme.bodySmall }
+                            // Qt Quick Layouts' fillWidth shrinks this row down to
+                            // MAppBarRow's one-button minimum after the spacer yields.
+                            // AppBarDsl.kt:312-346 keeps overflow reachable; Play,
+                            // the tools button and count retain their fixed widths.
+                            MAppBarRow { objectName:"collectionFolderActions"; visible:app.page==="library" && app.libraryId==="files"; Layout.fillWidth:true; Layout.preferredWidth:Math.min(implicitWidth,parent.width); Layout.preferredHeight:48
                                 actions:[
                                     {key:"folders",name:"musicFoldersButton",symbol:"folder",text:"Folders",label:"Manage music folders",visible:true,trigger:function(){musicFoldersDialog.open()}},
                                     {key:"rescan",name:"rescanFoldersButton",symbol:"refresh",label:"Rescan music folders",enabled:!app.importingLocal,visible:app.musicFolders.length>0,trigger:function(){app.rescanMusicFolders()}}
