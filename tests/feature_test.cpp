@@ -4330,9 +4330,12 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
       auto list = menu->property("contentItem").value<QQuickItem *>();
       auto item = list ? anyItem(list, "menuItemContainer") : nullptr;
       c.check(item && item->isVisible(), "and each item carries a container of its own");
+      // The run's ends and a chosen item are the medium step; 24 is
+      // SegmentedMenuTokens.ActiveContainerShape, which no item reads
+      // (MenuDefaults.kt, leadingItemShape and selectedItemShape).
       if (item)
-        c.check(qAbs(item->property("topLeftRadius").toDouble() - 24) < 0.5,
-                QString("with the run's end at the shape Material gives a taken item (%1)")
+        c.check(qAbs(item->property("topLeftRadius").toDouble() - 12) < 0.5,
+                QString("with the run's end at the medium step (%1)")
                     .arg(item->property("topLeftRadius").toDouble(), 0, 'f', 0));
       // Material marks a chosen menu item with the tertiary container, not the
       // secondary one it marks a chosen anything else with. A menu is a list

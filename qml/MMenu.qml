@@ -42,10 +42,11 @@ Menu {
         ScrollBar.vertical: MScrollBar { objectName: "menuScrollBar" }
     }
     background: Rectangle {
-        // MenuTokens.ContainerColor, whether the items are a run or a list.
-        color: Theme.container
+        // MenuTokens.ContainerColor for a list; a run sits on the group
+        // container, SegmentedMenuTokens.GroupContainerColor. The lift is
+        // what sets a menu off from the window: no menu token has an outline.
+        color: menu.segmented ? Theme.surfaceLow : Theme.container
         radius: menu.segmented ? Theme.shapeLarge : Theme.shapeLargeIncreased
-        border.color: Theme.outlineVariant
         MElevation { anchors.fill: parent; radius: parent.radius; level: 2 }
     }
     enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.enterDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }

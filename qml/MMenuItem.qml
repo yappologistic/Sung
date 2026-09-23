@@ -28,12 +28,16 @@ MenuItem {
     // there is there a secondary container for that ink to sit on. Elsewhere
     // the row keeps the menu's own ink and the tick alone marks the choice,
     // which is how Material's list marks a selection without a container.
-    readonly property color ink: !control.enabled ? Theme.muted
+    //
+    // A disabled item is onSurface at 38%, label and icon alike
+    // (StandardMenuTokens.ItemDisabledLabelTextColor and its opacity).
+    readonly property color disabledInk: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, Theme.disabledContentOpacity)
+    readonly property color ink: !control.enabled ? disabledInk
                                : control.checked && control.segmented ? Theme.secondaryContainerText
                                : Theme.text
     // The leading icon is the variant ink until the item is chosen, when it
     // takes the ink of the container it has been given.
-    readonly property color leadingInk: !control.enabled ? Theme.muted
+    readonly property color leadingInk: !control.enabled ? disabledInk
                                       : control.checked ? ink : Theme.muted
 
     // A menu item's insides are built the first time the menu it sits in is
@@ -78,8 +82,7 @@ MenuItem {
             anchors.verticalCenter: parent.verticalCenter
             x: control.mirrored ? 0 : control.leadingSpace
             width: parent.width-control.leadingSpace-(shortcutLabel.visible ? shortcutLabel.width+12 : 0)
-            text: control.text; color: control.ink
-            opacity: control.enabled ? 1 : 0.5; font.pixelSize: Theme.bodyLarge
+            text: control.text; color: control.ink; font.pixelSize: Theme.bodyLarge
             elide: Text.ElideRight
         }
         SungText {
@@ -99,21 +102,20 @@ MenuItem {
     background: Loader {
       active: control.built
       sourceComponent: Item {
-        // The run's own container. Material rounds the ends of the run and
-        // leaves the corners inside it nearly square, and rounds an item fully
-        // while it is taken.
+        // The run's own container. Material rounds the ends of the run to the
+        // medium step and leaves the corners inside it at extra small, and
+        // rounds the chosen item to medium all round (MenuDefaults.kt,
+        // leadingItemShape, middleItemShape, trailingItemShape,
+        // selectedItemShape). The shape follows the choice alone, not the
+        // pointer (Menu.kt, shapeByInteraction).
         Rectangle {
             objectName: "menuItemContainer"
             visible: control.segmented
             y: 1; height: parent.height-2
             width: parent.width
-            readonly property bool taken: control.down || control.visualFocus || control.highlighted || control.checked
-            // The item under the pointer takes the shape Material publishes
-            // for it, and so do the ends of the run; the corners inside the
-            // run are the small step.
-            topLeftRadius: taken || control.firstInRun ? Theme.menuItemTaken : Theme.shapeSmall
+            topLeftRadius: control.checked || control.firstInRun ? Theme.shapeMedium : Theme.shapeExtraSmall
             topRightRadius: topLeftRadius
-            bottomLeftRadius: taken || control.lastInRun ? Theme.menuItemTaken : Theme.shapeSmall
+            bottomLeftRadius: control.checked || control.lastInRun ? Theme.shapeMedium : Theme.shapeExtraSmall
             bottomRightRadius: bottomLeftRadius
             // The run sits on the menu's own container, so an item in it takes
             // the step above to read as a container rather than a hole.

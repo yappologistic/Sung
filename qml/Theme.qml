@@ -134,9 +134,6 @@ QtObject {
     // the full step, the corners inside it are the resting one, and the items
     // are set apart rather than divided by a rule.
     readonly property int listSegmentedGap: 2
-    // The shape a segmented menu gives the item under the pointer. Material
-    // publishes it on the component rather than off the shape scale.
-    readonly property int menuItemTaken: 24
 
     // --- App bars ------------------------------------------------------------
     // Material's flexible app bars hug what is in them, so a bar with a
