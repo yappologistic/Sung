@@ -8,6 +8,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
+#include <QPointer>
 #include <QProcess>
 #include <QQmlComponent>
 #include <QQmlContext>
@@ -204,7 +205,9 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(500);
   c.check(player->property("coverflow").toBool() && player->property("coverflowVisible").toBool(),
           "layout menu enables the carousel");
-  auto covers = shownItem(w->contentItem(), "coverflowView");
+  // A QPointer, because the carousel's Loader destroys the view whenever the
+  // cover budget makes it yield (below a 160dp cover) and builds a new one.
+  QPointer<QQuickItem> covers = shownItem(w->contentItem(), "coverflowView");
   c.check(covers, "carousel view is shown");
   if (!covers)
     return c.finish();
@@ -237,6 +240,12 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   w->setMaximumSize({1180, 800});
   w->resize(1180, 800);
   QTest::qWait(200);
+  // The 480 capture made the carousel yield, so the view is a new instance.
+  c.check(c.until([&] { return shownItem(w->contentItem(), "coverflowView") != nullptr; }),
+          "the carousel returns after the narrow captures");
+  covers = shownItem(w->contentItem(), "coverflowView");
+  if (!covers)
+    return c.finish();
 
   // The coverflow is one keyboard stop. Arrows preview without seeking or
   // starting playback; Return activates the cover the keyboard selected.
