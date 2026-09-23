@@ -3,6 +3,7 @@
 #include "m3color.h"
 #include "rowselection.h"
 #include <QColor>
+#include <QAccessible>
 #include <QDir>
 #include <QFile>
 #include <QImage>
@@ -287,6 +288,12 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(sheet&&sheet->property("visible").toBool()&&w->property("immersive").toBool(),"queue opens without leaving immersion");
   auto queue=visibleItem(w->contentItem(),"queueView");check(queue&&queue->property("count").toInt()==3,"sheet uses complete live queue");
   shot("queue");
+  {
+    auto button=visibleItem(w->contentItem(),"immersiveQueueButton");
+    auto accessible=button?QAccessible::queryAccessibleInterface(button):nullptr;
+    check(accessible&&accessible->text(QAccessible::Name)==QString::fromUtf8("Queue \u00b7 Ctrl+L"),
+          "queue button keeps its accessible name while the sheet suppresses its tip");
+  }
   if(queue){
     auto selection=queue->property("selection").value<RowSelection*>();
     check(selection,"queue selection is available");
@@ -517,6 +524,24 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(title&&title->property("lineCount").toInt()==1&&!title->property("truncated").toBool(),
         "480px coverflow title uses the column width and stays on one line");
   shot("coverflow-480");
+  for(const auto &pair:{qMakePair("immersiveArtistButton","immersiveArtistFocusRing"),
+                        qMakePair("immersiveAlbumButton","immersiveAlbumFocusRing")}){
+    auto button=visibleItem(w->contentItem(),pair.first);
+    auto ring=w->findChild<QQuickItem*>(pair.second);
+    if(button)button->forceActiveFocus(Qt::TabFocusReason);
+    QTest::qWait(30);
+    check(button&&ring&&ring->isVisible()&&qAbs(ring->x()+3)<0.5&&
+          qAbs(ring->width()-button->width()-6)<0.5&&ring->property("radius").toDouble()>12&&
+          QQmlProperty::read(ring,"border.width",qmlContext(ring)).toInt()==2,
+          qPrintable(QString("%1 uses an external 2px shaped focus ring").arg(pair.first)));
+  }
+  auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
+  auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
+  if(artistLink)artistLink->forceActiveFocus(Qt::TabFocusReason);
+  QTest::keyClick(w,Qt::Key_Tab);
+  check(albumLink&&w->activeFocusItem()==albumLink,
+        "Tab reaches the album after the artist in artwork details");
+  shot("focus-ring-480");
   auto waveMotion=w->findChild<QObject*>("seekWaveMotion");
   check(waveMotion&&waveMotion->property("duration").toInt()==1000,
         "the 28px seek wave advances one wavelength per second");

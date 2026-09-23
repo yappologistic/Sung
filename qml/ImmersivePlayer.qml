@@ -143,7 +143,10 @@ Item {
                     Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
                     onClicked: player.collectionRequested(player.artistTarget)
                     contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
-                    background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}
+                    background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
+                    // MButton's ring sits 3px outside the control and follows
+                    // its shape, with a 2px Theme.focusRing stroke.
+                    Rectangle { objectName: "immersiveArtistFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
                 }
                 AbstractButton {
                     objectName:"immersiveAlbumButton";Layout.fillWidth:true;Layout.maximumWidth:immersiveArt.width;Layout.alignment:Qt.AlignHCenter;implicitHeight:40;leftPadding:0;rightPadding:8;visible:!!app.current.album
@@ -151,7 +154,8 @@ Item {
                     Accessible.name: "Open album \u00b7 "+(app.current.album || "")
                     onClicked: player.collectionRequested(player.albumTarget)
                     contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
-                    background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}
+                    background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
+                    Rectangle { objectName: "immersiveAlbumFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
                 }
             }
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
@@ -211,7 +215,7 @@ Item {
             RowLayout {
                 id: seekTrailing
                 spacing: 12
-                MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue \u00b7 Ctrl+L";onClicked:player.queueRequested()}
+                MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue \u00b7 Ctrl+L";Accessible.name:"Queue \u00b7 Ctrl+L";onClicked:player.queueRequested()}
                 VolumeControl {id:immersiveVolume;showSlider:false}
             }
         }
