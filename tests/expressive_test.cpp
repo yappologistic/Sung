@@ -1622,6 +1622,22 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   w->resize(1280, 850);
   QTest::qWait(400);
 
+  // The mini window keeps Qt's unbound DragHandler for compositor moving.
+  // Open and restore through the same shortcuts a person uses.
+  QTest::keyClick(w, Qt::Key_M, Qt::ControlModifier);
+  QQuickWindow *mini = nullptr;
+  c.check(c.until([&] {
+    for (auto top : QGuiApplication::topLevelWindows())
+      if (top->objectName() == "miniPlayerWindow")
+        mini = qobject_cast<QQuickWindow *>(top);
+    return mini && mini->isVisible();
+  }), "Ctrl+M opens the mini player");
+  auto moveHandler = mini ? mini->findChild<QObject *>("miniMoveHandler") : nullptr;
+  c.check(moveHandler && !moveHandler->property("target").value<QObject *>(),
+          "the mini window uses an unbound drag handler for system move");
+  if (mini) QTest::keyClick(mini, Qt::Key_M, Qt::ControlModifier);
+  c.check(c.until([&] { return w->isVisible(); }), "Ctrl+M restores the full player");
+
   auto settings = w->findChild<QObject *>("settingsDialog");
   c.check(settings, "the settings dialog exists");
   if (!settings)

@@ -29,7 +29,9 @@ Window {
     Rectangle {
         anchors.fill: parent; anchors.margins: 1; radius: Theme.shapeExtraLarge; color: Theme.container
         border.width: 1; border.color: Theme.outlineVariant
-        MouseArea { anchors.fill: parent; onPressed: mini.startSystemMove() }
+        // Qt Quick Window::startSystemMove documents an unbound DragHandler:
+        // the compositor starts moving only after the pointer begins a drag.
+        DragHandler { objectName: "miniMoveHandler"; target: null; onActiveChanged: if (active) mini.startSystemMove() }
         ColumnLayout {
             anchors.fill: parent; anchors.margins: 16; spacing: 4
             RowLayout {
