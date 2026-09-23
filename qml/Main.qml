@@ -527,10 +527,11 @@ ApplicationWindow {
                 onTimingRequested: lyricTimingDialog.open() } } }
     PlaybackHud {
         id:playbackHud;anchors.horizontalCenter:parent.horizontalCenter
-        // ImmersivePlayer's compact/regular margins are 16/24dp. The 48dp
-        // top actions follow IconButton.kt:242-249; an 8dp gap puts feedback
-        // below them and above the lyric measure at every window width.
-        y:window.immersive?(window.width<600?16:24)+48+8:window.height-height-128
+        // ImmersivePlayer's compact/regular margins are 16/24dp and its top
+        // action row is 48dp (IconButton.kt:242-249). The row's centre is
+        // empty between the back button and the actions at every width, so
+        // the 48dp pill sits in it and covers neither the cover nor lyrics.
+        y:window.immersive?(window.width<600?16:24)+(48-height)/2:window.height-height-128
         z:90
     }
     Drawer {

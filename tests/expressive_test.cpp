@@ -403,8 +403,9 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   w->resize(1180, 800);
   QTest::qWait(250);
 
-  // IconButton.kt:242-249 gives the top controls a 48dp target. The HUD is
-  // below it, and its text never covers readable player text in either theme.
+  // IconButton.kt:242-249 gives the top controls a 48dp row. The HUD sits in
+  // that row's empty centre: it touches no action, no readable player text
+  // and not the cover, in either theme.
   auto hud = shownItem(w->contentItem(), "playbackHud");
   for (const auto &theme : {"dark", "light"}) {
     b->setTheme(theme);
@@ -415,14 +416,22 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
       QTest::keyClick(w, Qt::Key_Right);
       c.until([&] { return shownItem(w->contentItem(), "playbackHud") != nullptr; }, 1200);
       hud = shownItem(w->contentItem(), "playbackHud");
+      auto topRow = shownItem(w->contentItem(), "immersiveTopControls");
+      auto cover = shownItem(w->contentItem(), "immersiveArtwork");
       const auto hudRect = hud ? hud->mapRectToScene(hud->boundingRect()) : QRectF();
-      bool clear = hud && hudRect.top() >= (width < 600 ? 72 : 80) - 1;
+      const auto rowRect = topRow ? topRow->mapRectToScene(topRow->boundingRect()) : QRectF();
+      bool clear = hud && topRow && qAbs(hudRect.center().y() - rowRect.center().y()) < 1 &&
+                   !(cover && hudRect.intersects(cover->mapRectToScene(cover->boundingRect())));
+      for (auto action : topRow ? topRow->childItems() : QList<QQuickItem *>()) {
+        if (action->inherits("QQuickAbstractButton") && action->isVisible() &&
+            hudRect.intersects(action->mapRectToScene(action->boundingRect()))) clear = false;
+      }
       for (auto text : player->findChildren<QQuickItem *>()) {
         if (!text->inherits("QQuickText") || !text->isVisible() || text->opacity() <= 0 ||
             text->property("text").toString().isEmpty()) continue;
         if (hudRect.intersects(text->mapRectToScene(text->boundingRect()))) clear = false;
       }
-      c.check(clear, QString("immersive HUD clears text at %1 %2").arg(width).arg(theme));
+      c.check(clear, QString("immersive HUD sits clear in the top row at %1 %2").arg(width).arg(theme));
       c.shot(QString("03-hud-%1-%2").arg(width).arg(theme));
     }
   }
