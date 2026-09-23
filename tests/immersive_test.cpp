@@ -53,6 +53,56 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     check(w->width()==width&&w->height()==height,
           qPrintable(QString("window measures %1x%2").arg(width).arg(height)));
   };
+  // WCAG 1.4.3 measures the actual ink against the background behind it.
+  // Read the delegate colour and alpha, then sample the captured backdrop in
+  // its left padding so artwork-driven theme colours are included.
+  auto lyricContrast=[&](double floor,const QString &context){
+    QList<QQuickItem*> labels;collectItems(w->contentItem(),"lyricLabel",labels);
+    QQuickItem *rest=nullptr,*active=nullptr;
+    for(auto label:labels){
+      if(!label->isVisible()||!label->parentItem()||!label->parentItem()->isVisible())continue;
+      if(label->parentItem()->property("current").toBool())active=label;
+      else if(label->parentItem()->opacity()>0.99 && !rest)rest=label;
+    }
+    check(rest&&active,qPrintable(context+" has current and resting lyric delegates"));
+    if(!rest||!active)return;
+    const auto image=w->grabWindow();
+    const auto p=rest->mapToScene(QPointF(2,rest->height()/2));
+    const int x=qBound(0,qRound(p.x()*image.width()/w->width()),image.width()-1);
+    const int y=qBound(0,qRound(p.y()*image.height()/w->height()),image.height()-1);
+    const auto backdrop=image.pixelColor(x,y);
+    const auto ink=rest->property("color").value<QColor>();
+    const double alpha=ink.alphaF()*rest->opacity()*rest->parentItem()->opacity();
+    const auto drawn=QColor::fromRgbF(ink.redF()*alpha+backdrop.redF()*(1-alpha),
+                                     ink.greenF()*alpha+backdrop.greenF()*(1-alpha),
+                                     ink.blueF()*alpha+backdrop.blueF()*(1-alpha));
+    const double ratio=m3::contrastRatio(drawn,backdrop);
+    check(ratio>=floor,qPrintable(QString("%1 resting lyric contrast %2:1 >= %3:1 (ink %4, backdrop %5)")
+          .arg(context).arg(ratio,0,'f',2).arg(floor,0,'f',1).arg(ink.name(),backdrop.name())));
+    check(active->property("color").value<QColor>()!=ink && active->scale()>rest->scale(),
+          qPrintable(context+" keeps current line distinct by colour and scale"));
+  };
+  auto singAlongContrast=[&](const QString &context){
+    auto rest=visibleItem(w->contentItem(),"singAlongLine");
+    auto active=visibleItem(w->contentItem(),"singAlongCurrent");
+    check(rest&&active,qPrintable(context+" has sung and unsung lines"));
+    if(!rest||!active)return;
+    const auto image=w->grabWindow();
+    const auto p=rest->mapToScene(QPointF(2,rest->height()/2));
+    const int x=qBound(0,qRound(p.x()*image.width()/w->width()),image.width()-1);
+    const int y=qBound(0,qRound(p.y()*image.height()/w->height()),image.height()-1);
+    const auto backdrop=image.pixelColor(x,y);
+    const auto ink=rest->property("color").value<QColor>();
+    const double alpha=ink.alphaF()*rest->opacity()*rest->parentItem()->opacity();
+    const auto drawn=QColor::fromRgbF(ink.redF()*alpha+backdrop.redF()*(1-alpha),
+                                     ink.greenF()*alpha+backdrop.greenF()*(1-alpha),
+                                     ink.blueF()*alpha+backdrop.blueF()*(1-alpha));
+    const double ratio=m3::contrastRatio(drawn,backdrop);
+    check(ratio>=3.0,qPrintable(QString("%1 unsung large text %2:1 >= 3:1")
+          .arg(context).arg(ratio,0,'f',2)));
+    check(active->property("color").value<QColor>()!=ink&&active->parentItem()->scale()>rest->parentItem()->scale(),
+          qPrintable(context+" keeps the sung line distinct by colour and scale"));
+  };
   QWindowSystemInterface::handleFocusWindowChanged(w);
   w->setMinimumSize({1180,800});w->setMaximumSize({1180,800});w->resize(1180,800);QTest::qWait(700);QWindowSystemInterface::handleFocusWindowChanged(w);b->setTheme("dark");b->setMotion(true);b->setVolume(0);
   b->setAutoplay(false);b->setPrepareNext(false);b->setWatchMusicFolders(false);b->setOnlineArtwork(false);b->setLyricsFallback(false);
@@ -121,6 +171,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   b->importLyrics(QUrl::fromLocalFile(lrc.fileName()),song.value("id").toString());
   check(waitFor([&]{return b->lyricLines().size()==5&&player->property("displayedLayout")=="lyrics";}),"available lyrics restore saved layout");
   b->seek(11000);QTest::qWait(450);shot("lyrics");
+  lyricContrast(3.0,"dark immersive");
+  b->setTheme("light");QTest::qWait(250);shot("lyrics-light");lyricContrast(3.0,"light immersive");
+  b->setTheme("dark");QTest::qWait(250);
   // At 1440 the lyric measure is bounded; at 1024 it stays on the same
   // centre line. Split mode is checked separately below.
   for(int width:{1440,1024}){
@@ -137,6 +190,18 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     shot(QString("lyrics-%1").arg(width));
   }
   resizeTo(1180,800);
+  auto lyricLines=QList<QQuickItem*>{};collectItems(w->contentItem(),"lyricLine",lyricLines);
+  QQuickItem *seekLine=nullptr;
+  for(auto line:lyricLines)if(line->isVisible()&&!line->property("current").toBool()&&line->property("index").toInt()==2)seekLine=line;
+  check(seekLine,"a non-current lyric can be targeted");
+  if(seekLine){
+    const auto point=seekLine->mapToScene(seekLine->boundingRect().center()).toPoint();
+    QTest::mouseMove(w,point);QTest::qWait(80);
+    check(seekLine->property("hovered").toBool(),"resting lyric remains hoverable");
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);QTest::qWait(100);
+    check(b->position()>=19500&&b->position()<=20500,"clicking a resting lyric seeks its timestamp");
+  }
+  b->seek(11000);QTest::qWait(100);
   choose("artwork");check(player->property("displayedLayout")=="artwork","artwork layout applies");shot("artwork");
   choose("split");check(player->property("displayedLayout")=="split","split layout applies");shot("split");
   {
@@ -145,6 +210,69 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     check(pane&&art&&pane->mapToScene({0,0}).x()>art->mapToScene({art->width(),0}).x(),
           "split lyrics remain to the right of the artwork");
   }
+  b->seek(11000);
+  choose("singalong");QTest::qWait(500);shot("singalong-dark");
+  singAlongContrast("dark sing along");
+  b->setTheme("light");QTest::qWait(300);shot("singalong-light");
+  singAlongContrast("light sing along");
+  b->setTheme("dark");QTest::qWait(200);
+  auto singSeek=visibleItem(w->contentItem(),"immersiveSeek");
+  check(singSeek&&b->lyricIndex()==1,"sing along starts on the second timed line");
+  if(singSeek){
+    const auto point=singSeek->mapToScene({singSeek->width()*0.12,singSeek->height()/2}).toPoint();
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
+    check(waitFor([&]{return b->lyricIndex()==2;}),"seeking through the UI advances the sung line");
+    QList<QQuickItem*> fills;collectItems(w->contentItem(),"singAlongFill",fills);
+    QQuickItem *previousFill=nullptr;
+    for(auto fill:fills)if(fill->parentItem()&&fill->parentItem()->property("index").toInt()==1)previousFill=fill;
+    check(previousFill,"previous sung line keeps a fill to fade");
+    if(previousFill){
+      const auto effects=b->motionSprings(b->motionScheme()!="standard").value("defaultEffects").toMap();
+      const int effectsMs=effects.value("ms").toInt();
+      auto fade=qmlContext(previousFill)->objectForName("fillFadeAnimation");
+      check(fade&&fade->property("duration").toInt()==effectsMs&&
+            QQmlProperty::read(fade,"easing.bezierCurve",qmlContext(fade)).toList()==effects.value("curve").toList(),
+            qPrintable(QString("sing-along fill uses DefaultEffects duration and curve (%1/%2, curve %3)")
+              .arg(fade?fade->property("duration").toInt():-1).arg(effectsMs)
+              .arg(fade ? QQmlProperty::read(fade,"easing.bezierCurve",qmlContext(fade)).toList()==effects.value("curve").toList() : false)));
+      bool sawFade=false;
+      for(int elapsed=0;elapsed<effectsMs && !sawFade;elapsed+=10){
+        const double alpha=previousFill->opacity();
+        sawFade=alpha>0.02&&alpha<0.98;
+        if(!sawFade)QTest::qWait(10);
+      }
+      check(sawFade,"completed lyric fill fades instead of cutting away");
+      QTest::qWait(effectsMs+80);
+      QList<QQuickItem*> resting;collectItems(w->contentItem(),"singAlongLine",resting);
+      QQuickItem *previousBody=nullptr;
+      for(auto body:resting)if(body->parentItem()&&body->parentItem()->property("index").toInt()==1)previousBody=body;
+      QColor mutedColor;bool mutedValid=false;
+      if(previousBody){
+        QQmlExpression muted(qmlContext(previousBody),previousBody,"Theme.muted");
+        mutedColor=muted.evaluate().value<QColor>();mutedValid=!muted.hasError();
+      }
+      check(previousBody&&mutedValid&&previousBody->property("color").value<QColor>()==mutedColor&&
+            previousFill->opacity()<0.01&&!previousFill->isVisible()&&
+            qAbs(previousFill->width()-previousBody->width())<1,
+            "finished line keeps full-width fill while fading, then reads in onSurfaceVariant");
+      int accented=0;
+      for(auto fill:fills)if(fill->isVisible()&&fill->opacity()>0.01)++accented;
+      check(accented==1,"only the current sung line keeps an accent fill");
+      shot("singalong-later-line");
+    }
+    b->setMotion(false);
+    const auto nextPoint=singSeek->mapToScene({singSeek->width()*0.18,singSeek->height()/2}).toPoint();
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,nextPoint);
+    check(waitFor([&]{return b->lyricIndex()==3;}),"reduced-motion seek advances the sung line");
+    QTest::qWait(20);
+    QList<QQuickItem*> reducedFills;collectItems(w->contentItem(),"singAlongFill",reducedFills);
+    bool previousCleared=false;
+    for(auto fill:reducedFills)if(fill->parentItem()&&fill->parentItem()->property("index").toInt()==2)
+      previousCleared=fill->opacity()<0.01&&!fill->isVisible();
+    check(previousCleared,"reduced motion clears the completed fill immediately");
+    b->setMotion(true);
+  }
+  choose("split");
   const auto playingId=b->current().value("id");
   click("immersiveAlbumButton");check(!w->property("immersive").toBool()&&b->page()=="local-album","album link opens local collection");
   check(b->current().value("id")==playingId&&b->playing(),"collection navigation preserves playback");
@@ -393,6 +521,16 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   b->setTheme("light");shot("light");b->setMotion(false);
   choose("artwork");check(player->property("displayedLayout")=="artwork","reduced motion applies layout immediately");
   choose("split");b->setTheme("dark");
+  w->setProperty("immersive",false);resizeTo(1440,900);
+  if(w->property("side")!="lyrics")QTest::keyClick(w,Qt::Key_Y,Qt::ControlModifier);
+  QTest::qWait(300);
+  check(w->property("side")=="lyrics"&&visibleItem(w->contentItem(),"lyricsView"),
+        "side lyric panel opens at wide width");
+  b->setTheme("light");QTest::qWait(180);shot("side-lyrics-light");
+  lyricContrast(4.5,"light side pane");
+  b->setTheme("dark");QTest::qWait(180);shot("side-lyrics-dark");
+  lyricContrast(4.5,"dark side pane");
+  QMetaObject::invokeMethod(w,"activateSide",Q_ARG(QString,QString("lyrics")));
   w->setProperty("immersive",false);QTest::qWait(150);w->showNormal();w->setMinimumSize({780,580});w->setMaximumSize({780,580});w->resize(780,580);w->setProperty("immersive",true);QTest::qWait(250);
   player=visibleItem(w->contentItem(),"immersivePlayer");shot("compact");
   const auto art=visibleItem(w->contentItem(),"immersiveArtwork");const auto seek=visibleItem(w->contentItem(),"immersiveSeek");

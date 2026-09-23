@@ -121,13 +121,14 @@ Item {
                 scaled: true
                 font.pixelSize: lyricPane.expanded ? Math.max(24,Math.min(app.lyricTextSize*1.68,width/14*app.lyricTextSize/25)) : app.lyricTextSize; font.weight: Font.Medium
                 wrapMode: Text.Wrap; elide: Text.ElideNone; lineSpacing: 1.25
-                color: Theme.primary
+                // Material onSurfaceVariant carries lower-emphasis reading
+                // text. WCAG 1.4.3 requires 4.5:1 here at body size; the
+                // immersive size requires 3:1. The active line keeps primary.
+                color: lyricLine.current || lyricLine.visualFocus ? Theme.primary : Theme.muted
                 scale: lyricLine.current ? 1 : 0.86
                 transformOrigin: Item.Left
-                opacity: lyricLine.current || lyricLine.visualFocus ? 1 : lyricLine.hovered ? 0.8 : app.lyricIndex < 0 ? 0.65 : 0.34
                 // DefaultSpatial changes the size of the focused lyric line.
                 Behavior on scale { id: lyricScaleBehavior; enabled: app.motion; NumberAnimation { objectName: "lyricScaleMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
-                Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
                 Behavior on color { ColorAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
             }
         }

@@ -108,10 +108,8 @@ Item {
             width: lines.width
             implicitHeight: body.implicitHeight
 
-            // Everything but the line being sung stands back; what has already
-            // been sung stands back furthest.
-            opacity: current ? 1 : past ? 0.26 : 0.42
-            Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+            // Lines already sung and lines ahead stand back in onSurfaceVariant.
+            // Only the line being sung carries the primary fill.
             // Scale, not size: changing a font size would re-shape the text on
             // every frame of the transition, which is what makes it stutter.
             scale: current ? 1 : root.restingScale
@@ -130,20 +128,25 @@ Item {
                 horizontalAlignment: Text.AlignHCenter
                 wrapMode: Text.Wrap
                 lineHeight: 1.2
-                // Unsung text is the same colour held at reading contrast, so
-                // the fill below reads as the line being consumed.
-                color: Theme.text
+                // Material onSurfaceVariant keeps unsung words readable at
+                // WCAG 1.4.3's 3:1 large-text floor on the immersive surface.
+                color: line.current ? Theme.text : Theme.muted
+                Behavior on color { enabled: app.motion; ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             }
 
-            // The fill: the same line, in the accent colour, revealed from the
-            // left exactly as far as playback has travelled through it.
+            // The current line's primary fill follows playback. The completed
+            // line holds its full width while DefaultEffects fades it away;
+            // reduced motion clears it immediately. Past lines then keep only
+            // their onSurfaceVariant body text.
             Item {
                 objectName: "singAlongFill"
                 anchors.left: body.left
                 anchors.top: body.top
                 height: body.height
                 width: line.current ? body.width*Math.max(0,Math.min(1,root.fill)) : line.past ? body.width : 0
-                visible: line.current || line.past
+                opacity: line.current ? 1 : 0
+                Behavior on opacity { enabled: app.motion; NumberAnimation { id: fillFadeAnimation; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+                visible: line.current || opacity>0
                 clip: true
                 Text {
                     width: body.width
