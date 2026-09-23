@@ -33,6 +33,8 @@ Slider {
             objectName: "sliderActiveTrack"
             width: Math.max(0, slider.thumbCenter-Theme.sliderHandle/2-Theme.sliderGap)
             height: parent.height; radius: Theme.shapeFull(height)
+            // Slider.kt:3085-3088 rounds the track corner facing the handle to 2dp.
+            topRightRadius: 2; bottomRightRadius: 2
             color: slider.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)
         }
         Rectangle {
@@ -40,13 +42,16 @@ Slider {
             x: Math.min(parent.width, slider.thumbCenter+Theme.sliderHandle/2+Theme.sliderGap)
             width: parent.width-x; height: parent.height
             radius: Theme.shapeFull(height)
+            topLeftRadius: 2; bottomLeftRadius: 2
             color: slider.enabled ? Theme.secondaryContainer : Theme.sliderQuiet(Theme.disabledTrackOpacity)
         }
         Rectangle {
             objectName: "sliderStop"
             x: slider.trackEnd; anchors.verticalCenter: parent.verticalCenter
             width: Theme.sliderStop; height: Theme.sliderStop
-            radius: Theme.shapeFull(height); color: Theme.primary
+            // Slider.kt:1679-1684 uses disabled active track ink for the stop.
+            radius: Theme.shapeFull(height)
+            color: slider.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)
             visible: slider.thumbCenter+Theme.sliderHandle/2+Theme.sliderGap < slider.trackEnd
         }
     }
@@ -57,7 +62,9 @@ Slider {
         Rectangle {
             objectName: "sliderHandle"
             anchors.centerIn: parent
-            width: slider.pressed ? Theme.sliderHandlePressed : Theme.sliderHandle
+            // Slider.kt:2472-2497 and SliderTokens.FocusHandleWidth narrow the
+            // handle to 2dp on focus as well as press and drag.
+            width: slider.pressed || slider.visualFocus ? Theme.sliderHandlePressed : Theme.sliderHandle
             height: parent.height
             radius: Theme.shapeFull(width)
             color: slider.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)

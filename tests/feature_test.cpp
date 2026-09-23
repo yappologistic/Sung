@@ -4994,13 +4994,55 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
             QString("its track is drawn at that height (%1)").arg(inactive ? inactive->height() : 0));
     c.check(inactive && inactive->property("color").value<QColor>() == c.themeColor("secondaryContainer"),
             "in the secondaryContainer Material names for it");
+    c.check(inactive && qAbs(inactive->property("topLeftRadius").toDouble()-2) < 0.1,
+            "the track corner at the handle is 2dp (Slider.kt:3085-3088)");
     c.check(handle && qAbs(handle->width() - 4) < 0.5 && qAbs(handle->height() - 44) < 0.5,
             QString("and its handle is the bar, not a dot (%1 by %2)")
                 .arg(handle ? handle->width() : 0).arg(handle ? handle->height() : 0));
     auto stop = anyItem(seek, "seekStop");
     c.check(stop && qAbs(stop->width() - 4) < 0.5, "the end of the track is marked");
+    seek->forceActiveFocus(Qt::TabFocusReason);
+    QTest::qWait(350);
+    c.check(handle && qAbs(handle->width()-2) < 0.5,
+            "keyboard focus narrows the seek handle to SliderTokens.FocusHandleWidth");
   }
   c.shot("01-expressive-slider");
+
+  // The setting slider uses the same track geometry and disabled active ink.
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/SettingSlider.qml"));
+    QScopedPointer<QObject> made(source.create(qmlContext(w)));
+    auto slider = qobject_cast<QQuickItem *>(made.data());
+    c.check(slider, "a setting slider can be built for the slider state checks");
+    if (slider) {
+      slider->setParentItem(w->contentItem());
+      slider->setPosition(QPointF(200, 200));
+      slider->setWidth(280);
+      slider->setProperty("from", 0);
+      slider->setProperty("to", 100);
+      slider->setProperty("value", 40);
+      QTest::qWait(100);
+      auto active = anyItem(slider, "sliderActiveTrack");
+      auto inactive = anyItem(slider, "sliderInactiveTrack");
+      auto handle = anyItem(slider, "sliderHandle");
+      auto stop = anyItem(slider, "sliderStop");
+      c.check(active && inactive &&
+                  qAbs(active->property("topRightRadius").toDouble()-2) < 0.1 &&
+                  qAbs(inactive->property("topLeftRadius").toDouble()-2) < 0.1,
+              "both setting track corners facing the handle are 2dp");
+      slider->forceActiveFocus(Qt::TabFocusReason);
+      QTest::qWait(350);
+      c.check(handle && qAbs(handle->width()-2) < 0.5,
+              "keyboard focus narrows the setting handle to 2dp");
+      slider->setProperty("enabled", false);
+      QTest::qWait(100);
+      c.check(stop && stop->property("color").value<QColor>() ==
+                          c.evaluate("Theme.sliderQuiet(Theme.disabledContentOpacity)").value<QColor>(),
+              "the disabled stop uses disabled active track ink (Slider.kt:1679-1684)");
+      slider->setVisible(false);
+      slider->setParentItem(nullptr);
+    }
+  }
 
   // --- A list item answers the pointer with its shape ---
   c.check(c.evaluate("Theme.listRest").toInt() == 4 &&

@@ -80,8 +80,19 @@ Slider {
         id: track
         x: s.leftPadding; y: s.topPadding+(s.availableHeight-height)/2
         width: s.availableWidth; height: s.trackHeight
-        Rectangle { objectName: "seekInactiveTrack"; x: Math.min(parent.width,s.thumbCenter+s.thumbWidth/2+s.trackGap); width: parent.width-x; height: parent.height; radius: Theme.shapeFull(height); color: s.enabled ? s.inactiveColor : Theme.sliderQuiet(Theme.disabledTrackOpacity) }
-        Rectangle { objectName: "seekActiveTrack"; visible: s.volumeMode; width: Math.max(0,s.thumbCenter-s.thumbWidth/2-s.trackGap); height: parent.height; radius: Theme.shapeFull(height); color: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity) }
+        Rectangle {
+            objectName: "seekInactiveTrack"; x: Math.min(parent.width,s.thumbCenter+s.thumbWidth/2+s.trackGap)
+            width: parent.width-x; height: parent.height; radius: Theme.shapeFull(height)
+            // Slider.kt:3085-3088 gives the corner facing the handle 2dp.
+            topLeftRadius: 2; bottomLeftRadius: 2
+            color: s.enabled ? s.inactiveColor : Theme.sliderQuiet(Theme.disabledTrackOpacity)
+        }
+        Rectangle {
+            objectName: "seekActiveTrack"; visible: s.volumeMode
+            width: Math.max(0,s.thumbCenter-s.thumbWidth/2-s.trackGap); height: parent.height
+            radius: Theme.shapeFull(height); topRightRadius: 2; bottomRightRadius: 2
+            color: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)
+        }
         Item {
             id: played; objectName: "playedWave"
             visible: !s.volumeMode
@@ -106,6 +117,8 @@ Slider {
             objectName: "seekStop"
             x: parent.width-Theme.sliderStop-Theme.sliderGap; anchors.verticalCenter: parent.verticalCenter
             width: Theme.sliderStop; height: Theme.sliderStop; radius: Theme.shapeFull(height)
+            // Slider.kt:1679-1684 draws the stop with the disabled active
+            // track colour, onSurface at 38%, when the slider is disabled.
             color: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)
             visible: s.thumbCenter+s.thumbWidth/2+s.trackGap < x
         }
@@ -117,9 +130,9 @@ Slider {
         Rectangle {
             objectName: "seekHandle"
             anchors.centerIn: parent
-            // Material narrows the handle while it is held, so what is under
-            // it is not hidden by the thing setting it.
-            width: s.interacting ? Theme.sliderHandlePressed : Theme.sliderHandle
+            // Slider.kt:2472-2497 narrows the handle on focus, press and drag;
+            // SliderTokens.FocusHandleWidth and PressedHandleWidth are 2dp.
+            width: s.interacting || s.visualFocus ? Theme.sliderHandlePressed : Theme.sliderHandle
             height: parent.height
             radius: Theme.shapeFull(width)
             color: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)
