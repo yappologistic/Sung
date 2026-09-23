@@ -108,7 +108,8 @@ Item {
                 scale: lyricLine.current ? 1 : 0.86
                 transformOrigin: Item.Left
                 opacity: lyricLine.current || lyricLine.visualFocus ? 1 : lyricLine.hovered ? 0.8 : app.lyricIndex < 0 ? 0.65 : 0.34
-                Behavior on scale { enabled: app.motion; NumberAnimation { duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+                // DefaultSpatial changes the size of the focused lyric line.
+                Behavior on scale { id: lyricScaleBehavior; enabled: app.motion; NumberAnimation { objectName: "lyricScaleMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
                 Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
                 Behavior on color { ColorAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
             }

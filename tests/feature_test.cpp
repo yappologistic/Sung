@@ -696,6 +696,21 @@ void runArtistHeroTests(Backend *b, QQuickWindow *w) {
           "the summary reads back what it counted");
   auto name = shownItem(w->contentItem(), "artistHeroName");
   c.check(name && name->property("text").toString() == "Rill", "the hero names the artist");
+  // PaneMotion.kt:150-177 gives size changes DefaultSpatial. Check the live
+  // Behaviors so the old 120ms cubic and the font's effects duration fail.
+  const int spatialMs = c.evaluate("Theme.springSpatialMs").toInt();
+  auto heightMotion = hero->findChild<QObject *>("artistHeroHeightMotion");
+  auto typeBehavior = name ? qmlContext(name)->objectForName("typeSizeBehavior") : nullptr;
+  auto typeMotion = motionObject(typeBehavior, "animation");
+  const QVariant typeDuration = typeMotion ? typeMotion->property("duration") : QVariant();
+  c.check(heightMotion && typeDuration.isValid() &&
+              heightMotion->property("duration").toInt() == spatialMs &&
+              typeDuration.toInt() == spatialMs,
+          QString("the hero's height and type size use DefaultSpatial's settling time "
+                  "(height %1, type %2, expected %3)")
+              .arg(heightMotion ? QString::number(heightMotion->property("duration").toInt()) : "not found",
+                   typeDuration.isValid() ? QString::number(typeDuration.toInt()) : "not found")
+              .arg(spatialMs));
 
   // --- Material's large top app bar proportions ---
   auto portrait = shownItem(w->contentItem(), "artistHeroPortrait");
@@ -858,6 +873,20 @@ void runSingAlongTests(Backend *b, QQuickWindow *w) {
   if (!player)
     return c.finish();
   c.check(player->property("hasTimedLyrics").toBool(), "the song offers timed lyrics");
+  QMetaObject::invokeMethod(player, "layoutRequested", Q_ARG(QString, QString("lyrics")));
+  c.check(c.until([&] { return shownItem(w->contentItem(), "liveLyrics") != nullptr; }),
+          "the reading lyrics view opens before sing along");
+  auto lyricLabel = shownItem(w->contentItem(), "lyricLabel");
+  auto lyricBehavior = lyricLabel ? qmlContext(lyricLabel)->objectForName("lyricScaleBehavior") : nullptr;
+  auto lyricMotion = motionObject(lyricBehavior, "animation");
+  const QVariant lyricScaleDuration = lyricMotion ? lyricMotion->property("duration") : QVariant();
+  c.check(lyricScaleDuration.isValid() && lyricScaleDuration.toInt() ==
+                            c.evaluate("Theme.springSpatialMs").toInt(),
+          QString("the reading lyric scales on DefaultSpatial rather than 350ms "
+                  "(label %1, animation %2, expected %3)")
+              .arg(lyricLabel ? "found" : "not found",
+                   lyricScaleDuration.isValid() ? QString::number(lyricScaleDuration.toInt()) : "not found")
+              .arg(c.evaluate("Theme.springSpatialMs").toInt()));
   QMetaObject::invokeMethod(player, "layoutRequested", Q_ARG(QString, QString("singalong")));
   c.check(c.until([&] { return player->property("displayedLayout") == "singalong"; }),
           "sing along can be chosen");
@@ -880,6 +909,10 @@ void runSingAlongTests(Backend *b, QQuickWindow *w) {
   c.check(activeSize >= 28, "it is set at display size");
   // Emphasis is carried by scale, so no line ever re-shapes its text.
   if (auto lineItem = current->parentItem()) {
+    auto scaleMotion = lineItem->findChild<QObject *>("singAlongScaleMotion");
+    c.check(scaleMotion && scaleMotion->property("duration").toInt() ==
+                  c.evaluate("Theme.springSpatialMs").toInt(),
+            "the current lyric scale uses DefaultSpatial rather than 320ms");
     c.check(qAbs(lineItem->scale() - 1) < 0.02, "the sung line is at full size");
     if (auto other = shownItem(singAlong, "singAlongLine"))
       if (auto otherLine = other->parentItem()) {
@@ -1979,6 +2012,92 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
                   c.evaluate("Theme.springFastEffectsMs").toInt() &&
               curve("exitCurve") == curve("springFastEffects"),
           "the exit fade's duration and curve are one FastEffects spring");
+  // PaneMotion.kt:150-177 specifies DefaultSpatial for bounds. Inspect the
+  // animations on the real window so 350ms flights fail this check.
+  const int paneMs = c.evaluate("Theme.springSpatialMs").toInt();
+  for (const char *name : {"albumFlightMotion", "coverFlightMotion"}) {
+    auto flight = w->findChild<QObject *>(QString::fromLatin1(name));
+    int matched = 0;
+    if (flight)
+      for (auto child : flight->findChildren<QObject *>())
+        if (child->property("duration").toInt() == paneMs &&
+            QQmlProperty(child, "easing.bezierCurve").read().toList() == curve("springSpatial"))
+          ++matched;
+    c.check(matched == 5, QString("%1 moves all five bounds on DefaultSpatial").arg(name));
+  }
+  auto headerMotion = w->findChild<QObject *>("mainHeaderExtentMotion");
+  c.check(headerMotion && headerMotion->property("duration").toInt() == paneMs,
+          "the live page header resizes on DefaultSpatial");
+  for (const char *name : {"localGroupsWidthMotion", "playlistGridWidthMotion"}) {
+    const QString behavior = QString::fromLatin1(name) == "localGroupsWidthMotion"
+                                 ? "localGroupsWidthBehavior" : "playlistGridWidthBehavior";
+    const auto view = anyItem(w->contentItem(),
+                              behavior == "localGroupsWidthBehavior" ? "localGroups" : "playlistGrid");
+    auto behaviorObject = view ? qmlContext(view)->objectForName(behavior) : nullptr;
+    auto animation = motionObject(behaviorObject, "animation");
+    const QVariant duration = animation ? animation->property("duration") : QVariant();
+    c.check(duration.isValid() && duration.toInt() == paneMs,
+            QString("%1 uses DefaultSpatial instead of 260ms (actual %2, expected %3)")
+                .arg(name, duration.isValid() ? QString::number(duration.toInt()) : "not found")
+                .arg(paneMs));
+  }
+  auto immersiveQueue = qmlContext(w)->objectForName("immersiveQueue");
+  auto sheetExit = motionObject(immersiveQueue, "exit");
+  auto sheetExitAnimation = motionAt(sheetExit, {0});
+  const QVariant sheetExitDuration = sheetExitAnimation ? sheetExitAnimation->property("duration") : QVariant();
+  c.check(sheetExitDuration.isValid() && sheetExitDuration.toInt() ==
+                                               c.evaluate("Theme.springFastSpatialMs").toInt(),
+          QString("the queue sheet exits with the FastSpatial position spring "
+                  "(actual %1, expected %2)")
+              .arg(sheetExitDuration.isValid() ? QString::number(sheetExitDuration.toInt()) : "not found")
+              .arg(c.evaluate("Theme.springFastSpatialMs").toInt()));
+  if (auto tracks = shownItem(w->contentItem(), "tracksView")) {
+    for (const auto &entry : {QPair<const char *, const char *>{"trackDisplaceMotion", "displaced"},
+                              {"trackMoveMotion", "move"},
+                              {"trackAddMotion", "add"},
+                              {"trackRemoveMotion", "remove"}}) {
+      const int expected = QString::fromLatin1(entry.first) == "trackAddMotion"
+                               ? c.evaluate("Theme.springEffectsMs").toInt()
+                               : QString::fromLatin1(entry.first) == "trackRemoveMotion"
+                                     ? c.evaluate("Theme.springFastEffectsMs").toInt() : paneMs;
+      auto transition = motionObject(tracks, entry.second);
+      auto animation = QString::fromLatin1(entry.second) == "move"
+                           ? motionAt(transition, {0, 1}) : motionAt(transition, {0});
+      const QVariant duration = animation ? animation->property("duration") : QVariant();
+      c.check(duration.isValid() && duration.toInt() == expected,
+              QString("%1 uses its spring's settling time (actual %2, expected %3)")
+                  .arg(entry.first, duration.isValid() ? QString::number(duration.toInt()) : "not found")
+                  .arg(expected));
+    }
+    auto row = shownItem(tracks, "trackRow_0");
+    auto resize = row ? row->findChild<QObject *>("trackRowResizeMotion") : nullptr;
+    c.check(resize && resize->property("duration").toInt() == paneMs,
+            "the actual track row resizes on DefaultSpatial");
+  } else {
+    c.check(false, "the library track list is available to inspect its motion");
+  }
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/TrackPresentation.qml"));
+    QScopedPointer<QObject> presentation(source.create(qmlContext(w)));
+    for (const auto &entry : {QPair<const char *, int>{"presentationFadeOut", c.evaluate("Theme.springFastEffectsMs").toInt()},
+                              {"presentationOffsetOut", paneMs},
+                              {"presentationFadeIn", c.evaluate("Theme.springEffectsMs").toInt()},
+                              {"presentationOffsetIn", paneMs}}) {
+      auto animation = presentation ? presentation->findChild<QObject *>(QString::fromLatin1(entry.first)) : nullptr;
+      c.check(animation && animation->property("duration").toInt() == entry.second,
+              QString("%1 uses its effects or spatial settling time").arg(entry.first));
+    }
+  }
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/PlaybackGlyph.qml"));
+    QScopedPointer<QObject> glyph(source.create(qmlContext(w)));
+    auto morph = glyph ? glyph->findChild<QObject *>("playbackGlyphMorph") : nullptr;
+    // IconButton.kt:1561-1585 specifies DefaultEffects for the toggle shape
+    // because overshooting the glyph's endpoint would make it bounce.
+    c.check(morph && morph->property("duration").toInt() ==
+                         c.evaluate("Theme.springEffectsMs").toInt(),
+            "the play/pause glyph morph uses IconToggleButton's DefaultEffects");
+  }
   // A spatial spring passes its target and an effects spring does not, which
   // is the whole reason Material separates them.
   const double spatialPeak = peakOf(curve("springSpatial"));

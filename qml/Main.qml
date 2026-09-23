@@ -263,12 +263,14 @@ ApplicationWindow {
     Artwork {id:albumFly;objectName:"albumFlightArtwork";z:79;visible:window.albumFlying;pixels:480
         property real endX:0;property real endY:0;property real endSize:0;property real endRadius:24
     }
-    ParallelAnimation {id:albumFlight
-        NumberAnimation {target:albumFly;property:"x";to:albumFly.endX;duration:350;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}
-        NumberAnimation {target:albumFly;property:"y";to:albumFly.endY;duration:350;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}
-        NumberAnimation {target:albumFly;property:"width";to:albumFly.endSize;duration:350;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}
-        NumberAnimation {target:albumFly;property:"height";to:albumFly.endSize;duration:350;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}
-        NumberAnimation {target:albumFly;property:"radius";to:albumFly.endRadius;duration:350;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}
+    // PaneMotion.kt:150-177 uses DefaultSpatial for pane bounds. The flying
+    // cover changes bounds and corner radius with the same spatial spring.
+    ParallelAnimation {id:albumFlight;objectName:"albumFlightMotion"
+        NumberAnimation {target:albumFly;property:"x";to:albumFly.endX;duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}
+        NumberAnimation {target:albumFly;property:"y";to:albumFly.endY;duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}
+        NumberAnimation {target:albumFly;property:"width";to:albumFly.endSize;duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}
+        NumberAnimation {target:albumFly;property:"height";to:albumFly.endSize;duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}
+        NumberAnimation {target:albumFly;property:"radius";to:albumFly.endRadius;duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}
         onFinished:window.cancelAlbumFlight()
     }
     Connections {target:app;function onSettingsChanged(){if(!app.motion)window.cancelAlbumFlight();}}
@@ -302,13 +304,15 @@ ApplicationWindow {
         id: flyingCover; objectName: "flyingArtwork"; z: 80; visible: window.coverFlying; pixels: 800; fit:app.currentArtworkFit
         property real endX: 0; property real endY: 0; property real endWidth: 0; property real endHeight: 0; property real endRadius: 0
     }
+    // PaneMotion.kt:150-177 uses DefaultSpatial for pane bounds and sizing.
     ParallelAnimation {
         id: coverFlightAnimation
-        NumberAnimation { target: flyingCover; property: "x"; to: flyingCover.endX; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
-        NumberAnimation { target: flyingCover; property: "y"; to: flyingCover.endY; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
-        NumberAnimation { target: flyingCover; property: "width"; to: flyingCover.endWidth; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
-        NumberAnimation { target: flyingCover; property: "height"; to: flyingCover.endHeight; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
-        NumberAnimation { target: flyingCover; property: "radius"; to: flyingCover.endRadius; duration: 350; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        objectName: "coverFlightMotion"
+        NumberAnimation { target: flyingCover; property: "x"; to: flyingCover.endX; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
+        NumberAnimation { target: flyingCover; property: "y"; to: flyingCover.endY; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
+        NumberAnimation { target: flyingCover; property: "width"; to: flyingCover.endWidth; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
+        NumberAnimation { target: flyingCover; property: "height"; to: flyingCover.endHeight; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
+        NumberAnimation { target: flyingCover; property: "radius"; to: flyingCover.endRadius; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
         onFinished: {window.coverFlying=false;flyingCover.url="";}
     }
     Connections { target: app; function onSettingsChanged(){if(!app.motion)window.cancelCoverFlight();} }
@@ -522,7 +526,8 @@ ApplicationWindow {
         background:Rectangle {color:Theme.container;radius:Theme.shapeExtraLarge}
         Overlay.modal:Rectangle {color:Theme.scrimColor()}
         enter:Transition {NumberAnimation {property:"position";to:1;duration:app.motion?350:0;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}}
-        exit:Transition {NumberAnimation {property:"position";to:0;duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.exitCurve}}
+        // FastSpatial closes the position of this screen sheet.
+        exit:Transition {NumberAnimation {objectName:"mainSheetExitMotion";property:"position";to:0;duration:Theme.springFastSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}
         onOpened:{if(immersiveQueueLoader.item)immersiveQueueLoader.item.revealCurrent();}
         onClosed:{trackDrag.cancel();if(immersiveLoader.item){immersiveLoader.item.forceActiveFocus(Qt.PopupFocusReason);immersiveLoader.item.wake();}}
         contentItem:ColumnLayout {spacing:16
@@ -703,7 +708,8 @@ ApplicationWindow {
                     readonly property real headerCollapse: tracks.visible ? Math.max(0,Math.min(1,(tracks.contentY-tracks.originY)/160)) : 0
                     readonly property bool compactHeader: headerCollapse>0.7
                     property real headerExtent: (app.albumInfo.summary?Math.min(156,window.height*0.19):76)*(1-headerCollapse)+40*headerCollapse
-                    Behavior on headerExtent {enabled:!tracks.moving;NumberAnimation {duration:app.motion?120:0;easing.type:Easing.OutCubic}}
+                    // PaneMotion.kt:150-177 uses DefaultSpatial for pane size.
+                    Behavior on headerExtent {enabled:app.motion && !tracks.moving;NumberAnimation {objectName:"mainHeaderExtentMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
                     visible: true
                     Layout.fillWidth: true; Layout.fillHeight: true
                     radius: Theme.shapeExtraLarge; color: window.washed(Theme.surfaceLow); clip: true
@@ -1071,7 +1077,8 @@ ApplicationWindow {
                                 visible: app.page==="library" && app.viewMode==="grid" && (app.libraryId==="local-albums" || app.libraryId==="local-artists")
                                 model: visible ? app.collection : null
                                 cellWidth: width/Math.max(2,Math.floor(width/Theme.gridCell));
-                                Behavior on cellWidth {enabled:app.motion && localGroups.visible;NumberAnimation {duration:260;easing.type:Easing.InOutCubic}}
+                                // PaneMotion.kt:150-177 uses DefaultSpatial for pane width.
+                                Behavior on cellWidth {id:localGroupsWidthBehavior;enabled:app.motion && localGroups.visible;NumberAnimation {objectName:"localGroupsWidthMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
                                 cellHeight: coverExtent+64
                                 readonly property real coverExtent:Math.min(cellWidth-16,Math.max(96,height-64))
                                 ScrollBar.vertical: ScrollBar {}
@@ -1113,7 +1120,8 @@ ApplicationWindow {
                                 bottomMargin: libraryFab.visible ? libraryFab.height+24 : 0
                                 visible:window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist&&app.viewMode==="grid"
                                 model:visible?app.playlists:[];cellWidth:width/Math.max(2,Math.floor(width/Theme.gridCell));
-                                Behavior on cellWidth {enabled:app.motion && playlistGrid.visible;NumberAnimation {duration:260;easing.type:Easing.InOutCubic}}
+                                // PaneMotion.kt:150-177 uses DefaultSpatial for pane width.
+                                Behavior on cellWidth {id:playlistGridWidthBehavior;enabled:app.motion && playlistGrid.visible;NumberAnimation {objectName:"playlistGridWidthMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
                                 cellHeight:cellWidth+56
                                 ScrollBar.vertical:MScrollBar {}
                                 MSmoothWheel { flick: playlistGrid }

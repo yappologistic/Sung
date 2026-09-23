@@ -111,7 +111,8 @@ Item {
             // every frame of the transition, which is what makes it stutter.
             scale: current ? 1 : root.restingScale
             transformOrigin: Item.Center
-            Behavior on scale { enabled: app.motion; NumberAnimation { duration: 320; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+            // DefaultSpatial changes the size of the active lyric line.
+            Behavior on scale { enabled: app.motion; NumberAnimation { objectName: "singAlongScaleMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
 
             Text {
                 id: body

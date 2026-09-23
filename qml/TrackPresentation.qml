@@ -17,13 +17,17 @@ Item {
     SequentialAnimation {
         id: change
         ParallelAnimation {
-            NumberAnimation { target: presentation; property: "fade"; to: 0; duration: 90; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve }
-            NumberAnimation { target: presentation; property: "offset"; to: -8*presentation.direction; duration: 90; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.exitCurve }
+            // FastEffects fades the outgoing track, as Menu.kt:1829-1831 does.
+            NumberAnimation { objectName: "presentationFadeOut"; target: presentation; property: "fade"; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+            // PaneMotion.kt:150-177 uses DefaultSpatial for pane movement.
+            NumberAnimation { objectName: "presentationOffsetOut"; target: presentation; property: "offset"; to: -8*presentation.direction; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
         }
         ScriptAction { script: {presentation.shown=presentation.track;presentation.offset=8*presentation.direction;} }
         ParallelAnimation {
-            NumberAnimation { target: presentation; property: "fade"; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve }
-            NumberAnimation { target: presentation; property: "offset"; to: 0; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+            // DefaultEffects returns opacity without overshooting it.
+            NumberAnimation { objectName: "presentationFadeIn"; target: presentation; property: "fade"; to: 1; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects }
+            // PaneMotion.kt:150-177 uses DefaultSpatial for the incoming pane.
+            NumberAnimation { objectName: "presentationOffsetIn"; target: presentation; property: "offset"; to: 0; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
         }
     }
     Component.onCompleted: {shown=track;fade=1;}

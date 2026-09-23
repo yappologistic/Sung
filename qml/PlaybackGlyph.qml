@@ -11,7 +11,9 @@ Item {
     onAnimateChanged:if(!animate){morph.stop();settle.restart();}
     Timer {id:settle;interval:0;onTriggered:if(!glyph.animate){morph.stop();glyph.progress=glyph.paused?1:0;}}
     Component.onCompleted:{progress=paused?1:0;ready=true;}
-    Behavior on progress {enabled:glyph.animate;NumberAnimation {id:morph;duration:200;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
+    // IconButton.kt:1561-1585 names DefaultEffects for IconToggleButton shape
+    // morphs so the glyph does not bounce past its pause or play endpoint.
+    Behavior on progress {enabled:glyph.animate;NumberAnimation {id:morph;objectName:"playbackGlyphMorph";duration:Theme.springEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springEffects}}
     // Stable endpoints use the bundled Material Symbols. Only the short transition
     // interpolates the two pieces of the play triangle into the pause bars.
     Icon {anchors.centerIn:parent;name:glyph.paused?"pause":"play";ink:glyph.ink;visible:!morph.running}

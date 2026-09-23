@@ -17,7 +17,8 @@ Item {
     readonly property real portrait: (expandedHeight-96)*(1-collapse)+48*collapse
 
     implicitHeight: expandedHeight*(1-collapse)+collapsedHeight*collapse
-    Behavior on implicitHeight { enabled: !tracks.moving; NumberAnimation { duration: app.motion?120:0; easing.type: Easing.OutCubic } }
+    // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
+    Behavior on implicitHeight { enabled: app.motion && !tracks.moving; NumberAnimation { objectName: "artistHeroHeightMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
     clip: true
 
     AmbientBackdrop {
@@ -71,7 +72,8 @@ Item {
                 // Display small while the band is open, title large once it has
                 // collapsed into an ordinary header row.
                 font.pixelSize: Theme.displaySmall-(Theme.displaySmall-Theme.titleLarge)*hero.collapse
-                Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } }
+                // DefaultSpatial changes the visible size as the hero collapses.
+                Behavior on font.pixelSize { id: typeSizeBehavior; enabled: app.motion; NumberAnimation { objectName: "artistHeroTypeMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
                 emphasized: true
                 wrapMode: Text.Wrap
                 maximumLineCount: 2

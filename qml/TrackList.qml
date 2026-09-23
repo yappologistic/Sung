@@ -83,14 +83,18 @@ ListView {
     boundsBehavior: Flickable.StopAtBounds
     readonly property bool animateEdits: queueMode && app.motion && visible && Window.window && Window.window.visible && Window.window.visibility!==Window.Minimized
     onAnimateEditsChanged: if(!animateEdits){for(const child of contentItem.children)if(child.motionRaised!==undefined)child.motionRaised=false;}
-    displaced: Transition { enabled: list.animateEdits; NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+    // PaneMotion.kt:150-177 uses DefaultSpatial when panes move.
+    displaced: Transition { enabled: list.animateEdits && app.motion; NumberAnimation { objectName: "trackDisplaceMotion"; properties: "x,y"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
     move: Transition { enabled: list.animateEdits; SequentialAnimation {
         PropertyAction { property: "motionRaised"; value: true }
-        NumberAnimation { properties: "x,y"; duration: 220; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve }
+        // DefaultSpatial moves a row to its new list position.
+        NumberAnimation { objectName: "trackMoveMotion"; properties: "x,y"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
         PropertyAction { property: "motionRaised"; value: false }
     } }
-    add: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 180; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
-    remove: Transition { enabled: list.animateEdits; NumberAnimation { property: "opacity"; to: 0; duration: 120; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    // DefaultEffects fades added rows without opacity overshoot.
+    add: Transition { enabled: list.animateEdits && app.motion; NumberAnimation { objectName: "trackAddMotion"; property: "opacity"; from: 0; to: 1; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+    // Menu.kt:1829-1831 uses FastEffects for content leaving the screen.
+    remove: Transition { enabled: list.animateEdits && app.motion; NumberAnimation { objectName: "trackRemoveMotion"; property: "opacity"; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
     section.property: queueMode ? "queueOrigin" : groupFolders ? "musicFolder" : groupDiscs ? "musicDisc" : ""
     section.criteria: ViewSection.FullString
     section.delegate: Item {
@@ -191,7 +195,8 @@ ListView {
         visible:!foldedRow
         matchQuery: list.matchQuery
         transform: Translate { y: list.dropIndex<0?0:index>=list.dropIndex?list.dropParting:-list.dropParting
-            Behavior on y { NumberAnimation { duration: app.motion?130:0; easing.type: Easing.OutCubic } }
+            // DefaultSpatial settles list row movement to its new position.
+            Behavior on y { enabled: app.motion; NumberAnimation { objectName: "trackDropGapMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
         }
         track: entry; rowIndex: list.queueMode?index:app.collection.sourceIndex(index); queueMode: list.queueMode
         // The queue is drawn as Material's segmented list: one run per group of

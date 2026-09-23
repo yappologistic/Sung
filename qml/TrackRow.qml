@@ -53,7 +53,8 @@ ItemDelegate {
     property bool active: queueMode ? rowIndex===app.currentIndex : app.current.id !== undefined && app.current.id === track.id
     signal menuRequested(var item, int index, var anchor)
     ListView.onReused: {motionRaised=false;opacity=Qt.binding(()=>enabled?1:Theme.disabledContentOpacity);}
-    Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;duration:220;easing.type:Easing.InOutCubic}}
+    // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
+    Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;objectName:"trackRowResizeMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
     Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}
     implicitHeight: queueMode ? (app.compactDensity?56:72) : Theme.rowHeight
     width: ListView.view ? ListView.view.width : 500
