@@ -410,15 +410,15 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
             where + ": text on the accent keeps 4.5:1");
     c.check(contrastOf(c.themeColor("containerText"), c.themeColor("primaryContainer")) >= 4.5,
             where + ": container text keeps 4.5:1");
-    // Navigation is drawn in the secondary pair and a row being carried in the
-    // tertiary one, so both have to hold their ink wherever the scheme lands.
+    // Navigation is drawn in the secondary pair. A carried row uses the
+    // primary container pair, which stays in the cover's family.
     c.check(contrastOf(c.themeColor("secondaryContainerText"), c.themeColor("secondaryContainer")) >= 4.5,
             where + ": the destination you are on keeps 4.5:1 on its indicator");
     c.check(contrastOf(c.themeColor("secondary"), c.themeColor("surface")) >= 4.5,
             where + ": and its label keeps 4.5:1 beneath it");
     c.check(contrastOf(c.themeColor("secondaryText"), c.themeColor("secondary")) >= 4.5,
             where + ": a tonal toggle that is on keeps 4.5:1 on the secondary role");
-    c.check(contrastOf(c.themeColor("tertiaryContainerText"), c.themeColor("tertiaryContainer")) >= 4.5,
+    c.check(contrastOf(c.themeColor("containerText"), c.themeColor("primaryContainer")) >= 4.5,
             where + ": a row being carried keeps 4.5:1 on the reorder container");
     // The two outline roles have two jobs and two floors: a rule only has to
     // be seen, a control boundary has to meet Material's 3:1 for a shape that
@@ -5507,11 +5507,10 @@ void runMaterialGrainTests(Backend *b, QQuickWindow *w) {
   }
   Q_UNUSED(previous)
 
-  // --- A row being carried takes Material's reorder container ---
-  // The reorder list names a container for the item under the finger: the
-  // tertiary one, at corner large, with its own ink. It is a colour the app
-  // uses nowhere else, so a row being moved is unmistakably the subject of
-  // the gesture rather than a row that happens to be lit.
+  // --- A row being carried stays in the cover's primary colour family ---
+  // ReorderListTokens.kt:22-44 names the tertiary pair, but over warm covers
+  // that hue reads green. The primary pair keeps the moved row with its
+  // cover; the secondary pair still distinguishes a selected row.
   QVariantList queued;
   for (int i = 0; i < 4; ++i)
     queued.append(b->results()->get(i));
@@ -5525,8 +5524,8 @@ void runMaterialGrainTests(Backend *b, QQuickWindow *w) {
     auto container = row->property("background").value<QQuickItem *>();
     auto title = anyItem(row, "trackTitle");
     auto layer = anyItem(row, "rowDraggedLayer");
-    const auto carriedContainer = c.themeColor("tertiaryContainer");
-    const auto carriedInk = c.themeColor("tertiaryContainerText");
+    const auto carriedContainer = c.themeColor("primaryContainer");
+    const auto carriedInk = c.themeColor("containerText");
     c.check(container && container->property("color").value<QColor>() != carriedContainer,
             "which is not wearing the reorder container while it rests");
     c.check(layer && !layer->isVisible(), "and no state layer either");
@@ -5536,10 +5535,10 @@ void runMaterialGrainTests(Backend *b, QQuickWindow *w) {
     QTest::qWait(400);
     c.check(row->property("dragging").toBool(), "moving the pointer picks it up");
     c.check(container && container->property("color").value<QColor>() == carriedContainer,
-            "the carried row takes the tertiary container Material names for it");
-    c.check(carriedContainer != c.themeColor("primaryContainer") &&
+            "the carried row takes the primary container from the cover family");
+    c.check(carriedContainer != c.themeColor("secondaryContainer") &&
                 carriedContainer != c.themeColor("container"),
-            "which is a container it wears in no other state");
+            "which stays distinct from selection and the resting surface");
     c.check(title && title->property("color").value<QColor>() == carriedInk,
             "and the ink that belongs on it");
     c.check(container && qAbs(container->property("topLeftRadius").toDouble() -

@@ -22,20 +22,19 @@ ItemDelegate {
     property string matchQuery: ""
     readonly property bool titleRevealAllowed: !dragging && (!dragHub || !dragHub.owner) && (!listOwner || (!listOwner.moving && y>=listOwner.contentY && y+height<=listOwner.contentY+listOwner.height))
     property bool dragging: false
-    // Material's reorder list recolours the row under the finger rather than
-    // only tinting it: the carried row takes the tertiary container and the
-    // ink that belongs on it, so it reads as the subject of the gesture and
-    // not as a row that happens to be lit. These three inks are what the rest
-    // of the row asks for, so the rule lives in one place.
+    // ReorderListTokens.kt:22-44 and ListItemDefaults.kt:231-241 give a
+    // dragged row the tertiary pair. Over warm covers that turns green, away
+    // from the cover's colour family. The primary container pair keeps the
+    // gesture tied to the cover; selected rows retain the secondary pair.
     readonly property bool carried: dragging
-    readonly property color titleInk: carried ? Theme.tertiaryContainerText
+    readonly property color titleInk: carried ? Theme.containerText
                                     : selected ? Theme.secondaryContainerText
                                     : active ? Theme.primary : Theme.text
-    readonly property color supportInk: carried ? Theme.tertiaryContainerText
+    readonly property color supportInk: carried ? Theme.containerText
                                       : selected ? Theme.secondaryContainerText : Theme.muted
     // ListTokens.ItemTrailingIconColor: a row's trailing action is in the
     // variant ink, like its supporting text, not in the title's.
-    readonly property color actionInk: carried ? Theme.tertiaryContainerText
+    readonly property color actionInk: carried ? Theme.containerText
                                      : selected ? Theme.secondaryContainerText : Theme.muted
     property point pressPoint
     property int pressModifiers: 0
@@ -135,7 +134,7 @@ ItemDelegate {
         // Material marks a chosen list item with the secondary container, the
         // same role that marks a chosen anything else. Picking rows out is not
         // an action, so it does not take the accent an action is offered in.
-        color: row.carried ? Theme.tertiaryContainer : row.selected ? Theme.secondaryContainer : row.motionRaised ? Theme.container : row.active ? Theme.high : row.hovered ? Theme.container : row.segmented ? Theme.container : "transparent"
+        color: row.carried ? Theme.primaryContainer : row.selected ? Theme.secondaryContainer : row.motionRaised ? Theme.container : row.active ? Theme.high : row.hovered ? Theme.container : row.segmented ? Theme.container : "transparent"
         border.width: row.keyboardCurrent ? 2 : 0; border.color: Theme.focusRing
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
