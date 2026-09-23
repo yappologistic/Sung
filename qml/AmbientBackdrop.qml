@@ -13,9 +13,13 @@ Item {
     property color scrim: Theme.background
     // Scrim coverage. Text sits on the scrim, never on the raw cover.
     property real dim: 0.8
+    property bool allowed: true
+    property string heldUrl: ""
+    onUrlChanged: if (url) heldUrl = url
     property real corner: 0
     property real drift: 1
-    readonly property bool active: app.ambientBackdrop && !!url
+    readonly property bool active: allowed && app.ambientBackdrop && !!url
+    onActiveChanged: if (active) heldUrl = url
     // MCU color_spec_2021.ts:241-248 gives onSurfaceVariant a surface
     // contrast curve. The cover is part of that surface, so the decoded
     // pixels determine the smallest scrim meeting the same text target.
@@ -38,7 +42,9 @@ Item {
     // This 220ms smoothing follows decoded audio, not a control state. Reduced
     // motion disables the Behavior so its last level change settles at once.
     Behavior on pulse { enabled: app.motion; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
-    visible: active
+    // Qt Quick Item visibility stops drawing immediately. Keep the last
+    // cover visible until SlowEffects reaches zero, including coverless tracks.
+    visible: active || opacity > 0
     opacity: active ? 1 : 0
     // The drifting cover is oversized on purpose and must not paint outside.
     clip: true
@@ -54,8 +60,9 @@ Item {
         pixels: 160
         blur: 22
         crossfade: backdrop.visible && app.motion && Window.window && Window.window.visible && Window.window.visibility!==Window.Minimized
-        // A hidden backdrop keeps no decoded cover.
-        source: backdrop.visible && backdrop.opacity>0 ? backdrop.url : ""
+        // The old cover survives the exit fade, then its source is released.
+        source: backdrop.visible && backdrop.opacity>0
+            ? (backdrop.active ? backdrop.url : backdrop.heldUrl) : ""
         transformOrigin: Item.Center
         // Drifting needs margin, so the cover is always a little oversized.
         scale: backdrop.drifts ? 1.08*backdrop.drift*(1+0.035*backdrop.pulse) : 1

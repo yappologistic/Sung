@@ -572,7 +572,7 @@ ApplicationWindow {
     AmbientBackdrop {
         objectName: "windowBackdrop"
         anchors.fill: parent
-        visible: !window.compactMode && !window.immersive && active
+        allowed: !window.compactMode && !window.immersive
         url: window.windowArtwork
         scrim: Theme.background
         dim: 0.80
@@ -581,7 +581,13 @@ ApplicationWindow {
     // How much of the wash the floating surfaces let through. Opaque when there
     // is no wash, so nothing changes for anyone who has turned it off.
     readonly property bool windowWashed: app.ambientBackdrop && !!window.windowArtwork && !window.compactMode && !window.immersive
-    readonly property real washAlpha: windowWashed ? 0.74 : 1
+    property real washAlpha: windowWashed ? 0.74 : 1
+    // TextFieldImpl.kt:2049-2050 uses SlowEffects for opacity. The panels
+    // close with the same monotonic spring as the ambient wash behind them.
+    Behavior on washAlpha { enabled: app.motion; NumberAnimation {
+        duration: Theme.springSlowEffectsMs; easing.type: Easing.BezierSpline
+        easing.bezierCurve: Theme.springSlowEffects
+    } }
     function washed(surface) { return Qt.rgba(surface.r,surface.g,surface.b,window.washAlpha) }
     Item {
         visible: !window.compactMode && !window.immersive

@@ -179,6 +179,13 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   c.check(backdrop->property("animating").toBool(), "motion restores the drift");
 
   b->setAmbientBackdrop(false);
+  QTest::qWait(45);
+  c.check(backdrop->isVisible() && backdrop->opacity() > 0 && backdrop->opacity() < 1,
+          "the backdrop remains painted during its fade out");
+  c.check(art && !art->property("source").toUrl().isEmpty(),
+          "the fade keeps the last cover until it reaches zero");
+  c.check(w->grabWindow().save(c.directory + "/02-backdrop-fading.png"),
+          "capture a frame during the backdrop fade");
   QTest::qWait(700);
   c.check(!backdrop->property("active").toBool() && !backdrop->isVisible(),
           "disabling the setting hides the backdrop");
@@ -468,6 +475,55 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
             "the released panel backdrop keeps no cover");
     w->setProperty("side", "");
     QTest::qWait(300);
+  }
+  // Play a coverless track through its visible library row. The previous
+  // cover must remain behind the text until the exit spring finishes.
+  QDir().mkpath(c.directory + "/music/noart");
+  if (!writeFixture(c, c.directory + "/music/noart/coverless.flac",
+                    {"-metadata", "title=Coverless fixture", "-metadata", "album=Coverless"}))
+    return c.finish();
+  b->importMusicFolder(QUrl::fromLocalFile(c.directory + "/music/noart"));
+  c.check(c.until([&] { return !b->importingLocal(); }), "import coverless fixture");
+  b->library("files");
+  c.check(c.until([&] { return b->collection()->count() >= 5; }),
+          "the coverless track appears in local files");
+  int coverlessIndex = -1;
+  for (int i = 0; i < b->collection()->count(); ++i)
+    if (b->collection()->get(i).value("title") == "Coverless fixture") coverlessIndex = i;
+  auto windowBackdrop = itemNamed(w->contentItem(), "windowBackdrop");
+  c.check(coverlessIndex >= 0 && windowBackdrop && windowBackdrop->property("active").toBool(),
+          "the previous cover washes the window before the click");
+  if (coverlessIndex >= 0 && windowBackdrop) {
+    auto tracks = shownItem(w->contentItem(), "tracksView");
+    c.check(tracks, "the local track list is visible");
+    if (!tracks) return c.finish();
+    tracks->forceActiveFocus();
+    QTest::keyClick(w, Qt::Key_End);
+    QTest::qWait(350);
+    auto row = shownItem(w->contentItem(), "trackRow_" + QString::number(coverlessIndex));
+    c.check(row, "the coverless row is visible to click");
+    if (!row) return c.finish();
+    // The import snackbar floats over the row centre; its left label stays
+    // exposed and is the same place a person can click it.
+    const auto point = row->mapToScene(QPointF(180, row->height() / 2)).toPoint();
+    c.check(tracks->mapRectToScene(tracks->boundingRect()).contains(point),
+            "End scrolls the coverless row inside the visible track list");
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    c.check(c.until([&] { return b->current().value("title") == "Coverless fixture"; }, 120),
+            "clicking the coverless row starts that track");
+    QTest::qWait(45);
+    c.check(b->current().value("art").toString().isEmpty() &&
+                windowBackdrop->isVisible() && windowBackdrop->opacity() > 0 &&
+                windowBackdrop->opacity() < 1,
+            "the coverless track fades the old window wash");
+    auto oldArt = itemNamed(windowBackdrop, "ambientArt");
+    c.check(oldArt && !oldArt->property("source").toUrl().isEmpty(),
+            "the coverless fade retains its previous picture");
+    c.check(w->grabWindow().save(c.directory + "/06-coverless-fading.png"),
+            "capture the coverless transition frame");
+    QTest::qWait(700);
+    c.check(!windowBackdrop->isVisible() && oldArt && oldArt->property("source").toUrl().isEmpty(),
+            "the coverless wash releases its picture after fading");
   }
   b->clearQueue();
   b->stop();
@@ -1392,6 +1448,22 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
             "so its cover stays exactly inside its rounded corners");
     c.shot("02-panel-still");
   }
+  auto windowBackdrop = itemNamed(w->contentItem(), "windowBackdrop");
+  c.check(windowBackdrop && windowBackdrop->property("active").toBool(),
+          "the window has the playing cover after leaving immersive");
+  b->setAmbientBackdrop(false);
+  QTest::qWait(45);
+  c.check(windowBackdrop && windowBackdrop->isVisible() &&
+              windowBackdrop->opacity() > 0 && windowBackdrop->opacity() < 1,
+          "the window backdrop stays painted during fade out");
+  c.check(w->property("washAlpha").toReal() > 0.74 && w->property("washAlpha").toReal() < 1,
+          "panel opacity moves with the same effects spring");
+  c.check(w->grabWindow().save(c.directory + "/03-window-fading.png"),
+          "capture a frame during the window fade");
+  QTest::qWait(700);
+  c.check(windowBackdrop && !windowBackdrop->isVisible() &&
+              qAbs(w->property("washAlpha").toReal() - 1) < 0.001,
+          "the wash is released after both fades finish");
   w->setProperty("side", "");
   b->stop();
   b->clearQueue();
