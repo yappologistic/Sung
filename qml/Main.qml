@@ -1951,11 +1951,13 @@ ApplicationWindow {
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===0
                     SungText {heading: true;text:"Appearance";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
                     ColumnLayout {id:options0;objectName:"settingsRows0";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
-                SungText { visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); text: "Theme"; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium" }
-                // Two arrangements of the same three destinations. The label
-                // names where they go, so the control needs no sentence under
-                // it explaining what a rail is.
+                // Two arrangements of the same three destinations. The option
+                // labels name where they go, so the control needs no sentence
+                // under it explaining what a rail is; it does need its own
+                // heading, or it reads as a theme under the one below.
+                SungText { visible: settingsDialog.matches("Navigation top bar sidebar rail destinations"); text: "Navigation"; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium" }
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;visible:settingsDialog.matches("Navigation top bar sidebar rail destinations");accessibleName:"Navigation";options:[{key:false,label:"Top bar",name:"navigationTop"},{key:true,label:"Sidebar",name:"navigationSidebar"}];value:app.sidebarNavigation;onChosen:value=>app.sidebarNavigation=value}
+                SungText { visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); text: "Theme"; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium" }
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Appearance theme system Noctalia light dark"); accessibleName:"Theme"; options:[{key:"system",label:desktopTheme.available?"Noctalia":"System",name:"themeSystem"},{key:"light",label:"Light",name:"themeLight"},{key:"dark",label:"Dark",name:"themeDark"}]; value:app.theme; onChosen:value=>app.theme=value }
 
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; objectName:"artworkAccentSwitch"; text:"Use artwork accent"; checked:app.artworkAccent; onToggled:app.artworkAccent=checked; visible:settingsDialog.matches("Appearance artwork accent color") }

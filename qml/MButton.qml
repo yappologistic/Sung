@@ -90,7 +90,14 @@ AbstractButton {
     // touch target around it, so a small button is a 40dp shape you can still
     // hit comfortably. The target is the footprint the layout sees.
     readonly property real touchTarget: Math.max(Theme.minimumTarget, sizedHeight)
-    implicitWidth: text.length ? buttonLabel.implicitWidth + (symbol.length || busy ? control.sizedIcon+control.sizedGap : 0) + control.contentInset*2
+    // A left aligned button is a list row: its label starts after the leading
+    // inset and keeps room at the far end for a trailing symbol, or for air.
+    // Its natural width has to budget the same room its label is laid out in,
+    // or a row sized to its own label elides it ("Reset layo…").
+    readonly property real alignedLeadRoom: (symbol.length || busy ? sizedIcon + sizedGap + 8 : 0) + contentInset
+    readonly property real alignedTrailRoom: trailingSymbol.length ? 36 : 18
+    implicitWidth: text.length ? buttonLabel.implicitWidth + (leftAligned ? alignedLeadRoom + alignedTrailRoom
+                                                                         : (symbol.length || busy ? control.sizedIcon+control.sizedGap : 0) + control.contentInset*2)
                                : Math.max(control.touchTarget, Math.round(control.sizedSquareWidth))
     implicitHeight: control.touchTarget
     hoverEnabled: true
@@ -185,7 +192,7 @@ AbstractButton {
                     sourceComponent: MLoadingIndicator { objectName: "buttonSpinner"; running: control.busy; ink: control.ink; trackColor: "transparent"; label: "Loading"; Accessible.ignored: true }
                 }
             }
-            SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; font.pixelSize: control.labelSize; labelRole: true; emphasized: control.size==="large"; width: control.leftAligned ? Math.max(0,control.width-(control.symbol.length || control.busy?control.sizedIcon+control.sizedGap+8:0)-control.contentInset-(control.trailingSymbol.length?36:18)) : implicitWidth; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
+            SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; font.pixelSize: control.labelSize; labelRole: true; emphasized: control.size==="large"; width: control.leftAligned ? Math.max(0,control.width-control.alignedLeadRoom-control.alignedTrailRoom) : implicitWidth; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
         }
         // Most buttons carry no trailing symbol, and a button is built more
         // often than anything else in the window, so the glyph waits until one

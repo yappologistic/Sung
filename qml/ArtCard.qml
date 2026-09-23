@@ -13,6 +13,10 @@ Item {
     // the artwork keeps its rounded corners and its square.
     property real parallax: 0
     signal menuRequested(var item, var anchor)
+    // A smart playlist's size depends on its rules and is only known once it
+    // is opened, so the backend reports it as -1; a card says nothing rather
+    // than printing that.
+    readonly property string countLabel: track.count >= 0 ? track.count + (track.count === 1 ? " track" : " tracks") : ""
     readonly property bool playableCover: !!(track.videoId || track.localPath || track.serverSong) || ["album","playlist","local","local-album","local-artist"].indexOf(track.kind)>=0
     readonly property bool loadingCover: !!app.coverPlayId && app.coverPlayId===(track.browseId || track.id || "")
     width: 180; height: width + 68
@@ -45,5 +49,5 @@ Item {
         onClicked: app.togglePin(card.track)
     }
     MatchText { anchors.top: art.bottom; anchors.topMargin: 12; width: parent.width; revealFocused: openCard.activeFocus; sourceText: card.track.title || ""; font.pixelSize: Theme.bodyLarge; font.weight: Font.Medium }
-    MatchText { anchors.top: art.bottom; anchors.topMargin: 36; width: parent.width; sourceText: card.track.count!==undefined ? ((card.track.artist?card.track.artist+" · ":"")+card.track.count+" tracks") : card.track.artist || (card.track.kind === "album" ? "Album" : (card.track.kind === "artist" || card.track.kind === "local-artist") ? "Artist" : "Playlist"); font.pixelSize: Theme.bodySmall; color: Theme.muted }
+    MatchText { objectName: "cardSubtitle"; anchors.top: art.bottom; anchors.topMargin: 36; width: parent.width; sourceText: card.countLabel ? ((card.track.artist?card.track.artist+" · ":"")+card.countLabel) : card.track.artist || (card.track.smart ? "Smart playlist" : card.track.kind === "album" ? "Album" : (card.track.kind === "artist" || card.track.kind === "local-artist") ? "Artist" : "Playlist"); font.pixelSize: Theme.bodySmall; color: Theme.muted }
 }

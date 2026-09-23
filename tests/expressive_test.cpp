@@ -994,6 +994,29 @@ void runLibraryExchangeTests(Backend *b, QQuickWindow *w) {
   c.check(b->results()->count() == 1 && b->results()->get(0).value("title") == "Long closer",
           "rules combine rather than replace each other");
 
+  // A smart playlist is only measured when it is opened, so the backend
+  // reports its size as -1. The playlist grid printed that as "-1 tracks".
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("playlists")));
+  c.check(c.until([&] { return b->libraryId() == "playlists"; }), "the playlists page opens");
+  QTest::qWait(400);
+  // The cards are the grid layout of this page; the list layout names a
+  // smart playlist in its own row already.
+  const auto listLayout = b->viewMode();
+  b->setViewMode("grid");
+  QStringList subtitles;
+  const std::function<void(QQuickItem *)> collect = [&](QQuickItem *item) {
+    if (!item->isVisible()) return;
+    if (item->objectName() == "cardSubtitle") subtitles << item->property("sourceText").toString();
+    for (auto child : item->childItems()) collect(child);
+  };
+  c.check(c.until([&] { subtitles.clear(); collect(w->contentItem()); return subtitles.size() >= 2; }),
+          "the playlists show as cards");
+  c.check(!subtitles.join("|").contains("-1"),
+          QString("no card prints an unknown count (%1)").arg(subtitles.join(" | ")));
+  c.check(subtitles.contains("Smart playlist"), "and a smart playlist says what it is instead");
+  c.shot("02-playlist-cards");
+  b->setViewMode(listLayout);
+
   // The dialog has to round-trip everything it can save.
   auto dialog = w->findChild<QObject *>("smartPlaylistDialog");
   c.check(dialog, "the smart playlist dialog exists");

@@ -2320,6 +2320,30 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(400);
   c.check(shownItem(w->contentItem(), "navigationSidebar"),
           "Settings offers the two arrangements");
+  // Each appearance control carries its own heading. The navigation one had
+  // none and sat under "Theme", so it read as a choice of theme.
+  if (auto rows = shownItem(w->contentItem(), "settingsRows0")) {
+    const auto headingY = [&](const QString &label) {
+      double y = -1;
+      const std::function<void(QQuickItem *)> walk = [&](QQuickItem *item) {
+        if (!item->isVisible() || y >= 0) return;
+        if (item->childItems().isEmpty() && item->property("text").toString() == label)
+          y = item->mapToScene(QPointF(0, 0)).y();
+        for (auto child : item->childItems()) walk(child);
+      };
+      walk(rows);
+      return y;
+    };
+    auto navControl = shownItem(rows, "navigationSidebar");
+    auto themeControl = shownItem(rows, "themeDark");
+    const double navHeading = headingY("Navigation"), themeHeading = headingY("Theme");
+    c.check(navControl && themeControl && navHeading >= 0 && themeHeading >= 0 &&
+                navHeading < navControl->mapToScene(QPointF(0, 0)).y() &&
+                navControl->mapToScene(QPointF(0, 0)).y() < themeHeading &&
+                themeHeading < themeControl->mapToScene(QPointF(0, 0)).y(),
+            QString("each appearance control sits under its own heading (navigation %1, theme %2)")
+                .arg(navHeading, 0, 'f', 0).arg(themeHeading, 0, 'f', 0));
+  }
   c.click("navigationSidebar");
   c.check(c.until([&] { return b->sidebarNavigation(); }, 3000),
           "and choosing the sidebar takes");
