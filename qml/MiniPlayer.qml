@@ -33,13 +33,17 @@ Window {
         // the compositor starts moving only after the pointer begins a drag.
         DragHandler { objectName: "miniMoveHandler"; target: null; onActiveChanged: if (active) mini.startSystemMove() }
         ColumnLayout {
-            anchors.fill: parent; anchors.margins: 16; spacing: 4
+            // Qt Quick Layouts uses implicitHeight for this column. Top
+            // anchoring lets the lyric row leave the layout entirely when it
+            // disappears; a fill anchor stretched the remaining rows down.
+            anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+            anchors.margins: 16; spacing: 4
             RowLayout {
                 Layout.fillWidth: true; spacing: 12
                 Artwork { url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: Theme.shapeMedium; pixels: 128; fit:app.currentArtworkFit }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 4
-                    SungText { text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; font.weight: Font.DemiBold }
+                    SungText { objectName:"miniTitle"; text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; font.weight: Font.DemiBold }
                     SungText { text: presentation.shown.artist || ""; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.bodyMedium; color: Theme.muted }
                 }
                 MButton { objectName: "miniPinButton"; symbol: "pin"; toggle: true; selected: app.miniPinned; visible: app.canPinWindows; tip: app.miniPinned?"Let other windows cover this":"Keep above other windows"; onClicked: app.miniPinned=!app.miniPinned }
@@ -77,7 +81,9 @@ Window {
             RowLayout {
                 Layout.fillWidth: true; spacing: 8
                 SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34 }
-                SeekBar { Layout.fillWidth: true; implicitHeight: 28 }
+                // SliderTokens.HandleHeight:88 is 44dp and Slider.kt:3079
+                // uses it. The seek row must reserve the entire handle.
+                SeekBar { Layout.fillWidth: true; implicitHeight: Theme.sliderHandleHeight.xsmall }
                 SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
             }
         }

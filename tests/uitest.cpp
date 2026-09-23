@@ -2145,9 +2145,17 @@ void runListeningRefinementTests(Backend *b,QQuickWindow *w){
   auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
   auto click=[&](const char *name){auto item=findItem(w->contentItem(),QString::fromUtf8(name));check(item&&item->isVisible(),name);if(item)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,item->mapToScene(QPointF(item->width()/2,item->height()/2)).toPoint());QTest::qWait(100);};
   QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1280,850);b->setMotion(true);b->setTheme("dark");b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);b->setWatchMusicFolders(false);b->setOnlineArtwork(false);b->setLyricsFallback(false);b->setCompactDensity(false);
+  QTest::qWait(350);
+  if(auto skip=findItem(w->contentItem(),"onboardingSkip");skip&&skip->isVisible()){
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,skip->mapToScene(skip->boundingRect().center()).toPoint());
+    QTest::qWait(300);
+  }
   QImage cover(320,320,QImage::Format_RGB32);cover.fill(QColor("#587e86"));cover.save(dir+"/music/cover.jpg");
   QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","30","-metadata","album=Still Water","-metadata","artist=Example Artist",dir+"/music/Track 01.wav"});check(encode.waitForFinished(10000)&&encode.exitCode()==0,"generate silent local audio");
-  for(int i=2;i<=8;++i)QFile::copy(dir+"/music/Track 01.wav",dir+QString("/music/Track %1.wav").arg(i,2,10,QChar('0')));
+  for(int i=2;i<=7;++i)QFile::copy(dir+"/music/Track 01.wav",dir+QString("/music/Track %1.wav").arg(i,2,10,QChar('0')));
+  const QString longTitle="A very long title that crosses the whole mini player and must end before its controls";
+  QProcess longEncode;longEncode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","30","-metadata","title="+longTitle,"-metadata","artist=Example Artist",dir+"/music/Track 08.flac"});
+  check(longEncode.waitForFinished(10000)&&longEncode.exitCode()==0,"generate long-title local audio");
   b->importMusicFolder(QUrl::fromLocalFile(dir+"/music"));check(until([&]{return !b->importingLocal();}),"import fixture songs");b->library("files");b->playCollection(0);check(until([&]{return b->playing();}),"local playback starts");b->pause();
   auto homeNav=findItem(w->contentItem(),"navBar_home");check(homeNav,"Home navigation exists");
   // The label sits beside the glyph inside the indicator, so pressing the
@@ -2189,6 +2197,56 @@ void runListeningRefinementTests(Backend *b,QQuickWindow *w){
     check(!b->miniPinned()&&!(mini->flags()&Qt::WindowStaysOnTopHint),"and the same control lets go again");
   }
   if(mini){QWindowSystemInterface::handleFocusWindowChanged(mini);tapItem(mini,visibleItem(mini->contentItem(),"miniVolumeButton"));auto field=visibleItem(mini->contentItem(),"volumePercent");check(field,"mini player offers numeric volume");if(field){field->setProperty("text","23");QTest::keyClick(mini,Qt::Key_Return);check(qAbs(b->volume()-.23)<.001,"mini numeric volume applies");}tapItem(mini,visibleItem(mini->contentItem(),"miniVolumeButton"));check(mini->grabWindow().save(dir+"/07-mini-volume.png"),"07-mini-volume");QTest::keyClick(mini,Qt::Key_Escape);check(mini->isVisible(),"Escape closes volume without leaving mini player");}
+  if(mini){
+    auto miniSeek=visibleItem(mini->contentItem(),"seekBar");
+    auto fitsSeek=[&]{
+      auto handle=miniSeek?visibleItem(miniSeek,"seekHandle"):nullptr;
+      return miniSeek&&handle&&miniSeek->height()>=44&&handle->height()>=44&&
+        handle->mapToScene(QPointF(0,handle->height())).y()<=mini->height()-16;
+    };
+    check(fitsSeek(),"mini seek reserves the 44dp Material handle inside the window");
+    b->importLyrics(QUrl::fromLocalFile(lrc.fileName()),b->current().value("id").toString());
+    b->seek(12000);QTest::qWait(300);
+    check(mini->height()>188&&fitsSeek(),"timed lyrics keep the full seek handle visible");
+    for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
+      b->setTheme(theme);QTest::qWait(280);
+      QTest::mouseMove(mini,QPoint(2,2));QTest::qWait(240);
+      check(mini->grabWindow().save(dir+"/mini-lyrics-"+theme+".png"),"capture mini with lyrics");
+    }
+    b->library("files");
+    check(until([&]{return b->libraryId()=="files"&&!b->busy()&&b->results()->count()==8;}),
+          "local songs remain available for the long title");
+    int longIndex=-1;
+    for(int i=0;i<b->results()->count();++i)
+      if(b->results()->get(i).value("localPath").toString().endsWith("Track 08.flac"))longIndex=i;
+    check(longIndex>=0,"the imported long-title track is in Local files");
+    if(longIndex>=0)b->playCollection(longIndex);
+    check(until([&]{return b->current().value("title")==longTitle;}),
+          "the long-title track reaches the mini player");
+    b->resetLyrics();
+    const bool longReady=until([&]{return b->current().value("title")==longTitle&&b->lyricLines().isEmpty();});
+    if(!longReady)fprintf(stdout,"MINI_LONG_STATE title=%s lyrics=%lld page=%s\n",
+      qPrintable(b->current().value("title").toString()),
+      static_cast<long long>(b->lyricLines().size()),qPrintable(b->page()));
+    check(longReady,
+          "long local title plays without timed lyrics");
+    b->pause();QTest::qWait(300);
+    check(mini->height()<216&&fitsSeek(),"without lyrics the seek row reflows above the bottom inset");
+    for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
+      b->setTheme(theme);QTest::qWait(280);
+      QTest::mouseMove(mini,QPoint(2,2));QTest::qWait(240);
+      check(mini->grabWindow().save(dir+"/mini-long-no-lyrics-"+theme+".png"),
+            "capture mini long title without lyrics");
+    }
+    b->stop();b->clearQueue();QTest::qWait(300);
+    for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
+      b->setTheme(theme);QTest::qWait(280);
+      QTest::mouseMove(mini,QPoint(2,2));QTest::qWait(240);
+      check(mini->grabWindow().save(dir+"/mini-nothing-playing-"+theme+".png"),
+            "capture mini with nothing playing");
+    }
+    b->setTheme("dark");
+  }
   QMetaObject::invokeMethod(w,"restorePlayer");QWindowSystemInterface::handleFocusWindowChanged(w);QTest::qWait(300);QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(500);tapItem(w,visibleItem(w->contentItem(),"exactVolumeButton"));auto immersivePercent=visibleItem(w->contentItem(),"volumePercent");check(immersivePercent,"immersive player offers numeric volume");if(immersivePercent)immersivePercent->setProperty("text","0");tapItem(w,visibleItem(w->contentItem(),"volumeApply"));check(b->volume()==0,"immersive numeric volume applies");QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(400);
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
