@@ -77,6 +77,40 @@ private slots:
     art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(dir.filePath("missing.png")));QTRY_VERIFY(!art.ready());QVERIFY(!art.transitioning());
     art.setSource(QUrl::fromLocalFile(files[0]));art.setSource({});QVERIFY(!art.ready());QVERIFY(art.m_previous.isNull());
   }
+  void decodedBackdropKeepsSmallTarget() {
+    QTemporaryDir dir;
+    QImage first(160, 160, QImage::Format_RGB32);
+    first.fill(Qt::black);
+    QImage next(160, 160, QImage::Format_RGB32);
+    next.fill(Qt::white);
+    const auto a = dir.filePath("first.png"), b = dir.filePath("next.png");
+    QVERIFY(first.save(a));
+    QVERIFY(next.save(b));
+    RoundedArt::clearCaches();
+    RoundedArt art;
+    art.setRadius(0);
+    art.setWidth(1180);
+    art.setHeight(800);
+    art.setPixels(160);
+    art.setBlur(22);
+    art.setCrossfade(true);
+    art.setSource(QUrl::fromLocalFile(a));
+    QTRY_VERIFY(art.ready());
+    // QQuickPaintedItem::textureSize: the 160px source at 1180x800 needs
+    // a 160x108 target. An empty size would allocate the full item.
+    QCOMPARE(art.textureSize(), QSize(160, 108));
+    const auto oldBlur = art.m_softImage;
+    const auto oldBits = oldBlur.constBits();
+    art.setSource(QUrl::fromLocalFile(b));
+    QVERIFY(art.transitioning());
+    QVERIFY(art.m_image.isNull());
+    QCOMPARE(art.textureSize(), QSize(160, 108));
+    QCOMPARE(art.m_softPrevious.constBits(), oldBits);
+    QTRY_VERIFY(!art.m_image.isNull());
+    QCOMPARE(art.m_softPrevious.constBits(), oldBits);
+    QCOMPARE(art.m_scrimSamples.size(), 256);
+    QCOMPARE(art.m_scrimPreviousSamples.size(), 256);
+  }
   void backdropScrimProtectsInk() {
     QTemporaryDir dir;
     RoundedArt art;

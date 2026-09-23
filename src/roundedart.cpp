@@ -144,7 +144,10 @@ void RoundedArt::soften() {
   m_softImage = softened(m_image, m_blur);
   if (m_blur > 0) m_scrimSamples = sampleScrim(shown());
   else m_scrimSamples.clear();
-  m_softPrevious = softened(m_previous, m_blur);
+  // A source change already carries the softened old cover. Blur it again
+  // only when the blur radius itself changes.
+  if (!m_previous.isNull() && m_softPrevious.isNull())
+    m_softPrevious = softened(m_previous, m_blur);
   if (m_blur > 0 && !m_previous.isNull() && m_scrimPreviousSamples.isEmpty())
     m_scrimPreviousSamples = sampleScrim(m_softPrevious.isNull() ? m_previous : m_softPrevious);
 }
@@ -156,6 +159,7 @@ void RoundedArt::setBlur(int radius) {
   if (radius == m_blur)
     return;
   m_blur = radius;
+  m_softPrevious = {};
   m_scrimPreviousSamples.clear();
   soften();
   fitTextureSize();
@@ -339,11 +343,15 @@ void RoundedArt::fitTextureSize() {
     setTextureSize(QSize(1, 1));
     return;
   }
-  if (art.isNull() || full.isEmpty() || m_radius > 0 || m3::hasShape(m_shape)) {
+  if (full.isEmpty() || m_radius > 0 || m3::hasShape(m_shape)) {
     setTextureSize({});
     return;
   }
-  const int carried = qMax(art.width(), art.height());
+  // Qt's empty textureSize means item-sized. During decode the prior image
+  // is still painted, so keep its small target instead of a window-sized one.
+  // QQuickPaintedItem::textureSize, Qt 6 documentation.
+  const QImage &sized = art.isNull() ? behind : art;
+  const int carried = qMax(sized.width(), sized.height());
   const int spans = qMax(full.width(), full.height());
   if (carried >= spans) {
     setTextureSize({});
