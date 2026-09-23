@@ -690,6 +690,35 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
     b->setTheme(theme);QTest::qWait(180);flush();
     auto filters=findItem(w->contentItem(),"searchFilters");auto firstChip=findItem(w->contentItem(),"filter_songs");auto lastChip=findItem(w->contentItem(),"filter_videos");
     check(filters&&firstChip&&lastChip&&qAbs(firstChip->mapToItem(filters,QPointF()).y()-lastChip->mapToItem(filters,QPointF()).y())<1&&filters->property("contentWidth").toReal()>filters->width(),"compact filters stay on one scrollable line");
+    // MChip gives FilterChipTokens.ContainerHeight's 32dp shape a 48dp
+    // selection target. The clipped run must hold the target and its label.
+    bool wholeChips=filters!=nullptr,wholeLabels=filters!=nullptr;
+    for(const auto &name:{"filter_songs","filter_albums","filter_artists","filter_playlists","filter_videos"}){
+      auto chip=findItem(w->contentItem(),name);
+      if(!chip||!filters){wholeChips=false;wholeLabels=false;continue;}
+      const auto bounds=chip->mapRectToItem(filters,chip->boundingRect());
+      wholeChips=wholeChips&&bounds.top()>=-0.5&&bounds.bottom()<=filters->height()+0.5;
+      auto content=chip->property("contentItem").value<QQuickItem*>();
+      QQuickItem *label=nullptr;
+      if(content)for(auto child:content->childItems())if(child->property("text").toString()==chip->property("text").toString())label=child;
+      if(!label){wholeLabels=false;continue;}
+      const auto ink=label->mapRectToItem(filters,label->boundingRect());
+      wholeLabels=wholeLabels&&ink.top()>=-0.5&&ink.bottom()<=filters->height()+0.5;
+    }
+    check(wholeChips&&wholeLabels,"all compact chips and labels fit vertically inside the clipped row");
+    auto searchBar=findItem(w->contentItem(),"searchBar");
+    check(firstChip&&searchBar&&qAbs(firstChip->mapToScene(QPointF()).x()-searchBar->mapToScene(QPointF()).x())<1,
+          "the first filter shares the search field's left edge");
+    auto input=findItem(w->contentItem(),"searchField");
+    if(input)input->forceActiveFocus(Qt::TabFocusReason);
+    for(int tab=0;firstChip&&!firstChip->hasActiveFocus()&&tab<24;++tab)QTest::keyClick(w,Qt::Key_Tab);
+    auto background=firstChip?firstChip->property("background").value<QQuickItem*>():nullptr;
+    QQuickItem *ring=nullptr;
+    if(background)for(auto child:background->childItems())if(child->width()>background->width()+4)ring=child;
+    const auto ringBounds=ring&&filters?ring->mapRectToItem(filters,ring->boundingRect()):QRectF();
+    check(firstChip&&firstChip->hasActiveFocus()&&ring&&ring->isVisible()&&filters&&
+              ringBounds.top()>=-0.5&&ringBounds.bottom()<=filters->height()+0.5,
+          "Tab reaches a filter with its entire focus ring inside the row");
     auto second=findItem(w->contentItem(),"trackRow_1"),player=findItem(w->contentItem(),"playbackBar");
     check(second&&player&&second->mapToScene(QPointF(0,second->height())).y()<=player->mapToScene(QPointF()).y()+1,"two complete compact search rows fit above playback");
     shot(QString("compact-search-%1").arg(theme));

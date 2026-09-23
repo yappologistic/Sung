@@ -859,9 +859,11 @@ ApplicationWindow {
                         }
                         Flickable {
                             objectName: "searchFilters"
-                            visible: app.page==="search"; Layout.fillWidth: true; Layout.preferredHeight: 32
-                            // FilterChipTokens.ContainerHeight is 32dp. A horizontal
-                            // chip run keeps that single row at compact widths.
+                            visible: app.page==="search"; Layout.fillWidth: true
+                            // FilterChipTokens.ContainerHeight is 32dp, but MChip
+                            // gives it a 48dp selection target with room for the
+                            // outer focus ring. Clip at the target's measured edge.
+                            Layout.preferredHeight: filterRow.implicitHeight
                             contentWidth: filterRow.implicitWidth; contentHeight: height
                             clip: true; boundsBehavior: Flickable.StopAtBounds
                             interactive: contentWidth>width
