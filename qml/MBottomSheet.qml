@@ -21,6 +21,13 @@ Item {
     signal closed()
     property Item returnFocusItem: null
     property bool focusPending: false
+    property bool focusInside: false
+    // Window.activeFocusItem changes as the keyboard moves. Keep this state
+    // explicit so Shortcut.enabled updates when focus enters or leaves us.
+    Connections {
+        target: sheet.Window.window
+        function onActiveFocusItemChanged() { sheet.focusInside = sheet.ownsFocus() }
+    }
 
     function focusableItems(root, result) {
         for (const child of root.children) {
@@ -29,6 +36,12 @@ Item {
                 result.push(child)
             focusableItems(child, result)
         }
+    }
+    function ownsFocus() {
+        const window = sheet.Window.window
+        for (let item = window ? window.activeFocusItem : null; item; item = item.parent)
+            if (item === sheet) return true
+        return false
     }
     function moveFocus(backward) {
         const items = []
@@ -42,9 +55,10 @@ Item {
         if (!focusPending || !open || !visible) return
         const items = []
         focusableItems(body, items)
-        if (!items.length) { sheet.forceActiveFocus(Qt.PopupFocusReason); return }
+        if (!items.length) { sheet.forceActiveFocus(Qt.PopupFocusReason); focusInside = ownsFocus(); return }
         focusPending = false
         items[0].forceActiveFocus(Qt.PopupFocusReason)
+        focusInside = ownsFocus()
     }
     function dismiss() { if (open) { open = false; closed() } }
 
@@ -92,16 +106,18 @@ Item {
             Qt.callLater(() => focusFirst())
         } else if (!open && returnFocusItem) {
             focusPending = false
+            focusInside = false
             const previous = returnFocusItem
             returnFocusItem = null
             Qt.callLater(() => { if (previous.visible && previous.enabled) previous.forceActiveFocus(Qt.PopupFocusReason) })
-        } else if (!open) focusPending = false
+        } else if (!open) { focusPending = false; focusInside = false }
     }
-    // Qt Quick's window focus chain continues through a FocusScope. A modal
-    // sheet cycles its reachable controls here so Tab cannot enter the page.
-    Shortcut { sequence: "Tab"; enabled: sheet.modal && sheet.open; onActivated: sheet.moveFocus(false) }
-    Shortcut { sequence: "Shift+Tab"; enabled: sheet.modal && sheet.open; onActivated: sheet.moveFocus(true) }
-    Shortcut { sequence: "Escape"; enabled: sheet.modal && sheet.open; onActivated: sheet.dismiss() }
+    // ModalBottomSheet.kt:136-142 makes the sheet a dialog traversal group.
+    // Qt Quick's focus chain continues through a FocusScope, so these keys
+    // cycle only while a visible modal sheet owns the current focus.
+    Shortcut { sequence: "Tab"; enabled: sheet.modal && sheet.open && sheet.visible && sheet.focusInside; onActivated: sheet.moveFocus(false) }
+    Shortcut { sequence: "Shift+Tab"; enabled: sheet.modal && sheet.open && sheet.visible && sheet.focusInside; onActivated: sheet.moveFocus(true) }
+    Shortcut { sequence: "Escape"; enabled: sheet.modal && sheet.open && sheet.visible && sheet.focusInside; onActivated: sheet.dismiss() }
 
     Rectangle {
         objectName: "bottomSheetSurface"

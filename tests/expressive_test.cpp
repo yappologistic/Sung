@@ -1623,6 +1623,15 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
     firstSheetControl = shownItem(w->contentItem(), "closePanelButton");
   c.check(c.until([&] { return firstSheetControl && w->activeFocusItem() == firstSheetControl; }),
           "opening the queue focuses its first reachable control once");
+  if (queueButton && firstSheetControl) {
+    queueButton->forceActiveFocus(Qt::OtherFocusReason);
+    c.check(!sheet->property("focusInside").toBool(),
+            "sheet shortcuts stand down when focus leaves the sheet");
+    QTest::keyClick(w, Qt::Key_Escape);
+    c.check(sheet->property("open").toBool(),
+            "Escape outside the sheet does not dismiss it");
+    firstSheetControl->forceActiveFocus(Qt::TabFocusReason);
+  }
   for (int i = 0; i < 10; ++i) {
     QTest::keyClick(w, Qt::Key_Tab);
     c.check(inSheet(), QString("Tab %1 stays inside the queue sheet").arg(i+1));
