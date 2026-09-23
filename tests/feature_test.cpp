@@ -3277,16 +3277,41 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { artworkRow = findArtworkRow(w->contentItem()); return artworkRow != nullptr; }),
           "Settings search finds Current artwork");
   auto settingsScroll = w->findChild<QQuickItem *>("settingsScroll");
+  QQuickItem *lastArtworkRow = nullptr;
+  QPointF lastArtworkCenter;
+  QElapsedTimer artworkPositionStill;
+  // Qt Quick layouts polish before a frame (QQuickItem::updatePolish). A row
+  // can be visible in the item tree while its scene position is still moving.
+  // Wait for the opened dialog and a steady centre before aiming the mouse.
+  // https://doc.qt.io/qt-6/qquickitem.html#updatePolish
   c.check(c.until([&] { artworkRow = findArtworkRow(w->contentItem());
-                       return artworkRow && settingsScroll &&
-                           settingsScroll->mapRectToScene(settingsScroll->boundingRect()).contains(
-                               artworkRow->mapToScene(artworkRow->boundingRect().center())); }),
-          "Current artwork settles inside the Settings viewport");
+                       if (!artworkRow || !settingsScroll || !settings ||
+                           !settings->property("opened").toBool()) return false;
+                       const auto centre = artworkRow->mapToScene(artworkRow->boundingRect().center());
+                       if (!settingsScroll->mapRectToScene(settingsScroll->boundingRect()).contains(centre)) {
+                         lastArtworkRow = nullptr;
+                         artworkPositionStill.invalidate();
+                         return false;
+                       }
+                       if (artworkRow != lastArtworkRow ||
+                           qAbs(centre.x() - lastArtworkCenter.x()) > 1 ||
+                           qAbs(centre.y() - lastArtworkCenter.y()) > 1) {
+                         lastArtworkRow = artworkRow;
+                         lastArtworkCenter = centre;
+                         artworkPositionStill.start();
+                         return false;
+                       }
+                       return artworkPositionStill.elapsed() >= 120; }),
+          "Current artwork settles inside the opened Settings viewport");
   if (artworkRow) {
+    QSignalSpy rowClicks(artworkRow, SIGNAL(clicked()));
+    const auto hoverPoint = artworkRow->mapToScene(artworkRow->boundingRect().center()).toPoint();
+    QTest::mouseMove(w, hoverPoint);
+    QTest::qWait(60);
     const auto point = artworkRow->mapToScene(artworkRow->boundingRect().center()).toPoint();
     QTest::mouseMove(w, point);
-    QTest::qWait(60);
     QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    c.check(rowClicks.size() == 1, "Current artwork receives the real mouse click");
     QTest::qWait(320);
   }
   auto artwork = w->findChild<QObject *>("artworkControls");
