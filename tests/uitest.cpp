@@ -1235,10 +1235,39 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
   check(volume&&volume->isVisible()&&notification&&!notification->isVisible(),"settings filters unrelated controls");shot("01-settings-search");
   if(settings){settings->setProperty("searchQuery","no-such-setting");}QTest::qWait(100);auto empty=findItem(w->contentItem(),"settingsNoResults");check(empty&&empty->isVisible(),"settings no matches state");
   if(settings){QMetaObject::invokeMethod(settings,"close");}QTest::qWait(250);
+  QAccessible::setActive(true);
   auto smart=w->findChild<QObject*>("smartPlaylistDialog");check(smart,"smart playlist dialog exists");
   if(smart){QMetaObject::invokeMethod(smart,"edit",Q_ARG(QVariant,QString()));}QTest::qWait(300);
+  const QList<QPair<QString,QString>> smartFields{{"smartName","Name"},{"smartArtist","Artist contains"},
+    {"smartTitle","Title contains"},{"smartAlbum","Album contains"},{"smartYearFrom","From year"},
+    {"smartYearTo","To year"},{"smartMinutesFrom","Shortest minutes"},{"smartMinutesTo","Longest minutes"}};
+  bool namedSmartFields=true;
+  for(const auto &[objectName,expected]:smartFields){
+    auto field=findItem(w->contentItem(),objectName);
+    auto accessible=field?QAccessible::queryAccessibleInterface(field):nullptr;
+    const auto label=field?field->property("label").toString():QString();
+    const auto placeholder=field?field->property("placeholderText").toString():QString();
+    namedSmartFields=namedSmartFields&&field&&label==expected&&placeholder.isEmpty()&&accessible&&
+                     accessible->text(QAccessible::Name)==expected;
+  }
+  check(namedSmartFields,"all smart playlist inputs carry distinct labels without repeating placeholders");
+  auto yearFromField=findItem(w->contentItem(),"smartYearFrom"),yearToField=findItem(w->contentItem(),"smartYearTo");
+  auto minutesFromField=findItem(w->contentItem(),"smartMinutesFrom"),minutesToField=findItem(w->contentItem(),"smartMinutesTo");
+  auto bareRange=[&](QQuickItem *start,QQuickItem *end){
+    if(!start||!end||start->parentItem()!=end->parentItem())return false;
+    for(auto child:start->parentItem()->childItems())
+      if(child->property("text").toString()=="and"||child->property("text").toString()=="to")return false;
+    return start->mapToScene(QPointF(start->width(),0)).x()<end->mapToScene(QPointF()).x();
+  };
+  check(bareRange(yearFromField,yearToField)&&bareRange(minutesFromField,minutesToField),
+        "labelled smart playlist ranges sit side by side without connector text");
   auto name=findItem(w->contentItem(),"smartName"),artist=findItem(w->contentItem(),"smartArtist");
-  if(name){name->setProperty("text","My artist mix");}if(artist){artist->setProperty("text","Example");}shot("02-smart-playlist");
+  if(name){name->setProperty("text","My artist mix");}if(artist){artist->setProperty("text","Example");}
+  auto nameLabel=name?findItem(name,"fieldLabel"):nullptr;
+  auto smartScroll=findItem(w->contentItem(),"smartScroll");
+  check(nameLabel&&smartScroll&&nameLabel->mapRectToItem(smartScroll,nameLabel->boundingRect()).top()>=0,
+        "the first floating smart playlist label stays inside its clipped scroll view");
+  shot("02-smart-playlist");
   w->resize(780,580);QTest::qWait(250);shot("03-compact-smart-playlist");
   auto scroll=w->findChild<QObject*>("smartScroll");auto flick=scroll?qvariant_cast<QObject*>(scroll->property("contentItem")):nullptr;
   if(flick){flick->setProperty("contentY",qMax(0.0,flick->property("contentHeight").toDouble()-flick->property("height").toDouble()));}

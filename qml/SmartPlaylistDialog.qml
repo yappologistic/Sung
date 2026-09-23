@@ -46,31 +46,29 @@ MDialog {
                 if(id)app.openPlaylist(id);
             }
             ScrollView {
-                id: scroll; objectName: "smartScroll"; anchors.fill: parent; clip: true; contentWidth: availableWidth; contentHeight: fields.implicitHeight; rightPadding: 10
+                id: scroll; objectName: "smartScroll"; anchors.fill: parent; clip: true; contentWidth: availableWidth; contentHeight: fields.y+fields.implicitHeight; rightPadding: 10
                 ScrollBar.vertical: MScrollBar { parent: scroll; x: scroll.width-width; height: scroll.availableHeight; orientation: Qt.Vertical }
                 ColumnLayout {
-                    id: fields; width: scroll.availableWidth; spacing: 12
-                    SungText { text: "Name" }
-                    MTextField { id: nameField; objectName: "smartName"; Layout.fillWidth: true; maximumLength: 120; placeholderText: "Playlist name" }
-                    SungText { text: "Artist contains" }
-                    MTextField { id: artistField; objectName: "smartArtist"; Layout.fillWidth: true; maximumLength: 120; placeholderText: "Any artist" }
-                    SungText { text: "Title contains" }
-                    MTextField { id: titleField; objectName: "smartTitle"; Layout.fillWidth: true; maximumLength: 120; placeholderText: "Any title" }
-                    SungText { text: "Album contains" }
-                    MTextField { id: albumField; objectName: "smartAlbum"; Layout.fillWidth: true; maximumLength: 120; placeholderText: "Any album" }
-                    SungText { text: "Released between" }
+                    // OutlinedTextField.kt:160-162 floats a focused label across its
+                    // top border. Leave half its height above the first field
+                    // so the clipped ScrollView does not cut that label off.
+                    id: fields; y: Math.ceil(Theme.labelMedium/2)+2; width: scroll.availableWidth; spacing: 12
+                    // OutlinedTextField.kt:160-162 passes one label to the decoration and
+                    // input semantics. Each rule uses that label, including both
+                    // ends of a range, so its name stays with the control.
+                    MTextField { id: nameField; objectName: "smartName"; Layout.fillWidth: true; maximumLength: 120; label: "Name" }
+                    MTextField { id: artistField; objectName: "smartArtist"; Layout.fillWidth: true; maximumLength: 120; label: "Artist contains" }
+                    MTextField { id: titleField; objectName: "smartTitle"; Layout.fillWidth: true; maximumLength: 120; label: "Title contains" }
+                    MTextField { id: albumField; objectName: "smartAlbum"; Layout.fillWidth: true; maximumLength: 120; label: "Album contains" }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 8
-                        MTextField { id: yearFrom; objectName: "smartYearFrom"; Layout.fillWidth: true; maximumLength: 4; placeholderText: "Any year"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 9999 } }
-                        SungText { text: "and"; color: Theme.muted }
-                        MTextField { id: yearTo; objectName: "smartYearTo"; Layout.fillWidth: true; maximumLength: 4; placeholderText: "Any year"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 9999 } }
+                        MTextField { id: yearFrom; objectName: "smartYearFrom"; Layout.fillWidth: true; maximumLength: 4; label: "From year"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 9999 } }
+                        MTextField { id: yearTo; objectName: "smartYearTo"; Layout.fillWidth: true; maximumLength: 4; label: "To year"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 9999 } }
                     }
-                    SungText { text: "Length in minutes" }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 8
-                        MTextField { id: minutesFrom; objectName: "smartMinutesFrom"; Layout.fillWidth: true; maximumLength: 3; placeholderText: "Any length"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 600 } }
-                        SungText { text: "to"; color: Theme.muted }
-                        MTextField { id: minutesTo; objectName: "smartMinutesTo"; Layout.fillWidth: true; maximumLength: 3; placeholderText: "Any length"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 600 } }
+                        MTextField { id: minutesFrom; objectName: "smartMinutesFrom"; Layout.fillWidth: true; maximumLength: 3; label: "Shortest minutes"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 600 } }
+                        MTextField { id: minutesTo; objectName: "smartMinutesTo"; Layout.fillWidth: true; maximumLength: 3; label: "Longest minutes"; inputMethodHints: Qt.ImhDigitsOnly; validator: IntValidator { bottom: 0; top: 600 } }
                     }
                     RowLayout {
                         Layout.fillWidth: true
