@@ -669,8 +669,11 @@ void runArtistHeroTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return b->results()->count() == 2; }), "two albums group");
   QTest::qWait(400);
   c.check(!shownItem(w->contentItem(), "artistHero"), "an album grid shows no artist hero");
-  c.check(shownItem(w->contentItem(), "collectionHeaderTitle"), "it keeps the standard header");
-  c.shot("01-albums-standard-header");
+  // The selected tab already names this root, so its page has no headline.
+  c.check(shownItem(w->contentItem(), "libraryTabs") &&
+              !shownItem(w->contentItem(), "collectionHeaderTitle"),
+          "the album grid shows its library tabs without a repeated headline");
+  c.shot("01-albums-tab-root");
 
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("local-artists")));
   c.check(c.until([&] { return b->results()->count() == 1; }), "one artist groups");
@@ -781,13 +784,15 @@ void runArtistHeroTests(Backend *b, QQuickWindow *w) {
           "the pin is offered only when there is a collection to pin");
   c.shot("06-artist-hero-actions");
 
-  // --- Leaving the artist puts the standard header back ---
+  // --- Leaving the artist restores the tab root ---
   b->back();
   c.check(c.until([&] { return b->page() != "local-artist"; }), "Back leaves the artist");
   QTest::qWait(500);
   c.check(!shownItem(w->contentItem(), "artistHero"), "the hero is released");
-  c.check(shownItem(w->contentItem(), "collectionHeaderTitle"), "the standard header returns");
-  c.shot("07-after-artist");
+  c.check(shownItem(w->contentItem(), "libraryTabs") &&
+              !shownItem(w->contentItem(), "collectionHeaderTitle"),
+          "the library tab row returns without a repeated headline");
+  c.shot("07-after-artist-tab-root");
 
   b->stop();
   b->clearQueue();
@@ -3784,20 +3789,28 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
   w->setProperty("side", "");
   QTest::qWait(400);
 
-  // --- The app bar keeps its actions reachable ---
+  // --- The Local files tools keep their actions reachable ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
+  // The selected tab already names this root, so Folders and Rescan live in
+  // the trailing MAppBarRow beside the list tools.
   QQuickItem *appBar = nullptr;
   c.check(c.until([&] { appBar = shownItem(w->contentItem(), "collectionFolderActions");
-                       return appBar != nullptr; }),
-          "the local files actions use an app bar row");
+                       return appBar != nullptr; }) &&
+              !shownItem(w->contentItem(), "collectionActions"),
+          "Local files puts its actions in the tools row without a header row");
   if (appBar) {
-    const int live = appBar->property("live").toList().size();
-    c.check(!appBar->property("overflowing").toBool(),
-            QString("which shows all %1 of its actions when there is room").arg(live));
-    c.shot("11-app-bar-wide");
+    const auto liveActions = appBar->property("live").toList();
+    c.check(liveActions.size() == 2 &&
+                liveActions[0].toMap().value("key") == "folders" &&
+                liveActions[1].toMap().value("key") == "rescan",
+            "the tools offer Folders then Rescan in order");
+    c.check(!appBar->property("overflowing").toBool() &&
+                appBar->property("shownCount").toInt() == liveActions.size(),
+            "the wide tools row shows both actions without overflow");
+    c.shot("11-local-files-tools-wide");
     const int shown = appBar->property("shownCount").toInt();
     const int hidden = appBar->property("hidden").toList().size();
-    c.check(shown + hidden == appBar->property("live").toList().size(),
+    c.check(shown + hidden == liveActions.size(),
             QString("and nothing is dropped on the way (%1 shown, %2 in the menu)")
                 .arg(shown).arg(hidden));
   }
