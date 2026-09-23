@@ -1565,15 +1565,33 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
             "a failed connection reports its error");
     c.check(!shownItem(w->contentItem(), "errorBar"),
             "the error bar stays behind the open connection dialog");
+    auto errorBar = itemNamed(w->contentItem(), "errorBar");
+    c.check(errorBar && errorBar->property("lastAnnouncedError").toString().isEmpty(),
+            "a hidden error is not announced");
     c.shot("00-server-error-dialog");
     QTest::keyClick(w, Qt::Key_Escape);
     c.check(c.until([&] { return shownItem(w->contentItem(), "errorBar") != nullptr; }),
             "the failed attempt appears on the page after the dialog closes");
+    auto alert = errorBar ? QAccessible::queryAccessibleInterface(errorBar) : nullptr;
+    c.check(alert && alert->role() == QAccessible::AlertMessage &&
+            alert->text(QAccessible::Name) == b->error(),
+            "the error bar exposes its alert role and error text");
+    c.check(errorBar && errorBar->property("lastAnnouncedError").toString() == b->error(),
+            "the newly visible error is announced once");
+    const auto announced = errorBar ? errorBar->property("lastAnnouncedError").toString() : QString();
     c.shot("00-server-error-page");
     c.click("serverEmptyConnect");
     c.check(!shownItem(w->contentItem(), "errorBar"),
             "opening a dialog hides an error that is standing");
     QTest::keyClick(w, Qt::Key_Escape);
+    c.check(c.until([&] { return shownItem(w->contentItem(), "errorBar") != nullptr; }) &&
+            errorBar && errorBar->property("lastAnnouncedError").toString() == announced,
+            "showing the same error again keeps its announcement state");
+    b->notifyError("A different connection error");
+    c.check(c.until([&] { return errorBar &&
+                errorBar->property("lastAnnouncedError").toString() == b->error(); }) &&
+            b->error() != announced && alert && alert->text(QAccessible::Name) == b->error(),
+            "a different error updates the alert and its announcement");
   }
   b->server()->disconnectServer();
   b->dismissError();
