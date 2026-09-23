@@ -330,7 +330,9 @@ Item {
         MDivider {}
         // The two actions that used to be buttons of their own. The speed one
         // carried its value on its face, so the line says it instead.
-        MMenuItem {objectName:"immersiveSpeed";symbol:"history";text:"Playback speed · "+Number(app.playbackRate.toFixed(2))+"×";onTriggered:player.speedRequested()}
+        // Menu.kt:324-347 makes the leading icon optional. There is no speed
+        // glyph in the bundled set, and a history glyph misnames the action.
+        MMenuItem {objectName:"immersiveSpeed";text:"Playback speed · "+Number(app.playbackRate.toFixed(2))+"×";onTriggered:player.speedRequested()}
         MMenuItem {objectName:"immersiveTiming";symbol:"settings";text:"Lyric timing";enabled:app.lyricLines.length>0;onTriggered:player.timingRequested()}
         MDivider {}
         MMenuItem {objectName:"immersiveCoverflowToggle";text:"Up next covers";checkable:true;checked:player.coverflow;onTriggered:player.coverflowRequested(!player.coverflow)}

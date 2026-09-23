@@ -581,6 +581,10 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
               qPrintable(QString("the standard menu uses surfaceContainerLow (%1 against %2)")
                          .arg(colour.name()).arg(expected.name())));
       }
+      auto speed=w->findChild<QObject*>("immersiveSpeed");
+      check(speed&&speed->property("symbol").toString().isEmpty()&&
+            speed->property("text").toString().startsWith("Playback speed"),
+            "playback speed uses its explicit text without a history glyph");
       shot("menu");
       QTest::keyClick(w,Qt::Key_Escape);
       check(waitFor([&]{return !menuOpen();}),"layout menu closes");
