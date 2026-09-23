@@ -181,7 +181,7 @@ ItemDelegate {
             // ListTokens.ItemLeadingImageWidth/Height is 56dp. The compact
             // option uses ItemLeadingAvatarSize (40dp), including in queue rows.
             Layout.preferredWidth: row.queueMode?(app.compactDensity?40:56):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
-            Icon { anchors.centerIn: parent; name: "shuffle"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
+            Icon { objectName: "mixKindIcon"; anchors.centerIn: parent; name: "filter"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
             // An album's header already owns its cover. RoundedArt loads a
             // source even when hidden, so an album row must release its URL.
             Artwork { objectName: "trackLeadingArtwork"; visible: row.track.kind!=="smart" && !row.albumMode; anchors.fill: parent; url: row.albumMode ? "" : (row.track.art || ""); radius: Theme.shapeSmall; pixels: 112 }
@@ -218,7 +218,7 @@ ItemDelegate {
             MatchText { objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; typeRole: "bodyLarge"; color: row.titleInk }
             // ListTokens.ItemSupportingTextFont is BodyMedium. Album rows omit
             // only the artist already stated in the album heading.
-            MatchText { objectName: "trackSupport"; visible: row.track.kind!=="smart" && !row.repeatedAlbumArtist; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
+            MatchText { objectName: "trackSupport"; visible: row.track.kind==="smart" || !row.repeatedAlbumArtist; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.kind==="smart" ? (row.track.description || "") : row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
         }
         PlayingIndicator { ink: row.titleInk; visible: row.active && !row.albumMode }
         // A row's trailing supporting text is label small

@@ -2055,7 +2055,8 @@ QVariantList Backend::libraryRows(const QString &kind) const {
   if(kind=="files")return m_localTracks;
   if(kind=="favorites")return m_favorites;
   if(kind=="history")return m_history;
-  if(kind=="mixes")return {QVariantMap{{"id","mix-recent"},{"kind","smart"},{"title","Recently liked"}},QVariantMap{{"id","mix-rediscover"},{"kind","smart"},{"title","Rediscover"}},QVariantMap{{"id","mix-unplayed"},{"kind","smart"},{"title","Unplayed"}}};
+  // These descriptions state the same bounds used by the mix branches below.
+  if(kind=="mixes")return {QVariantMap{{"id","mix-recent"},{"kind","smart"},{"title","Recently liked"},{"description","Last 50 liked songs"}},QVariantMap{{"id","mix-rediscover"},{"kind","smart"},{"title","Rediscover"},{"description","Last played over 30 days ago"}},QVariantMap{{"id","mix-unplayed"},{"kind","smart"},{"title","Unplayed"},{"description","Never played"}}};
   if(kind=="mix-recent")return m_favorites.mid(0,50);
   QVariantList rows;QSet<QString> seen;
   const auto cutoff=QDateTime::currentSecsSinceEpoch()-30*86400;

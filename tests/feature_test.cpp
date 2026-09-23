@@ -3408,6 +3408,21 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     b->stop();
     b->clearQueue();
   }
+
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("mixes")));
+  c.check(c.until([&] { return b->results()->count() == 3; }), "the three mixes load");
+  const QStringList expectedMixes{"Last 50 liked songs", "Last played over 30 days ago", "Never played"};
+  for (int index = 0; index < expectedMixes.size(); ++index) {
+    const auto data = b->results()->get(index);
+    auto mixRow = shownItem(w->contentItem(), QString("trackRow_%1").arg(index));
+    auto support = mixRow ? anyItem(mixRow, "trackSupport") : nullptr;
+    auto icon = mixRow ? anyItem(mixRow, "mixKindIcon") : nullptr;
+    c.check(data.value("description").toString() == expectedMixes[index] && support &&
+                support->isVisible() && support->property("sourceText").toString() == expectedMixes[index] &&
+                icon && icon->isVisible() && icon->property("name").toString() == "filter",
+            QString("mix %1 explains its membership beside the smart-playlist glyph").arg(index));
+  }
+  c.shot("16-mix-descriptions");
   c.finish();
 }
 
