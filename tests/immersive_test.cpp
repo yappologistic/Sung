@@ -121,8 +121,30 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   b->importLyrics(QUrl::fromLocalFile(lrc.fileName()),song.value("id").toString());
   check(waitFor([&]{return b->lyricLines().size()==5&&player->property("displayedLayout")=="lyrics";}),"available lyrics restore saved layout");
   b->seek(11000);QTest::qWait(450);shot("lyrics");
+  // At 1440 the lyric measure is bounded; at 1024 it stays on the same
+  // centre line. Split mode is checked separately below.
+  for(int width:{1440,1024}){
+    resizeTo(width,900);
+    auto pane=visibleItem(w->contentItem(),"lyricsView");
+    check(pane&&pane->width()>=759.5&&pane->width()<=760.5&&qAbs(pane->mapToScene({pane->width()/2,0}).x()-width/2.0)<2,
+          qPrintable(QString("%1px lyric-only column is bounded and centred").arg(width)));
+    QList<QQuickItem*> lines;collectItems(w->contentItem(),"lyricLine",lines);
+    QQuickItem *current=nullptr;
+    for(auto line:lines)if(line->isVisible()&&line->property("current").toBool())current=line;
+    check(pane&&current&&qAbs(current->mapToScene({0,current->height()/2}).y()-
+          pane->mapToScene({0,pane->height()/2}).y())<30,
+          qPrintable(QString("%1px current lyric stays at the vertical reading centre").arg(width)));
+    shot(QString("lyrics-%1").arg(width));
+  }
+  resizeTo(1180,800);
   choose("artwork");check(player->property("displayedLayout")=="artwork","artwork layout applies");shot("artwork");
   choose("split");check(player->property("displayedLayout")=="split","split layout applies");shot("split");
+  {
+    auto pane=visibleItem(w->contentItem(),"lyricsView");
+    auto art=visibleItem(w->contentItem(),"immersiveArtwork");
+    check(pane&&art&&pane->mapToScene({0,0}).x()>art->mapToScene({art->width(),0}).x(),
+          "split lyrics remain to the right of the artwork");
+  }
   const auto playingId=b->current().value("id");
   click("immersiveAlbumButton");check(!w->property("immersive").toBool()&&b->page()=="local-album","album link opens local collection");
   check(b->current().value("id")==playingId&&b->playing(),"collection navigation preserves playback");
@@ -294,7 +316,24 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     springCheck("immersiveFadeInMotion","fastEffects");
     springCheck("immersiveDetailFadeMotion","fastEffects");
   }
+  // The artwork, transport, and seek bar must share a centre at every width
+  // used in the immersive captures, including the compact layout.
   b->setMotion(false);
+  for(int width:{1440,1024,840,600}){
+    resizeTo(width,width==600?620:900);
+    auto artwork=visibleItem(w->contentItem(),"immersiveArtwork");
+    auto toolbar=visibleItem(w->contentItem(),"immersiveToolbar");
+    auto seek=visibleItem(w->contentItem(),"immersiveSeek");
+    const auto centre=[](QQuickItem *item){return item->mapToScene({item->width()/2,0}).x();};
+    check(artwork&&toolbar&&seek,qPrintable(QString("%1px artwork, transport and seek exist").arg(width)));
+    if(artwork&&toolbar&&seek){
+      const double art=centre(artwork),bar=centre(toolbar),wave=centre(seek);
+      check(qAbs(art-bar)<=2&&qAbs(art-wave)<=2,
+            qPrintable(QString("%1px centres art %2, transport %3, seek %4 differ by <=2px")
+                       .arg(width).arg(art,0,'f',1).arg(bar,0,'f',1).arg(wave,0,'f',1)));
+    }
+    shot(QString("artwork-%1").arg(width));
+  }
   resizeTo(480,620);
   click("immersiveLayoutButton");click("immersiveCoverflowToggle");
   auto covers=visibleItem(w->contentItem(),"coverflowView");

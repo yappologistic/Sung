@@ -70,6 +70,9 @@ Item {
         anchors.fill: parent; anchors.topMargin: searchControls.height; anchors.bottomMargin:gapCue.visible?44:0; clip: true; spacing: 12
         visible: !app.lyricsBusy && app.lyricLines.length>0 && !(lyricPane.searchOpen && lyricSearch.text.length>0)
         model: app.lyricLines; reuseItems: true; cacheBuffer: 100
+        // Half a viewport of scroll room lets the first and last timed lines
+        // reach the same reading position as lines in the middle.
+        topMargin: height/2; bottomMargin: height/2
         function centerCurrent() {
             Qt.callLater(function(){if(lyricPane.following && liveLyrics.visible && app.lyricIndex>=0)liveLyrics.positionViewAtIndex(app.lyricIndex,ListView.Center);});
         }
@@ -88,7 +91,9 @@ Item {
             Behavior on y { enabled: app.motion; NumberAnimation { objectName: "lyricHighlightMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
         }
         boundsBehavior: Flickable.StopAtBounds
-        ScrollBar.vertical: MScrollBar {}
+        // The reading column reveals its scroll rail on hover; the side pane
+        // keeps the persistent cue used elsewhere in the library.
+        ScrollBar.vertical: MScrollBar { opacity: lyricPane.expanded && !hovered && !pressed ? 0 : 1 }
         onMovementStarted: { lyricPane.following=false; resumeFollow.restart(); }
         delegate: AbstractButton {
             id: lyricLine; objectName: "lyricLine"

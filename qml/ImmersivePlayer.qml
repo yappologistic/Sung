@@ -151,7 +151,14 @@ Item {
                 }
             }
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
-            LyricsView { id: immersiveLyrics; expanded: true; visible:player.displayedLayout!=="artwork" && player.displayedLayout!=="singalong"; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0 }
+            // Matching flexible space centres the bounded lyric measure.
+            Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" }
+            LyricsView { id: immersiveLyrics; expanded: true; visible:player.displayedLayout!=="artwork" && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics"; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
+                // At the immersive 40px lyric size, 760px holds roughly 35
+                // characters per line. Centre that measure only when alone.
+                Layout.preferredWidth: player.displayedLayout==="lyrics" ? Math.min(760,body.width-2*body.spacing) : -1
+                Layout.maximumWidth: player.displayedLayout==="lyrics" ? 760 : Infinity; Layout.alignment: Qt.AlignHCenter }
+            Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" }
             SingAlong { id: immersiveSingAlong; visible:player.displayedLayout==="singalong"; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0 }
         }
         ImmersiveCoverflow {
