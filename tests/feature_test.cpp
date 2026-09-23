@@ -2012,6 +2012,13 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
                   c.evaluate("Theme.springFastEffectsMs").toInt() &&
               curve("exitCurve") == curve("springFastEffects"),
           "the exit fade's duration and curve are one FastEffects spring");
+  // LoadingIndicator.kt:400-419 alone specifies 0.6/200 with threshold 0.1;
+  // its spring is separate from the six scheme tokens.
+  const auto morphSpring = m3::loadingMorphSpring();
+  c.check(c.evaluate("Theme.loadingMorphSpringMs").toInt() == morphSpring.durationMs &&
+              curve("loadingMorphSpring") == morphSpring.curve &&
+              morphSpring.durationMs < 650,
+          "the indicator morph solves Compose's spring and fits its 650ms slot");
   // PaneMotion.kt:150-177 specifies DefaultSpatial for bounds. Inspect the
   // animations on the real window so 350ms flights fail this check.
   const int paneMs = c.evaluate("Theme.springSpatialMs").toInt();
@@ -2097,6 +2104,26 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
     c.check(morph && morph->property("duration").toInt() ==
                          c.evaluate("Theme.springEffectsMs").toInt(),
             "the play/pause glyph morph uses IconToggleButton's DefaultEffects");
+  }
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/MLoadingIndicator.qml"));
+    QScopedPointer<QObject> indicator(source.create(qmlContext(w)));
+    auto animation = indicator ? indicator->findChild<QObject *>("loadingMorphAnimation") : nullptr;
+    auto pause = indicator ? indicator->findChild<QObject *>("loadingMorphPause") : nullptr;
+    c.check(animation && pause && animation->property("duration").toInt() == morphSpring.durationMs &&
+                animation->property("duration").toInt() + pause->property("duration").toInt() == 650,
+            "the live loading morph starts again each 650ms");
+  }
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/MWavyProgress.qml"));
+    QScopedPointer<QObject> indicator(source.create(qmlContext(w)));
+    auto sweep = indicator ? indicator->findChild<QObject *>("wavySweepAnimation") : nullptr;
+    auto wave = indicator ? indicator->findChild<QObject *>("wavyTravelAnimation") : nullptr;
+    // ProgressIndicator.kt:1048-1055 specifies 1750ms; WavyProgressIndicator.kt:
+    // 106-107,174-175 moves one wavelength per second in both modes.
+    c.check(sweep && wave && sweep->property("duration").toInt() == 1750 &&
+                wave->property("duration").toInt() == 1000,
+            "the wavy sweep and wavelength use Compose's independent rates");
   }
   // A spatial spring passes its target and an effects spring does not, which
   // is the whole reason Material separates them.

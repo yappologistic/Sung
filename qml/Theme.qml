@@ -224,6 +224,10 @@ QtObject {
     readonly property int springFastEffectsMs: app.motion ? springs.fastEffects.ms : 0
     readonly property int springEffectsMs: app.motion ? springs.defaultEffects.ms : 0
     readonly property int springSlowEffectsMs: app.motion ? springs.slowEffects.ms : 0
+    // LoadingIndicator.kt:400-419 uses a dedicated 0.6/200 spring with a 0.1
+    // visibility threshold, so each shape finishes before the next 650ms slot.
+    readonly property var loadingMorphSpring: springs.fastSpatial.loadingMorph.curve
+    readonly property int loadingMorphSpringMs: app.motion ? springs.fastSpatial.loadingMorph.ms : 0
 
     // --- Typography ----------------------------------------------------------
     readonly property string fontFamily: "Google Sans Flex"

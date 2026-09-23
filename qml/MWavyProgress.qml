@@ -41,7 +41,9 @@ Item {
     // filling it, so its ends are both free to move.
     property real sweep: 0
     NumberAnimation on sweep {
-        from: 0; to: 1; duration: 1800; loops: Animation.Infinite
+        objectName: "wavySweepAnimation"
+        // ProgressIndicator.kt:1048-1055 runs head and tail in a 1750ms cycle.
+        from: 0; to: 1; duration: 1750; loops: Animation.Infinite
         running: indicator.animating && !indicator.determinate
     }
     readonly property real runStart: determinate ? 0 : Math.max(0, sweep*1.4-0.4)
@@ -111,8 +113,11 @@ Item {
                     }
                 }
                 XAnimator {
+                    objectName: "wavyTravelAnimation"
                     target: wave; from: 0; to: -indicator.wavelength
-                    duration: 1200; loops: Animation.Infinite
+                    // WavyProgressIndicator.kt:106-107,174-175 travels one
+                    // wavelength each second in either indicator mode.
+                    duration: 1000; loops: Animation.Infinite
                     running: indicator.animating
                 }
             }

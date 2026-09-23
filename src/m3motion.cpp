@@ -53,20 +53,20 @@ double springVelocity(double damping, double stiffness, double seconds) {
   return w0 * w0 * seconds * std::exp(-w0 * seconds);
 }
 
-double springSettleSeconds(double damping, double stiffness) {
+static double springSettleSecondsAt(double damping, double stiffness, double threshold) {
   const double w0 = std::sqrt(stiffness);
   if (damping < 1.0) {
     // The ringing decays inside an envelope, so the last crossing of the
     // threshold is where that envelope reaches it.
     const double envelope = std::sqrt(1 - damping * damping);
-    return -std::log(kDisplacementThreshold * envelope) / (damping * w0);
+    return -std::log(threshold * envelope) / (damping * w0);
   }
   // Critically damped has no closed form for this; the response is monotonic,
   // so a bisection lands on it exactly.
   double low = 0, high = 100;
   for (int i = 0; i < 200; ++i) {
     const double mid = (low + high) / 2;
-    if (std::exp(-mid) * (1 + mid) > kDisplacementThreshold)
+    if (std::exp(-mid) * (1 + mid) > threshold)
       low = mid;
     else
       high = mid;
@@ -74,9 +74,13 @@ double springSettleSeconds(double damping, double stiffness) {
   return low / w0;
 }
 
-Spring spring(double damping, double stiffness) {
+double springSettleSeconds(double damping, double stiffness) {
+  return springSettleSecondsAt(damping, stiffness, kDisplacementThreshold);
+}
+
+static Spring springWithThreshold(double damping, double stiffness, double threshold) {
   Spring out;
-  const double settle = springSettleSeconds(damping, stiffness);
+  const double settle = springSettleSecondsAt(damping, stiffness, threshold);
   out.durationMs = int(std::lround(settle * 1000));
   // The spline runs in the easing curve's own coordinates, where x is the
   // fraction of the duration. A derivative in those coordinates is therefore
@@ -99,6 +103,15 @@ Spring spring(double damping, double stiffness) {
   return out;
 }
 
+Spring spring(double damping, double stiffness) {
+  return springWithThreshold(damping, stiffness, kDisplacementThreshold);
+}
+
+Spring loadingMorphSpring() {
+  // LoadingIndicator.kt:400-419 specifies 0.6/200 with a 0.1 threshold.
+  return springWithThreshold(0.6, 200.0, 0.1);
+}
+
 SpringTokens springTokens(bool expressive, const QString &name) {
   const SpringTokens *set = expressive ? kExpressive : kStandard;
   for (int i = 0; i < 6; ++i)
@@ -112,8 +125,16 @@ QVariantMap motionScheme(bool expressive) {
   QVariantMap out;
   for (int i = 0; i < 6; ++i) {
     const auto s = spring(set[i].damping, set[i].stiffness);
+    QVariantMap entry{{"ms", s.durationMs}, {"curve", s.curve}};
+    if (i == 0) {
+      // Keep the six scheme keys intact. The loading component's dedicated
+      // spring travels in the same backend map under FastSpatial.
+      const auto morph = loadingMorphSpring();
+      entry.insert(QStringLiteral("loadingMorph"),
+                   QVariantMap{{"ms", morph.durationMs}, {"curve", morph.curve}});
+    }
     out.insert(QString::fromLatin1(kNames[i]),
-               QVariantMap{{"ms", s.durationMs}, {"curve", s.curve}});
+               entry);
   }
   return out;
 }

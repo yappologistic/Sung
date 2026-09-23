@@ -99,11 +99,14 @@ Item {
     SequentialAnimation {
         running: indicator.animating; loops: Animation.Infinite
         NumberAnimation {
-            target: indicator; property: "morphProgress"; from: 0; to: 1; duration: 450
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial
+            objectName: "loadingMorphAnimation"
+            // LoadingIndicator.kt:400-419 uses its 0.6/200 morph spring with
+            // a 0.1 visibility threshold, rather than FastSpatial.
+            target: indicator; property: "morphProgress"; from: 0; to: 1; duration: Theme.loadingMorphSpringMs
+            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.loadingMorphSpring
         }
-        // Material holds the finished shape for the rest of its 650ms slot.
-        PauseAnimation { duration: 200 }
+        // LoadingIndicator.kt:404-419 starts one morph each 650ms.
+        PauseAnimation { objectName: "loadingMorphPause"; duration: Math.max(0,650-Theme.loadingMorphSpringMs) }
         ScriptAction {
             script: {
                 indicator.turn=(indicator.turn+90)%360

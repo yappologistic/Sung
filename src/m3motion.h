@@ -48,10 +48,13 @@ double springVelocity(double damping, double stiffness, double seconds);
 double springSettleSeconds(double damping, double stiffness);
 
 Spring spring(double damping, double stiffness);
+// LoadingIndicator.kt:400-419 uses its own 0.1 visibility threshold so the
+// shape morph finishes within the next 650ms slot.
+Spring loadingMorphSpring();
 
 // The six springs of a scheme, keyed fastSpatial, defaultSpatial, slowSpatial,
-// fastEffects, defaultEffects, slowEffects. Each value is a map of "ms" and
-// "curve".
+// fastEffects, defaultEffects, slowEffects. Each value has "ms" and "curve";
+// fastSpatial also carries LoadingIndicator's dedicated "loadingMorph" pair.
 QVariantMap motionScheme(bool expressive);
 SpringTokens springTokens(bool expressive, const QString &name);
 
