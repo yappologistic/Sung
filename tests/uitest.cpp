@@ -1315,13 +1315,20 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
   const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
   auto shot=[&](const char *name){check(w->grabWindow().save(dir+"/"+name+".png"),name);};
   QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);b->setLyricsFallback(false);b->setMotion(true);b->setTheme("dark");qputenv("SUNG_BUFFER_FIXTURE","1");
-  QVariantList songs;for(int i=0;i<30;++i)songs.append(QVariantMap{{"id",QString("polish%1").arg(i,5,10,QChar('0'))},{"videoId",QString("polish%1").arg(i,5,10,QChar('0'))},{"title",QString("Aurora & <night> %1 — A very long recording title that should remain readable on deliberate hover or keyboard focus").arg(i)},{"artist","Example artist"},{"kind","song"},{"seconds",60}});
+  QVariantList songs;
+  for(int i=0;i<30;++i){
+    // This must elide even in the widest list so the hover test exercises
+    // the title reveal, rather than depending on a narrower font or panel.
+    const auto title=QString("Aurora & <night> %1: The complete late-night session with alternate takes, guest performances, extended introductions, studio notes, encore recordings, and the unedited closing improvisation from the final stop of the tour").arg(i);
+    songs.append(QVariantMap{{"id",QString("polish%1").arg(i,5,10,QChar('0'))},{"videoId",QString("polish%1").arg(i,5,10,QChar('0'))},{"title",title},{"artist","Example artist"},{"kind","song"},{"seconds",60}});
+  }
   for(int i=0;i<3;++i){QImage cover(120,120,QImage::Format_RGB32);cover.fill(QColor::fromHsv(i*95,140,200));const auto path=dir+QString("/cover-%1.png").arg(i);cover.save(path);auto item=songs[i].toMap();item["art"]=QUrl::fromLocalFile(path).toString();songs[i]=item;}
   const auto id=b->createPlaylist("Evening collection");b->addItemsToPlaylist(id,songs);b->openPlaylist(id);QTest::qWait(300);
   auto list=findItem(w->contentItem(),"tracksView");auto title=findItem(w->contentItem(),"collectionHeaderTitle");check(list&&title,"collection and header exist");
   if(list&&title){check(until([&]{return title->property("font").value<QFont>().pixelSize()==28;}),"expanded header settles");const auto size=title->property("font").value<QFont>().pixelSize();list->setProperty("contentY",220);QTest::qWait(450);check(title->property("font").value<QFont>().pixelSize()<size,"header shrinks while scrolling");shot("01-compact-header");list->setProperty("contentY",0);QTest::qWait(450);check(until([&]{return title->property("font").value<QFont>().pixelSize()==size;}),"header expands at top");}
   b->collection()->setQuery("Aurora night");QTest::qWait(250);auto row=findItem(w->contentItem(),"trackRow_0");auto label=row?findItem(row,"trackTitle"):nullptr;
   check(label&&label->property("text").toString().contains("<b>Aurora")&&label->property("text").toString().contains("&lt;"),"matches highlighted while metadata markup is escaped");shot("02-search-matches");
+  check(label&&label->property("truncated").toBool(),"fixture title is truncated before hovering");
   if(label){QTest::mouseMove(w,label->mapToScene(QPointF(40,label->height()/2)).toPoint());QTest::qWait(750);auto tip=label->findChild<QObject*>("fullTitleTip");check(tip&&tip->property("visible").toBool(),"truncated title reveals on hover");shot("03-full-title");}
   if(label){
     QTest::mouseMove(w,QPoint(1100,80));QTest::qWait(450);
