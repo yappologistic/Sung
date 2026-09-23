@@ -1695,6 +1695,20 @@ ApplicationWindow {
     Component {
         id: queuePanel
         ColumnLayout {
+            // Qt Quick ListView keeps cached delegates alive beyond its clip.
+            // positionViewAtIndex(..., Contain) is Qt's documented way to
+            // show the whole row when Tab enters it or its action.
+            function revealFocusedRow() {
+                let item=window.activeFocusItem;
+                while(item && item!==queueList && item!==recentList) {
+                    if(item.selectionIndex>=0 && (item.listOwner===queueList || item.listOwner===recentList)) {
+                        item.listOwner.positionViewAtIndex(item.selectionIndex,ListView.Contain);
+                        return;
+                    }
+                    item=item.parent;
+                }
+            }
+            Connections { target: window; function onActiveFocusItemChanged(){if(immersiveQueue.visible)revealFocusedRow();} }
             function revealCurrent() {
                 window.revealPending=false;
                 queueList.currentIndex=app.currentIndex;

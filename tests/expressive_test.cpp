@@ -318,6 +318,42 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
               w->property("immersive").toBool(),
           "closing the queue keeps the immersive player");
 
+  b->enqueueItems(b->results()->rows);
+  w->setMinimumSize({0, 0});
+  w->setMaximumSize({16777215, 16777215});
+  w->resize(480, 620);
+  QTest::qWait(250);
+  QTest::keyClick(w, Qt::Key_L, Qt::ControlModifier);
+  c.check(c.until([&] { return sheet && sheet->property("visible").toBool(); }),
+          "Ctrl+L opens the narrow immersive queue");
+  auto queueView = shownItem(w->contentItem(), "queueView");
+  c.check(queueView && queueView->height() > 0, "narrow drawer has a queue viewport");
+  bool reachedClippedAction = false;
+  bool actionInView = false;
+  for (int tab = 0; queueView && tab < 80 && !reachedClippedAction; ++tab) {
+    QTest::keyClick(w, Qt::Key_Tab);
+    auto focused = w->activeFocusItem();
+    auto name = focused ? QAccessible::queryAccessibleInterface(focused) : nullptr;
+    int focusedRow = -1;
+    for (auto item = focused; item && item != queueView; item = item->parentItem())
+      if (item->property("selectionIndex").isValid()) { focusedRow = item->property("selectionIndex").toInt(); break; }
+    if (!name || !name->text(QAccessible::Name).startsWith("Actions for ") || focusedRow != 5)
+      continue;
+    reachedClippedAction = true;
+    const auto action = focused->mapRectToScene(focused->boundingRect());
+    const auto viewport = queueView->mapRectToScene(queueView->boundingRect());
+    actionInView = action.top() >= viewport.top() - 1 && action.bottom() <= viewport.bottom() + 1;
+  }
+  c.check(reachedClippedAction, "Tab reaches the last queue row action");
+  c.check(actionInView, "Tab scrolls the focused queue action fully into view");
+  c.shot("03-queue-focus-480");
+  QTest::keyClick(w, Qt::Key_Escape);
+  c.until([&] { return sheet && !sheet->property("visible").toBool(); }, 3000);
+  w->setMinimumSize({1180, 800});
+  w->setMaximumSize({1180, 800});
+  w->resize(1180, 800);
+  QTest::qWait(250);
+
   w->setProperty("immersive", false);
   QTest::qWait(300);
   w->setProperty("immersive", true);
