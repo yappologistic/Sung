@@ -1185,12 +1185,20 @@ ApplicationWindow {
                                     MButton { objectName:"loadMoreButton"; anchors.centerIn: parent; text: app.busy ? "Loading…" : "Load more"; busy: app.busy; enabled: !app.busy; tonal: true; visible: app.canMore && tracks.count>0; onClicked: app.more() }
                                 }
                                 Column {
-                                    objectName: "collectionEmptyState"; anchors.centerIn: parent; width: Math.min(parent.width,320); spacing: 16
+                                    objectName: "collectionEmptyState"; anchors.centerIn: parent; width: Math.min(parent.width,320)
+                                    // Material's 4dp spacing step lets the 48dp button and
+                                    // the body line fit the compact Local files viewport.
+                                    spacing: window.compactWindow && app.page==="library" && window.libraryTab==="files"
+                                        ? Theme.spaceSmall : Theme.spaceLarge
                                     visible: app.collection.count===0 && !app.busy && !window.serverDisconnected
-                                    Icon { anchors.horizontalCenter: parent.horizontalCenter; name: app.error?"refresh":app.collection.query || app.page==="search"?"search":"library"; size: 36; ink: Theme.muted }
+                                    // At compact Local files widths the toolbar and player
+                                    // leave room for the message and action, but not the icon.
+                                    Icon { anchors.horizontalCenter: parent.horizontalCenter; visible: !(window.compactWindow && app.page==="library" && window.libraryTab==="files"); name: app.error?"refresh":app.collection.query || app.page==="search"?"search":"library"; size: 36; ink: Theme.muted }
                                     // Empty playlist guidance names the exact song-menu action;
                                     // the only button below takes the reader to songs.
-                                    SungText { objectName:app.page==="local"?"emptyPlaylistHint":"collectionEmptyMessage"; width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"No local music yet":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "Choose Add to playlist in any song’s menu" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: Theme.bodyLarge }
+                                    // Material BodyMedium's 20dp line replaces BodyLarge's
+                                    // 24dp line only where Local files has a compact toolbar.
+                                    SungText { objectName:app.page==="local"?"emptyPlaylistHint":"collectionEmptyMessage"; width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"No local music yet":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "Choose Add to playlist in any song’s menu" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: window.compactWindow && app.page==="library" && window.libraryTab==="files" ? Theme.bodyMedium : Theme.bodyLarge }
                                     MButton {
                                         objectName: "emptyStateAction"; anchors.horizontalCenter: parent.horizontalCenter; tonal: true
                                         text: app.collection.query?"Clear filters":app.error && app.canRetry?"Retry":window.libraryTab==="files" && app.page==="library"?"Add music":app.page==="local"?"Find songs":"Search music"

@@ -1444,6 +1444,16 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
       QMetaObject::invokeMethod(w,"chooseLibrary",Q_ARG(QVariant,QVariant(tab)));
       QTest::qWait(300);
       check(w->property("libraryTab").toString()==tab,"empty Library tab settles before capture");
+      if(width==480&&tab=="files"){
+        auto emptyAction=findItem(w->contentItem(),"emptyStateAction");
+        auto songList=findItem(w->contentItem(),"tracksView");
+        auto emptyMessage=findItem(w->contentItem(),"collectionEmptyMessage");
+        check(emptyAction&&songList&&emptyMessage&&emptyAction->isVisible()&&
+              emptyMessage->mapToScene(QPointF()).y()>=songList->mapToScene(QPointF()).y()&&
+              emptyAction->mapToScene(QPointF(0,emptyAction->height())).y()<=
+                songList->mapToScene(QPointF(0,songList->height())).y(),
+              "compact empty Local files action stays above the clipped edge");
+      }
       check(w->grabWindow().save(dir+QString("/empty-%1-%2-%3.png").arg(tab).arg(width).arg(theme)),
             "capture empty Library tab");
     }
