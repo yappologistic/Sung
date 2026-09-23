@@ -176,7 +176,8 @@ Rectangle {
                         Layout.alignment: Qt.AlignHCenter
                         text: destination.modelData.label
                         font.pixelSize: Theme.labelMedium
-                        emphasized: destination.active; labelRole: true
+                        // NavigationBar.kt:201 uses LabelTextFont in both states.
+                        labelRole: true; typeRole: "labelMedium"
                         // The label is inside the indicator here, so it takes
                         // the ink of the container it is drawn on rather than
                         // the secondary accent a label below one would take.

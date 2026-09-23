@@ -4631,6 +4631,48 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return b->results()->count() == 3; }), "the library is listed");
   QTest::qWait(500);
 
+  // NavigationBar.kt:201 and Tab.kt:102 apply one LabelTextFont in either
+  // selection state; their token files have no active-font variant.
+  auto selectedNavLabel = anyItem(w->contentItem(), "navBarLabel_library");
+  auto quietNavLabel = anyItem(w->contentItem(), "navBarLabel_home");
+  c.check(selectedNavLabel && quietNavLabel &&
+              selectedNavLabel->property("font").value<QFont>().weight() ==
+                  quietNavLabel->property("font").value<QFont>().weight(),
+          "selected and unselected navigation labels have one weight");
+  auto selectedTab = shownItem(w->contentItem(), "localFilesTab");
+  auto quietTab = shownItem(w->contentItem(), "playlistsTab");
+  auto selectedTabLabel = selectedTab ? anyItem(selectedTab, "sungText") : nullptr;
+  auto quietTabLabel = quietTab ? anyItem(quietTab, "sungText") : nullptr;
+  c.check(selectedTabLabel && quietTabLabel &&
+              selectedTabLabel->property("font").value<QFont>().weight() ==
+                  quietTabLabel->property("font").value<QFont>().weight(),
+          "selected and unselected tab labels have one TitleSmall weight");
+  // NavigationRailVerticalItemTokens and HorizontalItemTokens also publish
+  // one label font each, regardless of selection.
+  {
+    QQmlComponent railSource(qmlEngine(w), QUrl("qrc:/qml/MNavigationItem.qml"));
+    QScopedPointer<QObject> made(railSource.create(qmlContext(w)));
+    auto rail = qobject_cast<QQuickItem *>(made.data());
+    c.check(rail, "a rail item can show both label arrangements");
+    if (rail) {
+      rail->setParentItem(w->contentItem());
+      rail->setProperty("text", QString("Library"));
+      for (bool expanded : {false, true}) {
+        rail->setProperty("expanded", expanded);
+        auto label = anyItem(rail, expanded ? "navigationWideLabel" : "navigationLabel");
+        rail->setProperty("selected", false);
+        QTest::qWait(80);
+        const int quietWeight = label ? label->property("font").value<QFont>().weight() : -1;
+        rail->setProperty("selected", true);
+        QTest::qWait(80);
+        c.check(label && label->property("font").value<QFont>().weight() == quietWeight,
+                QString("the %1 rail label keeps its weight when selected")
+                    .arg(expanded ? "horizontal" : "vertical"));
+      }
+      rail->setVisible(false);
+      rail->setParentItem(nullptr);
+    }
+  }
   // --- Material names six transitions and this had three of them ---
   // Fading through is for destinations that have nothing to do with each
   // other. Two screens at consecutive levels of one hierarchy slide instead,

@@ -111,7 +111,9 @@ Flickable {
                 contentItem: Item {
                     Row {
                         anchors.centerIn: parent; spacing: 8
-                        SungText { id: label; anchors.verticalCenter: parent.verticalCenter; text: tab.text; emphasized: tab.selected; labelRole: true; font.pixelSize: Theme.labelLarge; color: !tab.selected ? Theme.muted : tabs.secondary ? Theme.text : Theme.primary }
+                        // Tab.kt:102 uses the TitleSmall LabelTextFont for either state;
+                        // PrimaryNavigationTabTokens and SecondaryNavigationTabTokens agree.
+                        SungText { id: label; anchors.verticalCenter: parent.verticalCenter; text: tab.text; typeRole: "titleSmall"; font.pixelSize: Theme.titleSmall; color: !tab.selected ? Theme.muted : tabs.secondary ? Theme.text : Theme.primary }
                         MBadge {
                             id: tabBadge
                             objectName: "tabBadge_"+tab.modelData.key

@@ -79,7 +79,9 @@ AbstractButton {
                 y: 40; width: parent.width; height: 20
                 text: control.text; horizontalAlignment: Text.AlignHCenter
                 font.pixelSize: Theme.labelMedium
-                font.weight: control.selected ? Font.DemiBold : Font.Medium
+                // NavigationRailVerticalItemTokens.LabelTextFont stays LabelMedium
+                // for both states; the indicator and ink show selection.
+                labelRole: true; typeRole: "labelMedium"
                 color: control.selected ? Theme.secondary : Theme.muted
                 Accessible.ignored: true
             }
@@ -109,7 +111,8 @@ AbstractButton {
                 verticalAlignment: Text.AlignVCenter
                 text: control.text; elide: Text.ElideRight
                 font.pixelSize: Theme.labelLarge
-                font.weight: control.selected ? Font.DemiBold : Font.Medium
+                // NavigationRailHorizontalItemTokens.LabelTextFont stays LabelLarge.
+                labelRole: true; typeRole: "labelLarge"
                 // Where the glyph leads and the label sits inside the
                 // indicator, the label is on the container and takes its ink.
                 // Stacked, the label is below the indicator and on the surface,
