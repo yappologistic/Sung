@@ -324,6 +324,11 @@ public:
   bool buffering() const { return m_wantPlay && (m_resolving || m_media().mediaStatus()==QMediaPlayer::LoadingMedia || m_media().mediaStatus()==QMediaPlayer::StalledMedia || m_media().mediaStatus()==QMediaPlayer::BufferingMedia); }
   qint64 position() const { return m_media().source().isEmpty() ? m_savedPosition : m_media().position(); }
   qint64 duration() const {
+    // With no current track and a stopped deck the player may still hold the
+    // last source; the interface says "Nothing playing" and its seek bar must
+    // not offer that source's length. A source played without a queue
+    // (--smoke-local) still reports its own.
+    if (m_index < 0 && m_media().playbackState() == QMediaPlayer::StoppedState) return 0;
     return m_media().duration() > 0
                ? m_media().duration()
                : current().value("seconds").toLongLong() * 1000;

@@ -2366,6 +2366,10 @@ void runListeningRefinementTests(Backend *b,QQuickWindow *w){
             "capture mini long title without lyrics");
     }
     b->stop();b->clearQueue();QTest::qWait(300);
+    // Nothing playing keeps no length from the last source: the times read
+    // 0:00 and the seek bar is disabled rather than offering a dead track.
+    check(b->duration()==0&&miniSeek&&!miniSeek->isEnabled(),
+          "nothing playing clears the mini seek length");
     for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
       b->setTheme(theme);QTest::qWait(280);
       QTest::mouseMove(mini,QPoint(2,2));QTest::qWait(240);

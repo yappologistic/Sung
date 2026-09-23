@@ -847,6 +847,9 @@ void Backend::clearQueue() {
   clearLyrics();
   m_queue.reconcile({});
   emit trackChanged();
+  // duration() notifies through playbackChanged, and stop() sent that while
+  // the old track was still current.
+  emit playbackChanged();
   emit libraryChanged();
   m_saveTimer.start();
   if (!m_undoMessage.isEmpty()) emit toast(m_undoMessage);
@@ -1657,6 +1660,7 @@ void Backend::undo() {
     m_queue.reconcile(m_undoRows);
     m_index = qBound(-1, m_undoIndex, m_queue.count() - 1);
     emit trackChanged();
+    emit playbackChanged(); // the restored track's duration
   } else if (m_undoType == "history") {
     m_history = m_undoRows;m_lastPlayed=m_undoLastPlayed;m_undoLastPlayed.clear();
     refreshRecentlyPlayed();
