@@ -1,7 +1,9 @@
 #include "roundedart.h"
 #include "artworkurl.h"
+#include "m3motion.h"
 #include <QBuffer>
 #include <QDateTime>
+#include <QDir>
 #include <QNetworkCacheMetaData>
 #include <QNetworkDiskCache>
 #include <QStandardPaths>
@@ -64,8 +66,20 @@ private slots:
     // A cover off disk is decoded on a pool thread, so a surface becomes ready
     // a moment after it is given a source rather than inside the call.
     QTRY_VERIFY(art.ready());
-    art.setSource(QUrl::fromLocalFile(files[1]));QTRY_VERIFY(art.transitioning());QVERIFY(!art.m_previous.isNull());QTest::qWait(110);
+    art.setSource(QUrl::fromLocalFile(files[1]));QTRY_VERIFY(art.transitioning());QVERIFY(!art.m_previous.isNull());QTest::qWait(45);
+    QTRY_VERIFY(art.m_fade && art.m_fade->state() == QAbstractAnimation::Running);
+    // ExpressiveMotionTokens.kt:24-25 gives DefaultEffects 1/1600.
+    const auto effects = m3::springTokens(true, QStringLiteral("defaultEffects"));
+    QCOMPARE(art.m_fade->duration(), m3::spring(effects.damping, effects.stiffness).durationMs);
+    const qreal midpoint = m3::springResponse(effects.damping, effects.stiffness,
+                                              art.m_fade->duration() / 2000.0);
+    QVERIFY(qAbs(art.m_fade->easingCurve().valueForProgress(0.5) - midpoint) < 0.015);
     QImage mixed(100,100,QImage::Format_ARGB32_Premultiplied);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}
+    const auto capture = qEnvironmentVariable("SUNG_TEST_OUTPUT");
+    if (!capture.isEmpty()) {
+      QVERIFY(QDir().mkpath(capture));
+      QVERIFY(mixed.save(capture + "/artwork-crossfade-midpoint.png"));
+    }
     const auto color=mixed.pixelColor(50,50);QVERIFY(color.red()>30&&color.blue()>30);QVERIFY(color.alpha()>250);
     QTRY_VERIFY_WITH_TIMEOUT(!art.transitioning(),1000);QVERIFY(art.m_previous.isNull());
     art.setSource(QUrl::fromLocalFile(files[0]));QTRY_VERIFY(art.ready());art.setSource(QUrl::fromLocalFile(files[2]));QVERIFY(art.transitioning());

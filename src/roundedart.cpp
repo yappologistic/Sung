@@ -1,6 +1,7 @@
 #include "roundedart.h"
 #include "artworkurl.h"
 #include "m3shape.h"
+#include "m3motion.h"
 #include <QBuffer>
 #include <QFileInfo>
 #include <QCache>
@@ -175,7 +176,22 @@ void RoundedArt::imageReady(){
   soften();
   fitTextureSize();
   if(m_crossfade && !m_previous.isNull() && !m_image.isNull()){
-    if(!m_fade){m_fade=std::make_unique<QVariantAnimation>();m_fade->setDuration(220);m_fade->setStartValue(0.0);m_fade->setEndValue(1.0);m_fade->setEasingCurve(QEasingCurve::InOutCubic);
+    if(!m_fade){
+      m_fade=std::make_unique<QVariantAnimation>();
+      // ExpressiveMotionTokens.kt:24-25 gives DefaultEffects 1/1600.
+      // Theme.springEffects uses the same solved spring for the palette, so
+      // artwork and colour settle together without crossing a wrong value.
+      const auto token=m3::springTokens(true, QStringLiteral("defaultEffects"));
+      const auto spring=m3::spring(token.damping,token.stiffness);
+      QEasingCurve curve(QEasingCurve::BezierSpline);
+      for(int i=0;i+5<spring.curve.size();i+=6)
+        curve.addCubicBezierSegment(
+          QPointF(spring.curve[i].toDouble(),spring.curve[i+1].toDouble()),
+          QPointF(spring.curve[i+2].toDouble(),spring.curve[i+3].toDouble()),
+          QPointF(spring.curve[i+4].toDouble(),spring.curve[i+5].toDouble()));
+      m_fade->setDuration(spring.durationMs);
+      m_fade->setStartValue(0.0);m_fade->setEndValue(1.0);
+      m_fade->setEasingCurve(curve);
       connect(m_fade.get(),&QVariantAnimation::valueChanged,this,[this](const QVariant &value){m_mix=value.toReal();update();});
       connect(m_fade.get(),&QVariantAnimation::finished,this,&RoundedArt::finishTransition);
     }

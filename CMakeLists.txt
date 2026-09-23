@@ -88,7 +88,7 @@ if(BUILD_TESTING)
  target_include_directories(sung-jellyfin-tests PRIVATE src)
  target_link_libraries(sung-jellyfin-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Multimedia Qt6::Network Qt6::DBus Qt6::Test)
 
- qt_add_executable(sung-artwork-tests tests/artwork_test.cpp src/artworkurl.h src/m3shape.cpp src/m3shape.h src/roundedart.cpp src/roundedart.h src/motionartwork.cpp src/motionartwork.h)
+ qt_add_executable(sung-artwork-tests tests/artwork_test.cpp src/artworkurl.h src/m3shape.cpp src/m3shape.h src/m3motion.cpp src/m3motion.h src/roundedart.cpp src/roundedart.h src/motionartwork.cpp src/motionartwork.h)
  target_include_directories(sung-artwork-tests PRIVATE src)
  target_link_libraries(sung-artwork-tests PRIVATE Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Quick Qt6::Network Qt6::Multimedia Qt6::Test)
  add_test(NAME artwork COMMAND sung-artwork-tests)
