@@ -1206,92 +1206,136 @@ ApplicationWindow {
                 objectName: "playbackBar"
                 Accessible.role: Accessible.Pane
                 Accessible.name: "Playback"
-                Layout.fillWidth: true; Layout.preferredHeight: 112; color: window.washed(Theme.container); radius: Theme.shapeExtraLarge
-                RowLayout {
-                    anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16; spacing: 16
-                    AbstractButton { id: nowButton; objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
-                        contentItem: Artwork { id: nowArtwork; objectName: "nowArtwork"; url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; radius: Theme.shapeMedium; pixels: 150; fit:app.currentArtworkFit; opacity: window.coverFlying?0:1 }
-                        background: Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; radius: Theme.shapeLarge; border.width: parent.activeFocus?2:0; border.color: Theme.focusRing }
-                    }
-                    ColumnLayout {
-                        Layout.preferredWidth: Math.max(100,Math.min(220,window.width*0.17)); spacing: 6; opacity: nowPresentation.fade*window.coverDetailsOpacity; transform: Translate { x: nowPresentation.offset }
-                        AbstractButton { objectName: "nowTitle"; Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.title || "Nothing playing"; font.pixelSize: Theme.titleMedium; font.weight: Font.DemiBold } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
-                        AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open(window.relatedItem(app.current,"artist")); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.artist || ""; color: Theme.muted; font.pixelSize: Theme.bodyMedium } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
-                    }
-                    MButton { symbol: "heart"; tip: app.liked?"Unlike":"Like"; toggle: true; selected: app.liked; enabled: app.currentIndex>=0; visible: window.width>=1050; onClicked: app.toggleLike(app.current) }
-                    ColumnLayout {
-                        // The transport and the seek bar share this column. It
-                        // was held to 520 and a spacer beside it took the rest,
-                        // so on a wide window the bar stayed a few hundred
-                        // pixels long while the bar it sits in was over a
-                        // thousand. A minute of music was a handful of pixels.
-                        Layout.fillWidth: true; Layout.maximumWidth: 960; spacing: 0
+                Layout.fillWidth: true; Layout.preferredHeight: playerLayout.twoRow ? 136 : 112; color: window.washed(Theme.container); radius: Theme.shapeExtraLarge
+                // SmallIconButtonTokens gives each icon 40dp, and
+                // AppBarDsl.kt:312-346 reserves overflow room before measuring
+                // actions. Equal side slots centre transport. A 604dp inner
+                // bar fits two 180dp sides, a 212dp centre and two 16dp gaps.
+                // Below that (668dp with the shell's 16dp outer margins),
+                // the compact row keeps the 100dp title and puts seeking below.
+                Item {
+                    id: playerLayout
+                    objectName: "playerLayout"
+                    anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+                    readonly property bool twoRow: width < 604
+                    readonly property bool showQueue: !window.compactWindow
+                    readonly property bool showLike: !twoRow && window.width >= 1050
+                    readonly property bool showLyrics: !twoRow && window.width >= 840
+                    readonly property bool showOutput: !twoRow && window.width >= 1050
+                    readonly property bool showVolume: !twoRow && window.width >= 1050
+                    // SmallIconButtonTokens supplies 40dp actions. The left
+                    // needs 64 artwork + 16 gap + 100 title, plus 56 for Like.
+                    // On the right, 156 fits Queue and 100 of overflow;
+                    // Lyrics adds 56. Four inline icons need 208; the 66dp
+                    // volume slider raises that group to 274.
+                    readonly property real leftNeed: showLike ? 236 : 180
+                    readonly property real rightNeed: showVolume ? (window.width >= 1160 ? 274 : 208) : showLyrics ? 212 : 156
+                    readonly property real sideNeed: Math.max(leftNeed,rightNeed)
+                    // Time labels and gaps use 92dp, so a 212dp centre leaves
+                    // the chosen 120dp seek minimum. The side slots hold the
+                    // wider group; the centre gets the rest, up to 960dp.
+                    readonly property real transportWidth: twoRow ? 164 : Math.min(960,Math.max(212,width-2*sideNeed-32))
+                    readonly property real sideWidth: (width-transportWidth-32)/2
+                    readonly property real rightWidth: twoRow ? (showQueue ? 104 : 48) : sideWidth
+                    readonly property real leftWidth: twoRow ? width-transportWidth-rightWidth-32 : sideWidth
+                    Item {
+                        id: playerLeft; objectName: "playerLeft"; x: 0; y: playerLayout.twoRow ? 8 : (parent.height-64)/2
+                        width: playerLayout.leftWidth; height: 64
                         RowLayout {
-                            Layout.alignment: Qt.AlignHCenter; spacing: 6
+                            anchors.fill: parent; spacing: 16
+                            AbstractButton { id: nowButton; objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
+                                contentItem: Artwork { id: nowArtwork; objectName: "nowArtwork"; url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; radius: Theme.shapeMedium; pixels: 150; fit:app.currentArtworkFit; opacity: window.coverFlying?0:1 }
+                                background: Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; radius: Theme.shapeLarge; border.width: parent.activeFocus?2:0; border.color: Theme.focusRing }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true; Layout.minimumWidth: 100; Layout.maximumWidth: 220
+                                spacing: 6; opacity: nowPresentation.fade*window.coverDetailsOpacity; transform: Translate { x: nowPresentation.offset }
+                                AbstractButton { objectName: "nowTitle"; Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.title || "Nothing playing"; font.pixelSize: Theme.titleMedium; font.weight: Font.DemiBold } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
+                                AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open(window.relatedItem(app.current,"artist")); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.artist || ""; color: Theme.muted; font.pixelSize: Theme.bodyMedium } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
+                            }
+                            MButton { symbol: "heart"; tip: app.liked?"Unlike":"Like"; toggle: true; selected: app.liked; enabled: app.currentIndex>=0; visible: playerLayout.showLike; onClicked: app.toggleLike(app.current) }
+                        }
+                    }
+                    Item {
+                        id: playerTransport
+                        objectName: "playerTransport"
+                        x: playerLayout.twoRow ? playerLayout.leftWidth+16 : (playerLayout.width-width)/2
+                        y: playerLayout.twoRow ? 8 : 6
+                        width: playerLayout.transportWidth; height: 72
+                        RowLayout {
+                            anchors.centerIn: parent; spacing: 6
                             MButton { objectName: "playerShuffle"; symbol: "shuffle"; tip: "Shuffle"; toggle: true; selected: app.shuffle; onClicked: app.shuffle=!app.shuffle; visible: window.width>=980 }
                             MButton { symbol: "previous"; tip: "Previous · Ctrl+←"; enabled: app.queue.count>0; onClicked: app.previous() }
                             MButton { objectName: "playButton"; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"; filled: true; size: "medium"; implicitWidth: 72; enabled: app.queue.count>0; onClicked: app.toggle(); busy: app.buffering }
                             MButton { symbol: "next"; tip: "Next · Ctrl+→"; enabled: app.queue.count>0; onClicked: app.next() }
                             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; toggle: true; selected: app.repeat>0; onClicked: app.repeat=(app.repeat+1)%3; visible: window.width>=980 }
                         }
+                    }
+                    // Below 604dp of inner width, seeking gets a full row.
+                    // The three-slot bar retains at least 120dp of track.
+                    RowLayout {
+                        id: playerSeekRow
+                        objectName: "playerSeekRow"
+                        x: playerLayout.twoRow ? 0 : playerTransport.x
+                        y: playerLayout.twoRow ? 96 : 78
+                        width: playerLayout.twoRow ? playerLayout.width : playerTransport.width
+                        height: 28; spacing: 12
+                        SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34 }
+                        SeekBar { Layout.fillWidth: true; Layout.minimumWidth: 120; objectName: "seekBar" }
+                        SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
+                    }
+                    Item {
+                        id: playerRight
+                        objectName: "playerRight"
+                        x: playerLayout.width-width
+                        y: playerLayout.twoRow ? 20 : (parent.height-48)/2
+                        width: playerLayout.rightWidth; height: 48
                         RowLayout {
-                            Layout.fillWidth: true; spacing: 12
-                            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34 }
-                            SeekBar { Layout.fillWidth: true; objectName: "seekBar" }
-                            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelSmall; labelRole: true; Layout.preferredWidth: 34; horizontalAlignment: Text.AlignRight }
+                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 16
+                            MButton { symbol: "lyrics"; tip: "Lyrics · Ctrl+Y"; toggle: true; selected: window.side==="lyrics"; enabled: app.currentIndex>=0; visible: playerLayout.showLyrics; onClicked: window.activateSide("lyrics") }
+                            MButton {
+                                objectName: "queueButton"; symbol: "queue"; tip: "Queue · Ctrl+L"; visible: playerLayout.showQueue
+                                toggle: true; selected: window.side==="queue"; onClicked: window.activateSide("queue")
+                                MBadge {
+                                    objectName: "queueBadge"
+                                    present: window.side!=="queue"
+                                    count: app.queue.count-app.currentIndex-1
+                                    subject: "songs waiting"
+                                    x: parent.width/2+12-inset; y: (parent.height-24)/2-height+lift
+                                }
+                            }
+                            // AppBarDsl.kt:312-346 gives overflow a slot before
+                            // measuring actions. Sung folds these in the order:
+                            // lyrics, queue, like, shuffle, repeat, output,
+                            // then volume.
+                            MAppBarRow {
+                                id: playerOverflow; objectName: "playerOverflow"
+                                Layout.preferredWidth: playerLayout.twoRow ? itemWidth : Math.min(implicitWidth, itemWidth*2+spacing)
+                                Layout.preferredHeight: 48
+                                visible: live.length > 0
+                                actions: [
+                                    {key:"lyrics", symbol:"lyrics", label:"Lyrics", toggle:true, checked:window.side==="lyrics",
+                                     enabled:app.currentIndex>=0, visible:!playerLayout.showLyrics, trigger:function(){window.activateSide("lyrics")}},
+                                    {key:"queue", symbol:"queue", label:"Queue", toggle:true, checked:window.side==="queue",
+                                     visible:!playerLayout.showQueue, trigger:function(){window.activateSide("queue")}},
+                                    {key:"like", symbol:"heart", label:app.liked?"Unlike":"Like", toggle:true, checked:app.liked,
+                                     enabled:app.currentIndex>=0, visible:!playerLayout.showLike, trigger:function(){app.toggleLike(app.current)}},
+                                    {key:"shuffle", symbol:"shuffle", label:"Shuffle", toggle:true, checked:app.shuffle,
+                                     visible:window.width<980, trigger:function(){app.shuffle=!app.shuffle}},
+                                    {key:"repeat", symbol:app.repeat===2?"repeat_one":"repeat",
+                                     label:app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song",
+                                     toggle:true, checked:app.repeat>0, visible:window.width<980,
+                                     trigger:function(){app.repeat=(app.repeat+1)%3}},
+                                    {key:"output", label:"Audio output", visible:!playerLayout.showOutput,
+                                     trigger:function(){outputPicker.showAt(playerOverflow)}},
+                                    {key:"volume", symbol:app.volume>0?"volume":"mute", label:"Volume",
+                                     visible:!playerLayout.showVolume, trigger:function(){volumeControl.openFrom(playerOverflow)}}
+                                ]
+                            }
+                            MButton {id:outputButton;objectName:"playerOutputButton";symbol:"chevron";iconWidth:"narrow";tip:"Audio output · "+app.audioDeviceName;selected:outputPicker.visible;visible:playerLayout.showOutput;onClicked:outputPicker.showAt(outputButton)}
+                            VolumeControl {id:volumeControl;showSlider:window.width>=1160;visible:playerLayout.showVolume}
                         }
                     }
-
-                    // A compact window cannot hold the transport, the title and
-                    // every side control in one row: at 480 the row ran past its
-                    // own edge and squeezed the title to nothing. There the side
-                    // controls join the overflow menu below instead.
-                    MButton { symbol: "lyrics"; tip: "Lyrics · Ctrl+Y"; toggle: true; selected: window.side==="lyrics"; enabled: app.currentIndex>=0; visible: !window.compactWindow; onClicked: window.activateSide("lyrics") }
-                    MButton {
-                        objectName: "queueButton"; symbol: "queue"; tip: "Queue · Ctrl+L"; visible: !window.compactWindow
-                        toggle: true; selected: window.side==="queue"; onClicked: window.activateSide("queue")
-                        MBadge {
-                            objectName: "queueBadge"
-                            // Redundant once the queue itself is on screen.
-                            present: window.side!=="queue"
-                            count: app.queue.count-app.currentIndex-1
-                            subject: "songs waiting"
-                            x: parent.width/2+12-inset; y: (parent.height-24)/2-height+lift
-                        }
-                    }
-                    // Material moves an action that will not fit into an
-                    // overflow menu rather than dropping it, so the controls the
-                    // bar has no room for are still one click away.
-                    MAppBarRow {
-                        id: playerOverflow
-                        objectName: "playerOverflow"
-                        // The bar keeps room for two of these before it folds
-                        // the rest into the menu; a compact window keeps room
-                        // for the overflow button alone.
-                        Layout.preferredWidth: window.compactWindow ? itemWidth : Math.min(implicitWidth, itemWidth*2 + spacing)
-                        Layout.preferredHeight: 48
-                        visible: live.length > 0
-                        actions: [
-                            {key:"lyrics", symbol:"lyrics", label:"Lyrics", toggle:true, checked:window.side==="lyrics",
-                             enabled:app.currentIndex>=0, visible:window.compactWindow, trigger:function(){window.activateSide("lyrics")}},
-                            {key:"queue", symbol:"queue", label:"Queue", toggle:true, checked:window.side==="queue",
-                             visible:window.compactWindow, trigger:function(){window.activateSide("queue")}},
-                            {key:"like", symbol:"heart", label:app.liked?"Unlike":"Like", toggle:true, checked:app.liked,
-                             enabled:app.currentIndex>=0, visible:window.width<1050, trigger:function(){app.toggleLike(app.current)}},
-                            {key:"shuffle", symbol:"shuffle", label:"Shuffle", toggle:true, checked:app.shuffle,
-                             visible:window.width<980, trigger:function(){app.shuffle=!app.shuffle}},
-                            {key:"repeat", symbol:app.repeat===2?"repeat_one":"repeat",
-                             label:app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song",
-                             toggle:true, checked:app.repeat>0, visible:window.width<980,
-                             trigger:function(){app.repeat=(app.repeat+1)%3}},
-                            {key:"output", label:"Audio output", visible:window.compactWindow,
-                             trigger:function(){outputPicker.showAt(playerOverflow)}},
-                            {key:"volume", symbol:app.volume>0?"volume":"mute", label:"Volume",
-                             visible:window.compactWindow, trigger:function(){volumeControl.openFrom(playerOverflow)}}
-                        ]
-                    }
-                    MButton {id:outputButton;objectName:"playerOutputButton";symbol:"chevron";iconWidth:"narrow";tip:"Audio output · "+app.audioDeviceName;selected:outputPicker.visible;visible:!window.compactWindow;onClicked:outputPicker.showAt(outputButton)}
-                    VolumeControl {id:volumeControl;showSlider:window.width>=1160;visible:!window.compactWindow}
                 }
             }
             // Material puts the bar against the bottom edge, which is where

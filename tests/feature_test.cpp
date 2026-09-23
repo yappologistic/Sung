@@ -3354,6 +3354,53 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
     }
     crowded->setVisible(false);
   }
+  // SmallIconButtonTokens uses 40dp buttons. The bar keeps a 100dp title;
+  // under 668px the 120dp seek track takes a second row.
+  for (const int width : {1440, 1920, 2560, 1024, 900, 840, 668, 667, 600, 480}) {
+    w->resize(width, width == 480 ? 620 : 800);
+    QTest::qWait(450);
+    auto bar = anyItem(w->contentItem(), "playbackBar");
+    auto seek = shownItem(w->contentItem(), "seekBar");
+    auto title = anyItem(w->contentItem(), "nowTitle");
+    auto transport = anyItem(w->contentItem(), "playerTransport");
+    auto layout = anyItem(w->contentItem(), "playerLayout");
+    auto seekRow = anyItem(w->contentItem(), "playerSeekRow");
+    const bool twoRow = layout && layout->property("twoRow").toBool();
+    c.check(layout && twoRow == (width < 668),
+            QString("the %1px bar selects the layout before its title or seek can shrink").arg(width));
+    c.check(transport, QString("the %1px player has a centred transport").arg(width));
+    // Every visible child must stay within the rounded bar's own rectangle.
+    double overrun = 0;
+    if (bar) {
+      for (auto item : bar->findChildren<QQuickItem *>()) {
+        if (!item->isVisible() || item->width() <= 0 || item->height() <= 0 ||
+            (!item->objectName().startsWith("player") &&
+             !item->property("activeFocusOnTab").toBool())) continue;
+        const auto bounds = item->mapRectToItem(bar, item->boundingRect());
+        overrun = qMax(overrun, qMax(-bounds.left(), bounds.right()-bar->width()));
+      }
+    }
+    c.check(bar && overrun <= 0.5,
+            QString("the %1px player keeps controls within the bar (%2px over)").arg(width).arg(overrun, 0, 'f', 1));
+    c.check(seek && seek->width() >= 120,
+            QString("the %1px player keeps at least 120px of seek track").arg(width));
+    c.check(title && title->isVisible() && title->width() >= 100,
+            QString("the %1px title remains visible with at least 100px").arg(width));
+    if (!twoRow && bar && transport)
+      c.check(qAbs(transport->mapToItem(bar, QPointF(transport->width()/2, 0)).x()-bar->width()/2) <= 2,
+              QString("the %1px transport is centred within 2px").arg(width));
+    if (twoRow && transport && seekRow)
+      c.check(seekRow->y() >= transport->y()+transport->height(),
+              QString("the %1px seek track has its own row").arg(width));
+    if (width == 1440)
+      c.check(seek && seek->width() >= 700,
+              QString("the 1440px seek track reaches 700px (%1px)").arg(seek ? seek->width() : 0, 0, 'f', 0));
+    if (width == 1920 || width == 2560)
+      c.check(seek && seek->width() >= 860,
+              QString("the %1px seek track reaches the 960px transport cap").arg(width));
+  }
+  w->resize(1400, 900);
+  QTest::qWait(500);
   // The player bar's own overflow, for the controls a narrow bar cannot hold.
   auto playerOverflow = anyItem(w->contentItem(), "playerOverflow");
   c.check(playerOverflow && !playerOverflow->isVisible(),
@@ -3362,12 +3409,11 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(800);
   c.check(playerOverflow && playerOverflow->isVisible(),
           "a narrow one keeps the controls it cannot show in an overflow instead");
-  c.check(playerOverflow && playerOverflow->property("live").toList().size() == 3,
-          "holding shuffle, repeat and like");
+  c.check(playerOverflow && playerOverflow->property("live").toList().size() == 5,
+          "holding like, shuffle, repeat, output and volume");
   c.shot("13-player-overflow");
-  // A compact window moves the side controls into the same menu. At 480 the
-  // row used to run past the bar's edge, cutting the last button in half and
-  // squeezing the title to nothing.
+  // A compact window moves the side controls into the same menu and gives
+  // seeking a full-width second row.
   w->resize(480, 620);
   QTest::qWait(900);
   if (auto bar = anyItem(w->contentItem(), "playbackBar"); bar && !bar->childItems().isEmpty()) {
@@ -3384,7 +3430,7 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
   c.check(folded.contains("lyrics") && folded.contains("queue") && folded.contains("output") && folded.contains("volume"),
           QString("with lyrics, queue, output and volume in its menu (%1)").arg(folded.join(", ")));
   if (auto title = shownItem(w->contentItem(), "nowTitle"))
-    c.check(title->width() >= 60, QString("and the song's title keeps its room (%1px)").arg(title->width(), 0, 'f', 0));
+    c.check(title->width() >= 100, QString("and the song's title keeps 100px (%1px)").arg(title->width(), 0, 'f', 0));
   else
     c.check(false, "and the song's title stays on the bar");
   c.shot("13-compact-player");
