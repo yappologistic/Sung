@@ -7,7 +7,9 @@ MDialog {
     // The body is built the first time the dialog opens. MDialog sets
     // `built` on aboutToShow, which runs before the enter transition, so
     // the first frame of that transition already has the content in it.
-    contentItem: Loader {
+    // Popup places its default contentItem below the header and inside padding.
+    // Anchoring a replacement contentItem to the Popup bypasses that layout.
+    Loader {
         anchors.fill: parent
         active: dialog.built
         sourceComponent: Component {

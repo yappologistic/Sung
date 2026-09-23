@@ -8,18 +8,27 @@ MDialog {
     signal chooseFile()
     signal inspectRequested(string url)
     title: "Artwork"; modal: true; standardButtons: Dialog.Close
-    width: Math.min(440,parent.width-48); height: Math.min(640,parent.height-48)
+    // AlertDialog.kt:147,409-412 measures content within a 280-560dp width;
+    // this dialog prefers 440dp and the window limits its final size.
+    // ScrollView takes over when the content is taller than the window.
+    width: fitWidth(440); height: fitHeight(implicitHeight)
+    contentHeight: bodyLoader.implicitHeight
     // The body is built the first time the dialog opens. MDialog sets
     // `built` on aboutToShow, which runs before the enter transition, so
     // the first frame of that transition already has the content in it.
-    contentItem: Loader {
+    // Popup's contentItem is positioned below its header and inside padding.
+    // Keep this Loader inside the default contentItem so anchors cannot replace that layout.
+    Loader {
+        id: bodyLoader
         anchors.fill: parent
         active: dialog.built
         sourceComponent: Component {
             ScrollView {
+                implicitHeight: bodyColumn.implicitHeight
                 contentWidth: availableWidth; clip: true
                 ScrollBar.vertical: MScrollBar {}
                 ColumnLayout {
+                    id: bodyColumn
                     width: parent.width; spacing: 8
                     Artwork { objectName: "coverPreview"; Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: 128; Layout.preferredHeight: 128; url: app.current.art || ""; motionUrl: dialog.visible?app.currentMotionArt:""; pixels: 384; radius: Theme.shapeExtraLarge; fit:app.currentArtworkFit
                         AbstractButton {objectName:"inspectArtworkButton";anchors.fill:parent;enabled:!!app.current.art;focusPolicy:Qt.StrongFocus;hoverEnabled:true;Accessible.name:"View artwork";onClicked:{dialog.close();dialog.inspectRequested(app.current.art);}

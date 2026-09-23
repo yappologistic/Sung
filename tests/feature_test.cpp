@@ -2708,6 +2708,113 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
           "the listening figures are drawn in them");
   c.shot("07-fixed-accents");
   c.closeDialog(stats);
+  c.check(c.until([&] { return !stats || !stats->property("visible").toBool(); }),
+          "listening statistics closes before another dialog opens");
+
+  // Qt Popup lays out its default contentItem below the header and inside
+  // padding. A replacement Loader anchored to the Popup starts at its edge.
+  auto checkBody = [&](const char *name, const char *buttonName) {
+    auto dialog = w->findChild<QObject *>(name);
+    auto header = dialog ? dialog->property("header").value<QQuickItem *>() : nullptr;
+    auto body = dialog ? dialog->property("contentItem").value<QQuickItem *>() : nullptr;
+    QQuickItem *popupItem = nullptr;
+    for (auto item = body ? body->parentItem() : nullptr; item; item = item->parentItem())
+      if (QString::fromLatin1(item->metaObject()->className()).contains("PopupItem")) {
+        popupItem = item;
+        break;
+      }
+    c.check(dialog && dialog->property("visible").toBool() && header && body && popupItem,
+            QString("%1 is open with a real header, body and PopupItem").arg(name));
+    if (!dialog || !dialog->property("visible").toBool() || !header || !body || !popupItem) return;
+    const auto bodyRect = body->mapRectToScene(body->boundingRect());
+    const auto headerRect = header->mapRectToScene(header->boundingRect());
+    const auto popupRect = popupItem->mapRectToScene(popupItem->boundingRect());
+    const double left = popupRect.left() + dialog->property("leftPadding").toDouble();
+    const double right = popupRect.right() - dialog->property("rightPadding").toDouble();
+    const double bottom = popupRect.bottom() - dialog->property("bottomPadding").toDouble();
+    c.check(bodyRect.isValid() && headerRect.isValid() && popupRect.isValid(),
+            QString("%1 scene rectangles have size: body %2x%3, header %4x%5, popup %6x%7")
+                .arg(name).arg(bodyRect.width(), 0, 'f', 1).arg(bodyRect.height(), 0, 'f', 1)
+                .arg(headerRect.width(), 0, 'f', 1).arg(headerRect.height(), 0, 'f', 1)
+                .arg(popupRect.width(), 0, 'f', 1).arg(popupRect.height(), 0, 'f', 1));
+    c.check(bodyRect.isValid() && headerRect.isValid() && bodyRect.top() >= headerRect.bottom() - 1,
+            QString("%1 body scene top %2 follows header bottom %3")
+                .arg(name).arg(bodyRect.top(), 0, 'f', 1).arg(headerRect.bottom(), 0, 'f', 1));
+    c.check(bodyRect.isValid() && bodyRect.left() >= left - 1 &&
+                bodyRect.right() <= right + 1 && bodyRect.bottom() <= bottom + 1,
+            QString("%1 body scene [%2,%3,%4] fits popup inset [%5,%6,%7]")
+                .arg(name).arg(bodyRect.left(), 0, 'f', 1).arg(bodyRect.right(), 0, 'f', 1)
+                .arg(bodyRect.bottom(), 0, 'f', 1).arg(left, 0, 'f', 1)
+                .arg(right, 0, 'f', 1).arg(bottom, 0, 'f', 1));
+    if (buttonName) {
+      auto button = shownItem(w->contentItem(), buttonName);
+      const auto buttonRect = button ? button->mapRectToScene(button->boundingRect()) : QRectF{};
+      c.check(button && buttonRect.left() >= left - 1 && buttonRect.right() <= right + 1,
+              QString("%1 chooser scene [%2,%3] fits popup inset [%4,%5]")
+                  .arg(name).arg(buttonRect.left(), 0, 'f', 1).arg(buttonRect.right(), 0, 'f', 1)
+                  .arg(left, 0, 'f', 1).arg(right, 0, 'f', 1));
+    }
+  };
+  // Main.qml offers View layout through Quick actions. Open its command with
+  // the shortcut and click the row, as a keyboard user would.
+  QTest::keyClick(w, Qt::Key_P, Qt::ControlModifier | Qt::ShiftModifier);
+  c.check(c.until([&] { return shownItem(w->contentItem(), "command_view-layout") != nullptr; }),
+          "Quick actions offers View layout");
+  c.click("command_view-layout");
+  auto viewLayout = w->findChild<QObject *>("viewLayoutDialog");
+  c.check(c.until([&] { return viewLayout && viewLayout->property("visible").toBool(); }),
+          "View layout opens from its command");
+  checkBody("viewLayoutDialog", nullptr);
+  c.shot("07a-view-layout-dialog");
+  c.closeDialog(viewLayout);
+  c.check(c.until([&] { return !viewLayout || !viewLayout->property("visible").toBool(); }),
+          "View layout closes before the next route");
+  auto commandPalette = w->findChild<QObject *>("commandPalette");
+  c.check(c.until([&] { return !commandPalette || !commandPalette->property("visible").toBool(); }),
+          "Quick actions closes after choosing View layout");
+  c.click("trackRow_0");
+  c.check(c.until([&] { return b->currentIndex() >= 0; }), "a track is playing for its artwork action");
+  // Settings exposes Current artwork only for a playing track. Search for the
+  // row and click it, instead of invoking the dialog behind the interface.
+  c.click("settingsButton");
+  auto settings = w->findChild<QObject *>("settingsDialog");
+  c.check(c.until([&] { return settings && settings->property("visible").toBool(); }),
+          "Settings opens for the playing track");
+  c.click("settingsSearch");
+  for (const QChar letter : QStringLiteral("Current artwork"))
+    QTest::keyClick(w, letter.toLatin1());
+  std::function<QQuickItem *(QQuickItem *)> findArtworkRow = [&](QQuickItem *root) -> QQuickItem * {
+    if (!root || !root->isVisible()) return nullptr;
+    if (root->inherits("QQuickAbstractButton") &&
+        root->property("text").toString() == QStringLiteral("Current artwork")) return root;
+    for (auto child : root->childItems())
+      if (auto found = findArtworkRow(child)) return found;
+    return nullptr;
+  };
+  QQuickItem *artworkRow = nullptr;
+  c.check(c.until([&] { artworkRow = findArtworkRow(w->contentItem()); return artworkRow != nullptr; }),
+          "Settings search finds Current artwork");
+  if (artworkRow) {
+    const auto point = artworkRow->mapToScene(artworkRow->boundingRect().center()).toPoint();
+    QTest::mouseMove(w, point);
+    QTest::qWait(60);
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    QTest::qWait(320);
+  }
+  auto artwork = w->findChild<QObject *>("artworkControls");
+  c.check(c.until([&] { return artwork && artwork->property("visible").toBool(); }),
+          "Artwork opens from its Settings row");
+  c.check(c.until([&] { return !settings || !settings->property("visible").toBool(); }),
+          "Settings closes behind Artwork");
+  checkBody("artworkControls", "chooseArtworkButton");
+  if (artwork)
+    c.check(qAbs(artwork->property("height").toDouble() - artwork->property("implicitHeight").toDouble()) < 1,
+            "the artwork dialog hugs its content at a tall window");
+  c.shot("07b-artwork-dialog");
+  c.closeDialog(artwork);
+  c.check(c.until([&] { return !artwork || !artwork->property("visible").toBool(); }),
+          "Artwork closes before compact dialogs open");
+
 
   // --- The search view ---
   b->rememberSearch("aurora");
@@ -2801,6 +2908,15 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(500);
   w->setProperty("side", "queue");
   QTest::qWait(700);
+  QStringList modalBlockers;
+  c.check(c.until([&] {
+    modalBlockers.clear();
+    for (auto popup : w->findChildren<QObject *>())
+      if (popup->inherits("QQuickPopup") && popup->property("visible").toBool() &&
+          popup->property("modal").toBool())
+        modalBlockers.append(popup->objectName());
+    return modalBlockers.isEmpty();
+  }, 3000), QString("no modal dialog blocks the pane grip (%1)").arg(modalBlockers.join(", ")));
   auto panel = shownItem(w->contentItem(), "sidePanel");
   auto row = panel ? panel->parentItem() : nullptr;
   c.check(panel && row, "the supporting pane opens beside the page");
