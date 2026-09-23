@@ -29,8 +29,10 @@ ItemDelegate {
                                     : active ? Theme.primary : Theme.text
     readonly property color supportInk: carried ? Theme.tertiaryContainerText
                                       : selected ? Theme.secondaryContainerText : Theme.muted
+    // ListTokens.ItemTrailingIconColor: a row's trailing action is in the
+    // variant ink, like its supporting text, not in the title's.
     readonly property color actionInk: carried ? Theme.tertiaryContainerText
-                                     : selected ? Theme.secondaryContainerText : Theme.text
+                                     : selected ? Theme.secondaryContainerText : Theme.muted
     property point pressPoint
     property int pressModifiers: 0
     property bool queueMode: false
@@ -193,7 +195,9 @@ ItemDelegate {
             MatchText { visible: row.track.kind!=="smart"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium }
         }
         PlayingIndicator { ink: row.titleInk; visible: row.active }
-        SungText { font.features: {"tnum": 1}; visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: Theme.bodySmall; color: row.supportInk; Layout.rightMargin: 2 }
+        // A row's trailing supporting text is label small
+        // (ListTokens.ItemTrailingSupportingTextFont), not body small.
+        SungText { font.features: {"tnum": 1}; visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: Theme.labelSmall; labelRole: true; color: row.supportInk; Layout.rightMargin: 2 }
         MButton { visible: row.track.kind!=="smart"; symbol: "more"; tip: "Track actions"; Accessible.name: "Actions for "+(row.track.title||"track"); ink: row.actionInk; onClicked: row.menuRequested(row.track,row.rowIndex,this) }
     }
 }
