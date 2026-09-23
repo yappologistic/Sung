@@ -320,6 +320,13 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
     auto accessible = heading ? QAccessible::queryAccessibleInterface(heading) : nullptr;
     c.check(accessible && accessible->role() == QAccessible::Heading,
             "queue title is an accessibility heading");
+    auto background = sheet->property("background").value<QQuickItem *>();
+    c.check(sheet->property("width").toReal() == 360 && background &&
+                background->property("topLeftRadius").toReal() == 16 &&
+                background->property("bottomLeftRadius").toReal() == 16 &&
+                background->property("topRightRadius").toReal() == 0 &&
+                background->property("bottomRightRadius").toReal() == 0,
+            "modal drawer uses the 360dp cap and exposed 16dp corners");
   }
   QTest::keyClick(w, Qt::Key_Escape);
   c.check(c.until([&] { return sheet && !sheet->property("visible").toBool(); }, 3000) &&
@@ -355,6 +362,24 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   c.check(reachedClippedAction, "Tab reaches the last queue row action");
   c.check(actionInView, "Tab scrolls the focused queue action fully into view");
   c.shot("03-queue-focus-480");
+  for (const auto &theme : {"dark", "light"}) {
+    b->setTheme(theme);
+    for (const int width : {480, 600, 840, 1024, 1440, 2560}) {
+      w->resize(width, 620);
+      QTest::qWait(150);
+      auto tabs = shownItem(w->contentItem(), "queueTabs");
+      auto footer = shownItem(w->contentItem(), "queueWaitingCount");
+      auto background = sheet ? sheet->property("background").value<QQuickItem *>() : nullptr;
+      const auto drawerRect = background ? background->mapRectToScene(background->boundingRect()) : QRectF();
+      const auto tabsRect = tabs ? tabs->mapRectToScene(tabs->boundingRect()) : QRectF();
+      const auto footerRect = footer ? footer->mapRectToScene(footer->boundingRect()) : QRectF();
+      c.check(background && tabs && footer && tabsRect.left() >= drawerRect.left() &&
+                  tabsRect.right() <= drawerRect.right() && footerRect.bottom() <= drawerRect.bottom(),
+              QString("drawer controls fit at %1 %2").arg(width).arg(theme));
+      c.shot(QString("03-queue-%1-%2").arg(width).arg(theme));
+    }
+  }
+  b->setTheme("dark");
   QTest::keyClick(w, Qt::Key_Escape);
   c.until([&] { return sheet && !sheet->property("visible").toBool(); }, 3000);
   w->setMinimumSize({1180, 800});

@@ -530,9 +530,18 @@ ApplicationWindow {
     }
     Drawer {
         id:immersiveQueue;objectName:"immersiveQueueSheet";edge:Qt.RightEdge
-        width:Math.min(420,window.width-32);height:window.height;modal:true;dim:true;focus:true;interactive:false
+        // NavigationDrawer.kt:853-866 caps the modal container at the token.
+        // Keep the existing narrow-window inset below that cap.
+        width:Math.min(360,window.width-32);height:window.height;modal:true;dim:true;focus:true;interactive:false
         padding:24;leftPadding:24;rightPadding:24;topPadding:24;bottomPadding:24;closePolicy:Popup.CloseOnEscape|Popup.CloseOnPressOutside
-        background:Rectangle {color:Theme.container;radius:Theme.shapeExtraLarge}
+        background:Rectangle {
+            // NavigationDrawerTokens.kt:63-68,115-116 uses CornerLargeEnd
+            // and surfaceContainerLow. This right-edge drawer mirrors the
+            // exposed corners to the left; the edge corners stay square.
+            color:Theme.surfaceLow
+            topLeftRadius:Theme.shapeLarge;bottomLeftRadius:Theme.shapeLarge
+            topRightRadius:0;bottomRightRadius:0
+        }
         Overlay.modal:Rectangle {color:Theme.scrimColor()}
         // PaneMotion.kt:155-177 uses a spatial spring for entering bounds.
         enter:Transition {NumberAnimation {property:"position";to:1;duration:app.motion?Theme.springFastSpatialMs:0;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}
