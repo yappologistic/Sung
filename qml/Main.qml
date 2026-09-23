@@ -18,7 +18,12 @@ ApplicationWindow {
     RoundedArt {
         id: accentSample; objectName: "accentSample"; visible: false; pixels: 48
         source: app.artworkAccent ? (app.current.art || "") : ""
-        onReadyChanged: {const color=seedColor();Theme.artworkSeed=ready ? color : "transparent";}
+        // Keep the old scheme during the decoder gap. RoundedArt emits ready
+        // again when the new pixels arrive, so the seed changes with the cover.
+        onReadyChanged: {
+            if (!source.toString() || ready)
+                Theme.artworkSeed=source.toString() ? seedColor() : "transparent";
+        }
     }
     property string destination: "home"
     property string filter: "songs"

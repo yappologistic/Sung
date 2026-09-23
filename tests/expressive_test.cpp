@@ -1464,6 +1464,29 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
   c.check(windowBackdrop && !windowBackdrop->isVisible() &&
               qAbs(w->property("washAlpha").toReal() - 1) < 0.001,
           "the wash is released after both fades finish");
+  // The invisible sample follows the same real decoder as the visible art.
+  // Reduced motion makes a wrongly emitted transparent seed observable in
+  // the first event frame, before the worker can finish the next image.
+  b->setMotion(false);
+  b->setArtworkAccent(true);
+  auto sample = itemNamed(w->contentItem(), "accentSample");
+  c.check(sample && c.until([&] { return sample->property("ready").toBool(); }),
+          "the playing cover has a valid colour seed");
+  const QColor oldSeed = c.evaluate("Theme.artworkSeed").value<QColor>();
+  c.check(oldSeed.alpha() > 0, "the old colour seed is visible before decode");
+  QImage nextCover(1024, 1024, QImage::Format_RGB32);
+  nextCover.fill(QColor("#188450"));
+  const auto nextPath = c.directory + "/next-cover.png";
+  c.check(nextCover.save(nextPath), "write the next decoded cover");
+  if (sample) {
+    sample->setProperty("source", QUrl::fromLocalFile(nextPath));
+    c.check(!sample->property("ready").toBool() &&
+                c.evaluate("Theme.artworkSeed").value<QColor>() == oldSeed,
+            "the decoder gap retains the previous valid seed");
+    c.check(c.until([&] { return sample->property("ready").toBool(); }) &&
+                c.evaluate("Theme.artworkSeed").value<QColor>() != oldSeed,
+            "the new decoded cover replaces the seed once");
+  }
   w->setProperty("side", "");
   b->stop();
   b->clearQueue();
