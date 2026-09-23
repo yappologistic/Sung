@@ -651,20 +651,23 @@ ApplicationWindow {
             }
             RowLayout {
                 id: contentRow
-                // Material's list and detail layout: the list a detail was
-                // opened from stays beside it once there is room for both. The
-                // supporting pane can still take the far side, which is the
-                // arrangement Material allows at this width.
-                readonly property bool listDetail: app.listPaneId.length>0 && window.atLeastLarge && !window.sheetMode
+                // PaneScaffoldDirective.kt:48-100 gives expanded windows two
+                // partitions and large windows three. ListDetailPaneScaffold.kt:
+                // 224-253 maps list to Secondary and detail to Primary;
+                // ThreePaneScaffoldValue.kt:62-70 prioritizes the focused
+                // extra pane, so the list folds when it takes the second slot.
+                readonly property bool listDetail: app.listPaneId.length>0 && window.atLeastExpanded && (!window.side || window.atLeastLarge)
                 // Material's supporting pane layout splits the row two thirds
                 // to one; the third is where the panel starts before anyone
                 // drags it somewhere else.
                 readonly property real supportingWidth: Math.max(320,Math.min(480,Math.round(width/3)))
-                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 12
+                Layout.fillWidth: true; Layout.fillHeight: true; spacing: 0
                 Rectangle {
                     id: listPane
                     objectName: "listPane"
-                    Layout.preferredWidth: contentRow.listDetail ? 320 : 0
+                    // PaneScaffoldDirective.kt:346-347 prefers 360dp, 412dp
+                    // from the extra-large 1600dp window class.
+                    Layout.preferredWidth: contentRow.listDetail ? (window.width>=1600?412:360) : 0
                     Layout.fillHeight: true
                     visible: Layout.preferredWidth > 1
                     clip: true
@@ -701,8 +704,11 @@ ApplicationWindow {
                         }
                     }
                 }
+                // PaneScaffoldDirective.kt:58-70 sets 24dp between partitions.
+                Item { Layout.preferredWidth: contentRow.listDetail ? 24 : 0; Layout.fillHeight: true; visible: contentRow.listDetail }
                 Rectangle {
                     id: content
+                    objectName: "detailPane"
                     Accessible.role: Accessible.Pane
                     Accessible.name: window.title || "Content"
                     readonly property real headerCollapse: tracks.visible ? Math.max(0,Math.min(1,(tracks.contentY-tracks.originY)/160)) : 0
@@ -1164,6 +1170,9 @@ ApplicationWindow {
                 }
                 Item {
                     id: panelGrip; objectName: "panelResizeHandle"
+                    // ThreePaneScaffold.kt:545-562 centres the drag handle in
+                    // the spacer. PaneExpansionDraggableModifier.kt:45-68
+                    // makes that handle a horizontal drag target.
                     visible: !!window.side && !window.sheetMode
                     Layout.preferredWidth: 24; Layout.fillHeight: true
                     activeFocusOnTab: true; Accessible.role: Accessible.Grip; Accessible.name: "Resize side panel"

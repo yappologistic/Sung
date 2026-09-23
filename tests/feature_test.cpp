@@ -6408,14 +6408,48 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
         c.shot("06-list-detail-swapped");
       }
     }
-    // Material only splits the panes where there is room for both.
-    w->resize(1000, 860);
+    // PaneScaffoldDirective.kt:58-70 gives expanded windows two partitions
+    // with a 24dp spacer; the extra pane folds the list at this width.
+    w->resize(1024, 860);
     QTest::qWait(800);
-    c.check(!pane->isVisible(), "a window without the room keeps the detail alone");
-    c.shot("07-detail-alone");
-    w->resize(1400, 900);
+    auto detail = anyItem(w->contentItem(), "detailPane");
+    c.check(pane->isVisible() && detail &&
+                qAbs(detail->mapToScene(QPointF(0, 0)).x() -
+                     pane->mapToScene(QPointF(pane->width(), 0)).x() - 24) < 1,
+            "at 1024 the list and detail are visible with a 24dp spacer");
+    c.shot("07-expanded-list-detail");
+    w->resize(840, 860);
+    QTest::qWait(650);
+    c.check(pane->isVisible() && detail && detail->isVisible(),
+            "the list and detail begin sharing partitions at 840dp");
+    w->resize(1024, 860);
+    QTest::qWait(500);
+    w->setProperty("side", "queue");
     QTest::qWait(800);
-    c.check(pane->isVisible(), "and the pane returns with the width");
+    c.check(!pane->isVisible() && detail && detail->isVisible(),
+            "at 1024 the queue takes the second partition and the list folds");
+    c.shot("07-queue-two-pane");
+    w->setProperty("side", "");
+    w->resize(1440, 900);
+    QTest::qWait(800);
+    c.check(pane->isVisible() && qAbs(pane->width() - 360) < 1,
+            "at 1440 the list returns at its 360dp preferred width");
+    w->setProperty("side", "queue");
+    QTest::qWait(700);
+    auto side = anyItem(w->contentItem(), "sidePanel");
+    auto grip = anyItem(w->contentItem(), "panelResizeHandle");
+    const double detailRight = detail->mapToScene(QPointF(detail->width(), 0)).x();
+    c.check(pane->isVisible() && side && grip && grip->isVisible() &&
+                qAbs(side->mapToScene(QPointF(0, 0)).x() - detailRight - 24) < 1 &&
+                qAbs(grip->mapToScene(QPointF(0, 0)).x() - detailRight) < 1,
+            "at 1440 the grip occupies the 24dp spacer before the supporting pane");
+    w->setProperty("side", "");
+    w->resize(1600, 900);
+    QTest::qWait(700);
+    c.check(pane->isVisible() && qAbs(pane->width() - 412) < 1,
+            "at 1600 the list uses the 412dp extra-large preference");
+    w->resize(1440, 900);
+    QTest::qWait(350);
     // Leaving the library puts it away for good.
     b->home();
     c.check(c.until([&] { return !b->busy(); }), "Home loads");
