@@ -25,6 +25,7 @@
 #include <QFont>
 #include <QQmlProperty>
 #include <QSet>
+#include <QSignalSpy>
 #include <QTest>
 #include <qpa/qwindowsysteminterface.h>
 #include <functional>
@@ -4669,6 +4670,56 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
   c.check(c.until([&] { return b->results()->count() == 3; }), "the library is listed");
   QTest::qWait(500);
+
+  // Chip.kt:4286-4298 gives the trailing action its 8+18+8dp region;
+  // InputChipTokens.FocusIndicatorColor gives its icon a secondary ring.
+  {
+    QQmlComponent chipSource(qmlEngine(w), QUrl("qrc:/qml/MChip.qml"));
+    QScopedPointer<QObject> made(chipSource.create(qmlContext(w)));
+    auto input = qobject_cast<QQuickItem *>(made.data());
+    c.check(input, "an input chip can be focused through its trailing action");
+    if (input) {
+      input->setParentItem(w->contentItem());
+      input->setX(600); input->setY(360); input->setZ(95);
+      input->setProperty("variant", QString("input"));
+      input->setProperty("text", QString("Ferry"));
+      QTest::qWait(120);
+      auto remove = anyItem(input, "chipRemove");
+      c.check(remove && qAbs(remove->width() - 34) < 0.5 &&
+                  qAbs(remove->height() - input->height()) < 0.5,
+              "the remove action owns the whole 34dp trailing region and chip height");
+      input->forceActiveFocus(Qt::TabFocusReason);
+      QTest::keyClick(w, Qt::Key_Tab);
+      QTest::qWait(120);
+      auto ring = remove ? anyItem(remove, "chipRemoveFocusRing") : nullptr;
+      auto icon = remove ? anyItem(remove, "materialIcon") : nullptr;
+      c.check(remove && remove->hasActiveFocus() && ring && ring->isVisible(),
+              "Tab reaches the remove action and draws its ring");
+      c.check(ring && ring->property("border").value<QObject *>()->property("color").value<QColor>() ==
+                  c.themeColor("secondary"),
+              "the remove ring uses the secondary role");
+      c.check(ring && icon && qAbs(ring->width() - 24) < 0.5 &&
+                  qAbs(ring->height() - 24) < 0.5 &&
+                  qAbs(ring->property("radius").toDouble() - 12) < 0.5 &&
+                  (ring->mapToScene(ring->boundingRect().center()) -
+                   icon->mapToScene(icon->boundingRect().center())).manhattanLength() < 0.5,
+              "the 2px focus ring circles the icon 3px outside it");
+      c.shotNow("06a-chip-remove-focus");
+      QSignalSpy chipClicks(input, SIGNAL(clicked()));
+      QSignalSpy removals(input, SIGNAL(removed()));
+      c.check(chipClicks.isValid() && removals.isValid(),
+              "the chip and remove signals can be observed separately");
+      if (icon) {
+        const auto point = icon->mapToScene(icon->boundingRect().center()).toPoint();
+        QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+        QTest::qWait(80);
+        c.check(removals.count() == 1 && chipClicks.count() == 0,
+                "clicking the remove icon removes without activating the chip");
+      }
+      input->setVisible(false);
+      input->setParentItem(nullptr);
+    }
+  }
 
   // FloatingActionButtonMenu.kt:203-215 springs the visible item count on
   // SlowEffects; MenuTokens.FocusIndicatorColor gives the rings Secondary.

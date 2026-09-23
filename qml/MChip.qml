@@ -78,15 +78,32 @@ AbstractButton {
         // An input chip stands for something entered, so it carries the means
         // to take it back out rather than needing somewhere else to undo it.
         AbstractButton {
+            id: removeAction
             objectName: "chipRemove"
             visible: control.removable
-            width: 26; height: parent.height
-            anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
+            // Chip.kt:4286-4298 gives this trailing region an 8dp gap, the
+            // 18dp InputChipTokens.TrailingIconSize, then 8dp end padding.
+            // It owns all 34dp across and the chip's full target height.
+            width: control.trailRoom; height: parent.height
+            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter
+            z: 1
+            focusPolicy: Qt.StrongFocus
             Accessible.name: "Remove " + control.text
             onClicked: control.removed()
             // InputChipTokens: the variant ink, or the container's ink once
             // the chip is selected.
-            contentItem: Icon { name: "close"; size: Theme.chipIcon; ink: control.selected ? Theme.secondaryContainerText : Theme.muted }
+            contentItem: Item {
+                Icon { id: removeIcon; anchors.centerIn: parent; name: "close"; size: Theme.chipIcon; ink: control.selected ? Theme.secondaryContainerText : Theme.muted }
+                // InputChipTokens.FocusIndicatorColor is Secondary. MButton's
+                // 2px ring sits 3px outside the 18dp icon's circular shape.
+                Rectangle {
+                    objectName: "chipRemoveFocusRing"
+                    anchors.centerIn: removeIcon
+                    width: removeIcon.width + 6; height: width; radius: width / 2
+                    color: "transparent"; border.width: 2; border.color: Theme.focusRing
+                    visible: removeAction.visualFocus
+                }
+            }
         }
     }
 }
