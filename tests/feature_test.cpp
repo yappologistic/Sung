@@ -2848,9 +2848,13 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   // the ordinary row is 72dp tall and its cover occupies 56dp.
   auto ordinaryRow = shownItem(w->contentItem(), "trackRow_0");
   auto ordinaryLead = ordinaryRow ? anyItem(ordinaryRow, "trackLeading") : nullptr;
+  auto ordinaryTitle = ordinaryRow ? anyItem(ordinaryRow, "trackTitle") : nullptr;
   c.check(ordinaryRow && ordinaryLead && qAbs(ordinaryRow->height() - 72) < 1 &&
               qAbs(ordinaryLead->width() - 56) < 1,
           "ListTokens gives the ordinary two-line row a 72dp body and 56dp image");
+  // ListTokens.ItemLabelTextFont is BodyLarge, whose own weight is regular.
+  c.check(ordinaryTitle && ordinaryTitle->property("font").value<QFont>().weight() == QFont::Normal,
+          "the row title uses BodyLarge's regular weight");
 
   // --- The fill axis: filled where you are, outlined where you are not ---
   auto railHome = shownItem(w->contentItem(), "navBar_home");

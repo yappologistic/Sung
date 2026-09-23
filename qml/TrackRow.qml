@@ -195,8 +195,10 @@ ItemDelegate {
         }
         ColumnLayout {
             Layout.fillWidth: true; spacing: 4
-            MatchText { objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; font.weight: row.active ? Font.DemiBold : Font.Medium; color: row.titleInk }
-            MatchText { visible: row.track.kind!=="smart"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium }
+            // ListTokens.ItemLabelTextFont is BodyLarge at its own weight.
+            MatchText { objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; typeRole: "bodyLarge"; color: row.titleInk }
+            // ListTokens.ItemSupportingTextFont is BodyMedium.
+            MatchText { visible: row.track.kind!=="smart"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
         }
         PlayingIndicator { ink: row.titleInk; visible: row.active }
         // A row's trailing supporting text is label small
