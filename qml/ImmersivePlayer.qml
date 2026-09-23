@@ -58,15 +58,18 @@ Item {
     signal collectionRequested(var item)
     signal coverflowRequested(bool enabled)
     property bool coverflow: false
+    // ImmersiveCoverflow.qml:16-20 computes this row from the window height.
+    // The duplicate measure is needed before its Loader exists; reading the
+    // loaded item's height here makes coverflowVisible depend on itself.
+    readonly property real coverflowReserve: Math.round(Math.max(72,Math.min(104,
+        (Window.window?Window.window.height:800)*0.11)))+58
     // There is no Material token for a now-playing cover. Below 160dp it
     // reads as a queue thumbnail, so the optional coverflow yields its row.
-    // Work from the uncollapsed row budget to avoid a visible/height loop.
-    // IconButton.kt:242-249 gives each link a 48dp target. The other
-    // components report their natural heights; count four shell gaps before
-    // reserving the optional coverflow, without reading the cover it shrinks.
+    // IconButton.kt:242-249 gives each link a 48dp target. Count four shell
+    // gaps and the natural control heights before reserving the optional row.
     readonly property real coverflowCoverBudget: (Window.window?Window.window.height:height)-2*(width<600?16:24)
         -topControls.implicitHeight-transport.implicitHeight-seekRow.implicitHeight
-        -upNext.reserved-4*shell.spacing-title.implicitHeight-2*48
+        -coverflowReserve-4*shell.spacing-title.implicitHeight-2*48
     readonly property bool coverflowVisible: coverflow && app.queue.count>0 &&
         (displayedLayout==="lyrics" || displayedLayout==="singalong" || coverflowCoverBudget>=160)
     function hasKeyboardFocus(item) {
@@ -229,23 +232,19 @@ Item {
         Item {
             id: coverflowSlot
             Layout.fillWidth: true
-            property real measuredHeight: 0
-            Layout.preferredHeight: measuredHeight
+            Layout.preferredHeight: player.coverflowReserve
             visible: player.coverflowVisible
             opacity: player.controlsShown?1:0
             enabled: opacity>0
             // Destroy the faded carousel's delegates after its opacity reaches
-            // zero. The cached natural height keeps the layout slot in place.
+            // zero. The independent row measure keeps the layout slot in place.
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
             Loader {
                 id: upNext
                 anchors.fill: parent
                 active: coverflowSlot.opacity>0 && player.coverflowVisible
-                readonly property real reserved: item ? item.reserved : coverflowSlot.measuredHeight
-                onLoaded: coverflowSlot.measuredHeight=item.reserved
                 sourceComponent: ImmersiveCoverflow { onShowAllRequested: player.queueRequested() }
             }
-            Connections {target:upNext.item;function onReservedChanged(){coverflowSlot.measuredHeight=upNext.item.reserved;}}
         }
         // Material replaced the bottom app bar with docked and floating
         // toolbars. The transport floats over the artwork rather than being

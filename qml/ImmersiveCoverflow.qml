@@ -70,7 +70,9 @@ ColumnLayout {
         }
         Connections { target: app; function onTrackChanged(){covers.center(true);} }
         Component.onCompleted: center(false)
-        onCountChanged: if(!moving && !flicking)Qt.callLater(()=>covers.center(false))
+        // Qt.callLater's documented direct-method form stays tied to this
+        // ListView; a closure can retain covers after its Loader unloads it.
+        onCountChanged: if(!moving && !flicking)Qt.callLater(covers.center,false)
         // Coming to rest on a different cover plays it: the carousel moves
         // through the queue rather than only previewing it.
         Timer {

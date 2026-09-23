@@ -8,6 +8,7 @@
 #include <QFile>
 #include <QFont>
 #include <QImage>
+#include <QLoggingCategory>
 #include <QPainter>
 #include <QQmlContext>
 #include <QQmlExpression>
@@ -20,8 +21,27 @@
 #include <QTest>
 #include <qpa/qwindowsysteminterface.h>
 #include <functional>
+#include <atomic>
 
 namespace {
+struct QmlMessageAudit {
+  static std::atomic<QmlMessageAudit*> active;
+  QtMessageHandler previous=nullptr;
+  std::atomic<int> loops{0},types{0},references{0},assignments{0};
+  QmlMessageAudit(){previous=qInstallMessageHandler(&capture);active.store(this);}
+  ~QmlMessageAudit(){active.store(nullptr);qInstallMessageHandler(previous);}
+  static void capture(QtMsgType type,const QMessageLogContext &context,const QString &message){
+    if(auto audit=active.load()){
+      if(message.contains("Binding loop detected"))++audit->loops;
+      if(message.contains("TypeError:"))++audit->types;
+      if(message.contains("ReferenceError:"))++audit->references;
+      if(message.contains("Cannot assign"))++audit->assignments;
+      if(audit->previous)audit->previous(type,context,message);
+    }
+  }
+  int total()const{return loops.load()+types.load()+references.load()+assignments.load();}
+};
+std::atomic<QmlMessageAudit*> QmlMessageAudit::active{nullptr};
 QQuickItem *visibleItem(QQuickItem *root,const QString &name) {
   if(!root->isVisible())return nullptr;
   if(root->objectName()==name)return root;
@@ -48,6 +68,7 @@ void collectImmersiveControls(QQuickItem *root,QList<QQuickItem*> &found,bool in
 }
 
 void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
+  QmlMessageAudit messages;
   int failures=0;
   auto check=[&](bool ok,const char *name){fprintf(stdout,"%s %s\n",ok?"PASS":"FAIL",name);fflush(stdout);if(!ok)++failures;};
   const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir+"/music");
@@ -662,6 +683,10 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   click("immersiveCoverflowToggle");
   check(waitFor([&]{return visibleItem(w->contentItem(),"coverflowView");}),"coverflow appears");
   auto covers=visibleItem(w->contentItem(),"coverflowView");
+  auto flowMeasure=visibleItem(w->contentItem(),"immersiveCoverflow");
+  check(flowMeasure&&qAbs(player->property("coverflowReserve").toDouble()-
+                          flowMeasure->property("reserved").toDouble())<1,
+        "preloaded coverflow reserve matches the component's measured row");
   check(covers&&waitFor([&]{
           auto first=visibleItem(w->contentItem(),"coverflowItem_0");
           if(!first)return false;
@@ -767,6 +792,26 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         title->property("maximumLineCount").toInt()==2,
         "title wraps at words and elides after two lines");
   shot("coverflow-480");
+  const int beforeCoverflowMessages=messages.total();
+  for(const auto size:{QSize(480,620),QSize(600,800),QSize(840,800),
+                       QSize(1024,900),QSize(1440,900),QSize(2560,900)}){
+    resizeTo(size.width(),size.height());
+    for(const auto &theme:{"dark","light"}){
+      b->setTheme(theme);
+      QMetaObject::invokeMethod(player,"wake");
+      if(player->property("coverflowVisible").toBool()){
+        check(waitFor([&]{return visibleItem(w->contentItem(),"immersiveCoverflow");}),
+              "visible coverflow loads before its reserve is compared");
+        auto row=visibleItem(w->contentItem(),"immersiveCoverflow");
+        check(row&&qAbs(player->property("coverflowReserve").toDouble()-row->property("reserved").toDouble())<1,
+              qPrintable(QString("%1px %2 coverflow reserve agrees with the component").arg(size.width()).arg(theme)));
+      }
+      shot(QString("coverflow-%1-%2").arg(size.width()).arg(theme));
+    }
+  }
+  check(messages.total()==beforeCoverflowMessages,
+        "coverflow width and theme changes emit no binding loops or QML errors");
+  b->setTheme("dark");
   resizeTo(480,620);
   auto shortArt=visibleItem(w->contentItem(),"immersiveArtwork");
   auto shortFlow=visibleItem(w->contentItem(),"coverflowView");
@@ -930,5 +975,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     b->setTheme("light");shot("unsynced-lyrics-light");b->setTheme("dark");
   }
   qunsetenv("SUNG_BUFFER_FIXTURE");
+  check(messages.total()==0,qPrintable(QString("zero QML diagnostics (loops %1, type %2, reference %3, assignment %4)")
+        .arg(messages.loops.load()).arg(messages.types.load()).arg(messages.references.load()).arg(messages.assignments.load())));
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
