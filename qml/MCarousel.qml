@@ -23,11 +23,11 @@ ListView {
     readonly property real squashed: 0.38
 
     orientation: ListView.Horizontal
-    // Material's multi-browse measurements: 16dp at either end of the run and
-    // 8dp between the items in it.
+    // Carousel.kt:822-826 defaults its content padding to zero. The first
+    // cover shares the heading's edge; the shelf keeps its 8dp item rhythm.
     spacing: 8
-    leftMargin: 16
-    rightMargin: 16
+    leftMargin: 0
+    rightMargin: 0
     clip: true
     boundsBehavior: Flickable.StopAtBounds
     // Items snap into place to keep the layout, rather than resting part-way.

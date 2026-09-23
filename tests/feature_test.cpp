@@ -2520,17 +2520,27 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
             "and the shape comes back");
   }
 
-  // --- Carousel: items change size across the viewport, and snap ---
+  // Carousel.kt:70-75 masks full-size cards; :822-826 gives the first cover
+  // zero leading padding. Eight pinned albums make its edge state observable.
+  QVariantList carouselPins;
+  for (int i = 0; i < 8; ++i) {
+    QVariantMap pin{{"id", QString("carousel-fixture-%1").arg(i)},
+                    {"kind", "album"}, {"title", QString("Carousel %1").arg(i)}};
+    b->togglePin(pin);
+    carouselPins << pin;
+  }
   b->home();
   c.check(c.until([&] { return !b->busy(); }), "Home loads");
   QTest::qWait(600);
   auto carousel = shownItem(w->contentItem(), "carousel");
   c.check(carousel, "Home lays its shelves out as carousels");
   if (carousel) {
+    c.check(carousel->property("count").toInt() >= 8,"the carousel fixture has multiple cards");
     c.check(carousel->property("snapMode").toInt() == 1,
             "which snap items into place rather than resting part-way");
     auto first = anyItem(carousel, "carouselCell_0");
     c.check(first, "the carousel has cells");
+    if (first) c.check(qAbs(first->mapToItem(carousel,QPointF()).x()) < 0.5,"the first cover starts at the shelf heading edge");
     if (first) {
       auto card = shownItem(first, "carouselCard");
       c.check(card && qAbs(card->scale() - 1) < 0.02,
@@ -2551,6 +2561,8 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     }
     c.shot("03-carousel");
   }
+
+  for (const auto &pin : carouselPins) b->togglePin(pin.toMap());
 
   // --- Pull to refresh ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
