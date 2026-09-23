@@ -175,11 +175,10 @@ QtObject {
     readonly property int selectionTarget: 48
 
     // --- Tabs ----------------------------------------------------------------
-    // Material's active indicator: 3dp under a primary tab and 2dp under a
-    // secondary one, inset from the label it marks and never shorter than 24dp.
+    // Material's active indicator: 3dp under a primary tab, as wide as its
+    // label and never shorter than 24dp, and 2dp across a secondary one.
     readonly property int tabIndicatorPrimary: 3
     readonly property int tabIndicatorSecondary: 2
-    readonly property int tabIndicatorInset: 2
 
     // --- Chips ---------------------------------------------------------------
     readonly property int chipHeight: 32

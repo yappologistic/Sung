@@ -2528,8 +2528,13 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   if (primaryTabs && secondaryTabs) {
     auto divider = anyItem(primaryTabs, "tabDivider");
     c.check(divider && divider->isVisible(), "the primary container is closed by a divider");
-    c.check(!anyItem(secondaryTabs, "tabDivider")->isVisible(),
-            "which the secondary set does without");
+    // Compose closes both rows with a divider (TabRow.kt, SecondaryTabRow
+    // passes HorizontalDivider as well); the secondary set differs in its
+    // indicator, which spans the whole tab.
+    c.check(anyItem(secondaryTabs, "tabDivider")->isVisible(),
+            "and so is the secondary set's");
+    c.check(secondaryTabs->height() >= 47.5,
+            QString("which is as tall as the primary one (%1)").arg(secondaryTabs->height()));
     auto primaryTab = shownItem(primaryTabs, "localFilesTab");
     auto secondaryTab = shownItem(secondaryTabs, "localView_files");
     c.check(primaryTab && secondaryTab, "both mark Local files as chosen");

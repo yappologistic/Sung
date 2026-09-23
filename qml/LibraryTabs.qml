@@ -21,7 +21,10 @@ Flickable {
         {label:"History", key:"history", name:"historyTab"},
         {label:"Music server", key:"server", name:"serverTab"}
     ]
-    implicitHeight: secondary ? 44 : 48
+    // Both variants are 48dp tall (Primary/SecondaryNavigationTabTokens
+    // .ContainerHeight); the secondary one differs in its indicator, not its
+    // height.
+    implicitHeight: 48
     contentWidth: row.width; contentHeight: height
     flickableDirection: Flickable.HorizontalFlick
     boundsBehavior: Flickable.StopAtBounds
@@ -51,11 +54,11 @@ Flickable {
     }
     onWidthChanged: Qt.callLater(revealSelected)
     onVisibleChanged: if (visible) Qt.callLater(revealSelected)
-    // The primary container is defined by a divider along its bottom edge,
-    // which is what separates it from the content that scrolls beneath.
+    // A tab row is defined by a divider along its bottom edge, which is what
+    // separates it from the content that scrolls beneath. Compose draws it
+    // under both variants (TabRow.kt, PrimaryTabRow and SecondaryTabRow).
     Rectangle {
         objectName: "tabDivider"
-        visible: !tabs.secondary
         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom
         width: tabs.width
         height: 1
@@ -98,8 +101,10 @@ Flickable {
                         event.accepted = true
                     }
                 }
+                // Compose's tab ripple is the selected content colour: the
+                // accent for a primary tab, onSurface for a secondary one.
                 background: Rectangle {
-                    color: Theme.primary
+                    color: tabs.secondary ? Theme.text : Theme.primary
                     opacity: tab.down || tab.visualFocus ? Theme.pressedOpacity : tab.hovered ? Theme.hoverOpacity : 0
                     Behavior on opacity { NumberAnimation { duration: Theme.fast } }
                 }
@@ -126,10 +131,10 @@ Flickable {
                 Rectangle {
                     objectName: "tabIndicator"
                     anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-                    // A primary tab's indicator sits under its label only; a
-                    // secondary tab uses the simpler full-width rule.
-                    width: tabs.secondary ? tab.width
-                                          : Math.max(24, label.implicitWidth-2*Theme.tabIndicatorInset)
+                    // A primary tab's indicator is as wide as its label and
+                    // never under 24dp; a secondary tab's spans the whole tab
+                    // (TabRow.kt, contentWidth and matchContentSize = false).
+                    width: tabs.secondary ? tab.width : Math.max(24, label.implicitWidth)
                     height: tabs.secondary ? Theme.tabIndicatorSecondary : Theme.tabIndicatorPrimary
                     // It sits on the divider, so it rounds at the top and stays
                     // square where the two meet.
