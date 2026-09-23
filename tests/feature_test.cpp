@@ -4751,6 +4751,27 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
     c.shot("04-snackbar");
   }
 
+  // --- The snackbar stacks above the FAB ---
+  // Compose's Scaffold puts a snackbar on the FAB's top edge rather than over
+  // the button (Scaffold.kt, snackbarOffsetFromBottom). With the supporting
+  // pane open the FAB came to sit under a centred snackbar.
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("playlists")));
+  QQuickItem *fab = nullptr;
+  c.check(c.until([&] { fab = shownItem(w->contentItem(), "libraryFab"); return fab != nullptr; }),
+          "the library shows its FAB");
+  b->toast("Above the button");
+  if (fab && toast) {
+    const auto clear = [&] {
+      return toast->height() > 40 &&
+             toast->mapToScene(QPointF(0, toast->height())).y() <= fab->mapToScene(QPointF(0, 0)).y() - 8;
+    };
+    c.check(c.until(clear, 3000),
+            QString("and a snackbar sits above the button rather than over it (foot %1, FAB top %2)")
+                .arg(toast->mapToScene(QPointF(0, toast->height())).y(), 0, 'f', 0)
+                .arg(fab->mapToScene(QPointF(0, 0)).y(), 0, 'f', 0));
+    c.shot("04-snackbar-above-fab");
+  }
+
   // --- A pinned row is a feed, so nothing draws an empty state over it ---
   // The catalogue's own sections and the feed are not the same list: the feed
   // also carries the pinned row. Asking the catalogue whether to show a list

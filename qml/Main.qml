@@ -377,6 +377,16 @@ ApplicationWindow {
     readonly property real bottomChrome: immersive
         ? (immersiveLoader.item ? immersiveLoader.item.bottomChrome : 0)
         : compactMode ? 0 : playbackBar.height + 16
+    // A FAB counts as well. Compose's Scaffold stacks the snackbar on the
+    // FAB's top edge rather than letting it cover the button
+    // (Scaffold.kt: snackbarOffsetFromBottom = snackbarHeight +
+    // fabOffsetFromBottom). The FAB hangs from the foot of the content pane,
+    // so it only moves when the window or the chrome under it does.
+    readonly property real snackbarFloor: {
+        height; bottomChrome; contentFabHost.height
+        if (immersive || !libraryFab.visible || railShowing) return bottomChrome
+        return Math.max(bottomChrome, height - contentFabHost.mapToItem(null, 0, 0).y)
+    }
     readonly property bool sidebarNav: app.sidebarNavigation
     readonly property bool railShowing: sidebarNav && !compactWindow
     readonly property bool bottomBarShowing: sidebarNav && compactWindow
@@ -2175,7 +2185,7 @@ ApplicationWindow {
     // the smallest corner on the scale rather than a panel's rounding. A
     // snackbar can also be pushed aside, which is what the drag below is for.
     Rectangle {
-        anchors.bottom: parent.bottom; anchors.bottomMargin: 16 + window.bottomChrome; anchors.horizontalCenter: parent.horizontalCenter; z: 40
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 16 + window.snackbarFloor; anchors.horizontalCenter: parent.horizontalCenter; z: 40
         Behavior on anchors.bottomMargin { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         id: toastBar; objectName: "toastBar"
         width: Math.min(window.width-48,720,toastLabel.implicitWidth+(window.toastHasUndo?168:40))
