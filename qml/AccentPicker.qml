@@ -45,7 +45,7 @@ Flow {
                     anchors.fill: parent; radius: Theme.shapeLargeIncreased
                     color: Theme.text
                     opacity: swatch.down ? Theme.pressedOpacity : swatch.hovered ? Theme.hoverOpacity : 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                    Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                 }
             }
             contentItem: Item {

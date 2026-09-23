@@ -10,8 +10,8 @@ Popup {
     onOpened: {devices.currentIndex=app.audioDevices.findIndex(d=>d.id===app.audioDeviceId);devices.forceActiveFocus();}
     closePolicy:Popup.CloseOnEscape|Popup.CloseOnPressOutside
     background:Rectangle {radius:Theme.shapeExtraLarge;color:Theme.high;border.width:1;border.color:Theme.outlineVariant}
-    enter:Transition {NumberAnimation {property:"opacity";from:0;to:1;duration:Theme.enterDuration}}
-    exit:Transition {NumberAnimation {property:"opacity";to:0;duration:Theme.exitDuration}}
+    enter:Transition {NumberAnimation {property:"opacity";from:0;to:1;duration:Theme.enterDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.enterCurve}}
+    exit:Transition {NumberAnimation {property:"opacity";to:0;duration:Theme.exitDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.exitCurve}}
     contentItem:ColumnLayout {spacing:8
         SungText {heading:true;text:"Audio output";font.pixelSize:Theme.titleMedium;font.weight:Font.Medium;Layout.fillWidth:true}
         ListView {id:devices;objectName:"outputDevices";Layout.fillWidth:true;Layout.fillHeight:true;clip:true;spacing:4;model:popup.visible?app.audioDevices:[]

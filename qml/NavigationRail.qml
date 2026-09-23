@@ -44,7 +44,7 @@ ColumnLayout {
     // Material's expanded rail runs from 220dp to 360dp; it takes more of that
     // range as the window has room to give.
     property real shownWidth: expanded ? Math.max(220, Math.min(360, rail.parent ? rail.parent.width*0.2 : 220)) : 96
-    Behavior on shownWidth { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+    Behavior on shownWidth { NumberAnimation { duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
     Layout.preferredWidth: shownWidth; Layout.minimumWidth: shownWidth; Layout.maximumWidth: shownWidth
     // Material's collapsed rail is 96dp wide and sets 4dp between its
     // destinations; the header above them keeps 8dp of its own.

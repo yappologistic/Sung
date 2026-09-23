@@ -78,8 +78,8 @@ Item {
         // What keeps the actions reachable: a menu wider than the room on that
         // side is moved back inside the window rather than hanging off it.
         margins: 12
-        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: app.motion ? Theme.springFastEffectsMs : 0 } }
-        exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: app.motion ? Theme.springFastEffectsMs : 0 } }
+        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+        exit: Transition { NumberAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
 
         contentItem: Column {
             id: items
@@ -134,7 +134,7 @@ Item {
                             anchors.fill: parent; radius: parent.radius
                             color: Theme.containerText
                             opacity: entry.down || entry.visualFocus ? Theme.pressedOpacity : entry.hovered ? Theme.hoverOpacity : 0
-                            Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs } }
+                            Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                         }
                     }
                     contentItem: Row {
@@ -180,7 +180,7 @@ Item {
                 anchors.fill: parent; radius: parent.radius
                 color: root.open ? Theme.primaryText : Theme.containerText
                 opacity: fab.down || fab.visualFocus ? Theme.pressedOpacity : fab.hovered ? Theme.hoverOpacity : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs } }
+                Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             }
         }
         // A control stretches its content item to fill it, so the glyph needs a

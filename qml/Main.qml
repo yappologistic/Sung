@@ -2229,7 +2229,7 @@ ApplicationWindow {
             }
             onActiveTranslationChanged: if(active) toastShove.x = activeTranslation.x
         }
-        NumberAnimation { id: toastReturn; target: toastShove; property: "x"; to: 0; duration: Theme.springFastEffectsMs }
+        NumberAnimation { id: toastReturn; target: toastShove; property: "x"; to: 0; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
         onVisibleChanged: if(!visible) toastShove.x = 0
         Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         MButton { id: toastUndo; objectName: "toastUndo"; anchors.right: toastDismiss.left; anchors.bottom: parent.bottom; anchors.bottomMargin: (toastBar.restingHeight-height)/2; text: "Undo"; ink: Theme.inversePrimary; visible: window.toastHasUndo; onClicked: app.undo() }

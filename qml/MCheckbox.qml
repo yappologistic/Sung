@@ -35,7 +35,7 @@ AbstractButton {
             radius: Theme.shapeFull(width)
             color: control.checked ? Theme.primary : Theme.text
             opacity: control.down ? Theme.pressedOpacity : control.visualFocus ? Theme.focusOpacity : control.hovered ? Theme.hoverOpacity : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+            Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
     }
     contentItem: Item {

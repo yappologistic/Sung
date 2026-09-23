@@ -40,13 +40,13 @@ Popup {
     enter: Transition {
         ParallelAnimation {
             NumberAnimation { property: "x"; from: -drawer.width; to: 0; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
-            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs }
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve }
         }
     }
     exit: Transition {
         ParallelAnimation {
             NumberAnimation { property: "x"; to: -drawer.width; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
-            NumberAnimation { property: "opacity"; to: 0; duration: Theme.exitDuration }
+            NumberAnimation { property: "opacity"; to: 0; duration: Theme.exitDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.exitCurve }
         }
     }
 }

@@ -50,7 +50,7 @@ AbstractButton {
             anchors.fill: parent; radius: parent.radius
             color: control.selected ? Theme.secondaryContainerText : Theme.muted
             opacity: control.down || control.visualFocus ? Theme.pressedOpacity : control.hovered ? Theme.hoverOpacity : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+            Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
         Rectangle {
             anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium
@@ -73,7 +73,7 @@ AbstractButton {
             id: label; x: control.leads || control.removable ? control.leadRoom : (parent.width-implicitWidth)/2
             text: control.text; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium; labelRole: true
             color: control.selected ? Theme.secondaryContainerText : Theme.muted; anchors.verticalCenter: parent.verticalCenter
-            Behavior on x { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+            Behavior on x { NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         }
         // An input chip stands for something entered, so it carries the means
         // to take it back out rather than needing somewhere else to undo it.

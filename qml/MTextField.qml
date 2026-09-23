@@ -81,8 +81,8 @@ TextField {
              : field.errored ? Theme.error : field.activeFocus ? Theme.primary : Theme.muted
         Accessible.ignored: true
         Rectangle { objectName: "fieldLabelMask"; anchors.fill: parent; anchors.leftMargin: -4; anchors.rightMargin: -4; color: field.labelSurface; visible: field.floatingLabel && !field.filled; z: -1 }
-        Behavior on y { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
-        Behavior on font.pixelSize { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+        Behavior on y { NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+        Behavior on font.pixelSize { NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
     }
     SungText {
         id: supportLine

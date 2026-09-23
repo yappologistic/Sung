@@ -24,8 +24,8 @@ RowLayout {
         function apply(){body.item.apply();}
         closePolicy:Popup.CloseOnEscape|Popup.CloseOnPressOutside
         background:Rectangle {radius:Theme.shapeExtraLarge;color:Theme.high;border.width:1;border.color:Theme.outlineVariant}
-        enter:Transition {NumberAnimation {property:"opacity";from:0;to:1;duration:Theme.enterDuration}}
-        exit:Transition {NumberAnimation {property:"opacity";to:0;duration:Theme.exitDuration}}
+        enter:Transition {NumberAnimation {property:"opacity";from:0;to:1;duration:Theme.enterDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.enterCurve}}
+        exit:Transition {NumberAnimation {property:"opacity";to:0;duration:Theme.exitDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.exitCurve}}
         Loader {
             id: body
             anchors.fill: parent

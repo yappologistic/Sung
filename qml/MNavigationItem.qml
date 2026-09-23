@@ -64,7 +64,7 @@ AbstractButton {
             objectName: "navigationStack"
             anchors.fill: parent
             visible: opacity>0; opacity: control.expanded ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+            Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             Icon { id: stackGlyph; anchors.horizontalCenter: parent.horizontalCenter; y: 8; name: control.symbol; fill: control.selected ? 1 : 0; ink: control.selected ? Theme.secondaryContainerText : Theme.muted; Accessible.ignored: true }
             MBadge {
                 objectName: "navigationBadge"
@@ -91,7 +91,7 @@ AbstractButton {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
             spacing: 8
             visible: opacity>0; opacity: control.expanded ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+            Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             Item {
                 width: 24; height: 24; anchors.verticalCenter: parent.verticalCenter
                 Icon { anchors.centerIn: parent; visible: !control.artUrl; name: control.symbol; fill: control.selected ? 1 : 0; ink: control.selected ? Theme.secondaryContainerText : Theme.muted; Accessible.ignored: true }

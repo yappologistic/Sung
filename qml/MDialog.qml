@@ -165,7 +165,7 @@ T.Dialog {
                 height: 1; color: Theme.outlineVariant
                 visible: dialog.moreBelow
                 opacity: visible ? 1 : 0
-                Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             }
         }
         delegate: MButton {

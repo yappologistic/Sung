@@ -2,11 +2,11 @@ pragma Singleton
 import QtQuick
 QtObject {
     property color artworkSeed: "transparent"
-    Behavior on artworkSeed {enabled:app.motion && app.artworkAccent;ColorAnimation {duration:240;easing.type:Easing.InOutCubic}}
+    Behavior on artworkSeed {enabled:app.motion && app.artworkAccent;ColorAnimation {duration:springEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:springEffects}}
     readonly property bool useArtwork: app.artworkAccent && artworkSeed.a > 0
     // A hand-picked Material source color, used when no cover is driving the theme.
     property color accentSeed: app.accentColor ? app.accentColor : "transparent"
-    Behavior on accentSeed {enabled:app.motion;ColorAnimation {duration:240;easing.type:Easing.InOutCubic}}
+    Behavior on accentSeed {enabled:app.motion;ColorAnimation {duration:springEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:springEffects}}
     readonly property bool useAccent: !useArtwork && accentSeed.a > 0
     readonly property bool useSource: useArtwork || useAccent
     readonly property color sourceColor: useArtwork ? artworkSeed : accentSeed

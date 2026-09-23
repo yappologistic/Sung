@@ -106,7 +106,7 @@ Flickable {
                 background: Rectangle {
                     color: tabs.secondary ? Theme.text : Theme.primary
                     opacity: tab.down || tab.visualFocus ? Theme.pressedOpacity : tab.hovered ? Theme.hoverOpacity : 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.fast } }
+                    Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                 }
                 contentItem: Item {
                     Row {

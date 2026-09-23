@@ -118,7 +118,7 @@ ListView {
                 // surface container while it is open.
                 color:list.folded[heading.section]?Theme.surface:Theme.container
                 Behavior on color {ColorAnimation {duration:Theme.fast;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.fastEffectsCurve}}
-                Icon {anchors.centerIn:parent;name:"chevron";size:18;rotation:list.folded[heading.section]?0:90;Behavior on rotation {NumberAnimation {duration:app.motion?180:0}}}
+                Icon {anchors.centerIn:parent;name:"chevron";size:18;rotation:list.folded[heading.section]?0:90;Behavior on rotation {NumberAnimation {duration:Theme.springFastSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}}
                 TapHandler {onTapped:list.toggleGroup(heading.section)}
                 Accessible.ignored:true
             }

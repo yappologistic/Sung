@@ -86,7 +86,7 @@ ItemDelegate {
             radius: parent.committing ? Theme.listActive : Theme.shapeFull(height)
             color: parent.committing ? Theme.primary : Theme.secondaryContainer
             Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
-            Behavior on color { ColorAnimation { duration: Theme.springFastEffectsMs } }
+            Behavior on color { ColorAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             Icon {
                 anchors.centerIn: parent
                 name: "remove"; size: 20
@@ -94,7 +94,7 @@ ItemDelegate {
             }
         }
     }
-    NumberAnimation { id: swipeReturn; target: row; property: "swipe"; to: 0; duration: Theme.springFastEffectsMs }
+    NumberAnimation { id: swipeReturn; target: row; property: "swipe"; to: 0; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
     background: Rectangle {
         id: rowContainer
         transform: Translate { x: row.swipe }
