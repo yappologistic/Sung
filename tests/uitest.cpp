@@ -1032,6 +1032,7 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
       labels=labels&&label&&label->isVisible()&&!label->property("text").toString().isEmpty()&&field->property("floatingLabel").toBool();
     }
     check(labels,"populated fields retain visible floating labels");
+    {auto dialog=w->findChild<QObject*>("serverConnectionDialog");auto surface=dialog?dialog->property("background").value<QQuickItem*>():nullptr;auto mask=findItem(address,"fieldLabelMask");check(surface&&mask&&mask->isVisible()&&mask->property("color").value<QColor>()==surface->property("color").value<QColor>(),"a floating label's cut in the outline matches the dialog surface under it");}
     auto fields=findItem(w->contentItem(),"connectionFields");
     auto addressLabel=findItem(address,"fieldLabel");
     check(fields&&addressLabel&&addressLabel->mapRectToItem(fields,addressLabel->boundingRect()).top()>=0,"first floating label stays inside the scroll content");

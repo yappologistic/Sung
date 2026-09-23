@@ -14,14 +14,24 @@ TextField {
     property string variant: "outlined"
     readonly property bool filled: variant === "filled"
     property string label: ""
-    property color labelSurface: Theme.container
+    // What a floating label is painted over where it cuts the outline: the
+    // surface the field sits on. Every labelled outlined field is in a dialog,
+    // which is surfaceContainerHigh; the container role showed as a darker
+    // patch behind the label there.
+    property color labelSurface: Theme.high
     // Material's supporting text sits under the field and explains it; when the
     // field is in error the same line carries the reason and everything the
     // field is drawn with moves to the error role.
     property string supporting: ""
     property string errorText: ""
     readonly property bool errored: errorText.length > 0
-    readonly property color accent: errored ? Theme.error : activeFocus ? Theme.primary : Theme.outline
+    // Disabled, input and label drop to onSurface at 38% and the outline to
+    // 12%; a filled container to 4% with its indicator at 38%
+    // (OutlinedTextFieldTokens.Disabled*, FilledTextFieldTokens.Disabled*).
+    readonly property bool dimmed: !enabled
+    function onSurface(amount) { return Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, amount) }
+    readonly property color accent: dimmed ? onSurface(Theme.disabledSurfaceOpacity)
+                                  : errored ? Theme.error : activeFocus ? Theme.primary : Theme.outline
     readonly property bool floatingLabel: activeFocus || length > 0 || preeditText.length > 0
     readonly property bool handlesTextInput: true
     implicitHeight: 56
@@ -33,7 +43,8 @@ TextField {
     selectByMouse: true
     verticalAlignment: TextInput.AlignVCenter
     font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge
-    color: Theme.text; placeholderTextColor: Theme.muted
+    color: dimmed ? onSurface(Theme.disabledContentOpacity) : Theme.text
+    placeholderTextColor: dimmed ? onSurface(Theme.disabledContentOpacity) : Theme.muted
     selectionColor: Theme.primary; selectedTextColor: Theme.primaryText
     // Material reserves the supporting line so a field does not jump when an
     // error arrives.
@@ -46,7 +57,7 @@ TextField {
         radius: field.filled ? 0 : Theme.shapeExtraSmall
         topLeftRadius: field.filled ? Theme.shapeExtraSmall : radius
         topRightRadius: topLeftRadius
-        color: field.filled ? Theme.highest : "transparent"
+        color: field.filled ? (field.dimmed ? field.onSurface(0.04) : Theme.highest) : "transparent"
         border.width: field.filled ? 0 : field.activeFocus || field.errored ? 2 : 1
         border.color: field.accent
         Behavior on border.color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
@@ -55,7 +66,8 @@ TextField {
             visible: field.filled
             anchors.bottom: parent.bottom; anchors.left: parent.left; anchors.right: parent.right
             height: field.activeFocus || field.errored ? 2 : 1
-            color: field.errored ? Theme.error : field.activeFocus ? Theme.primary : Theme.muted
+            color: field.dimmed ? field.onSurface(Theme.disabledContentOpacity)
+                 : field.errored ? Theme.error : field.activeFocus ? Theme.primary : Theme.muted
             Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
     }
@@ -65,9 +77,10 @@ TextField {
         y: field.floatingLabel ? (field.filled ? 8 : -height/2) : (field.height-height)/2
         text: field.label; visible: text.length > 0
         font.pixelSize: field.floatingLabel ? Theme.labelMedium : Theme.bodyLarge
-        color: field.errored ? Theme.error : field.activeFocus ? Theme.primary : Theme.muted
+        color: field.dimmed ? field.onSurface(Theme.disabledContentOpacity)
+             : field.errored ? Theme.error : field.activeFocus ? Theme.primary : Theme.muted
         Accessible.ignored: true
-        Rectangle { anchors.fill: parent; anchors.leftMargin: -4; anchors.rightMargin: -4; color: field.labelSurface; visible: field.floatingLabel && !field.filled; z: -1 }
+        Rectangle { objectName: "fieldLabelMask"; anchors.fill: parent; anchors.leftMargin: -4; anchors.rightMargin: -4; color: field.labelSurface; visible: field.floatingLabel && !field.filled; z: -1 }
         Behavior on y { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
         Behavior on font.pixelSize { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
     }
