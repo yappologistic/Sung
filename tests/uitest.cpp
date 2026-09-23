@@ -1440,7 +1440,8 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
     w->resize(width,width==480?620:900);b->setTheme(theme);QTest::qWait(300);
     for(const QString &tab:{QStringLiteral("files"),QStringLiteral("local-albums"),
                             QStringLiteral("local-artists"),QStringLiteral("favorites"),
-                            QStringLiteral("history")}){
+                            QStringLiteral("mixes"),QStringLiteral("history"),
+                            QStringLiteral("server")}){
       QMetaObject::invokeMethod(w,"chooseLibrary",Q_ARG(QVariant,QVariant(tab)));
       QTest::qWait(300);
       check(w->property("libraryTab").toString()==tab,"empty Library tab settles before capture");
