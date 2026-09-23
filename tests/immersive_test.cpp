@@ -407,26 +407,20 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
                          .arg(bar->mapToScene(QPointF(0,0)).y(),0,'f',0)));
       else check(false,"the notification and the transport are both on screen");
     } else check(false,"a notification appears to place");
-    // The menu opened from this bar took the tertiary container, which is the
-    // source hue rotated and so belongs to no other surface in the window: on
-    // a warm cover it came out green beside a sepia interface. MenuTokens puts
-    // a menu on surfaceContainer and marks a chosen item with the secondary
-    // pair, and every menu in the app answers to the same rule.
+    // MenuDefaults.groupStandardContainerColor reads
+    // StandardMenuTokens.ContainerColor, surfaceContainerLow.
     click("immersiveLayoutButton");QTest::qWait(400);
     {
       auto menu=w->findChild<QObject*>("immersiveLayoutMenu");
       auto surface=menu?menu->property("background").value<QQuickItem*>():nullptr;
       check(surface,"the immersive menu has a surface to read");
       if(surface){
-        // The floating toolbar in this same view is on surfaceContainer by its
-        // own token, so it is the role to measure against without reaching
-        // into the theme singleton for it.
         const auto colour=surface->property("color").value<QColor>();
-        auto bar=visibleItem(w->contentItem(),"immersiveToolbar");
-        const auto onSurfaceContainer=bar?bar->property("color").value<QColor>():QColor();
-        check(bar && colour==onSurfaceContainer,
-              qPrintable(QString("the menu sits on the same surfaceContainer the transport does (%1 against %2)")
-                         .arg(colour.name()).arg(onSurfaceContainer.name())));
+        QQmlExpression standardSurface(qmlContext(menu),menu,"Theme.surfaceLow");
+        const auto expected=standardSurface.evaluate().value<QColor>();
+        check(!standardSurface.hasError()&&colour==expected,
+              qPrintable(QString("the standard menu uses surfaceContainerLow (%1 against %2)")
+                         .arg(colour.name()).arg(expected.name())));
       }
       shot("menu");
       QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(300);
