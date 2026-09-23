@@ -570,7 +570,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     }
     shot(QString("artwork-%1").arg(width));
   }
-  resizeTo(480,620);
+  resizeTo(480,780);
   click("immersiveLayoutButton");
   check(waitFor(menuOpen),"layout menu opens for coverflow");
   click("immersiveCoverflowToggle");
@@ -642,6 +642,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     }
   }
   auto title=visibleItem(w->contentItem(),"immersiveTitle");
+  auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
+  auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
   check(title&&title->property("lineCount").toInt()==1&&!title->property("truncated").toBool(),
         "480px coverflow title uses the column width and stays on one line");
   shot("coverflow-480");
@@ -655,8 +657,6 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           QQmlProperty::read(ring,"border.width",qmlContext(ring)).toInt()==2,
           qPrintable(QString("%1 uses an external 2px shaped focus ring").arg(pair.first)));
   }
-  auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
-  auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
   if(artistLink)artistLink->forceActiveFocus(Qt::TabFocusReason);
   QTest::keyClick(w,Qt::Key_Tab);
   check(albumLink&&w->activeFocusItem()==albumLink,

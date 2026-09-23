@@ -138,13 +138,32 @@ Item {
                         AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested();background:Rectangle {color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}}
                     }
                 }
-                SungText { objectName: "immersiveTitle"; text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade*player.detailsOpacity; transform: Translate { x: presentation.offset } Layout.fillWidth: true; Layout.maximumWidth: player.width<600 ? coverColumn.width : immersiveArt.width; Layout.alignment: Qt.AlignHCenter; font.pixelSize: player.width<900?22:30; font.weight: Font.DemiBold;
+                SungText {
+                    id: title
+                    objectName: "immersiveTitle"
+                    text: presentation.shown.title || "Nothing playing"
+                    opacity: presentation.fade*player.detailsOpacity
+                    transform: Translate { x: presentation.offset }
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: player.width<600 ? coverColumn.width : immersiveArt.width
+                    Layout.alignment: Qt.AlignHCenter
+                    font.pixelSize: player.width<900?22:30
+                    font.weight: Font.DemiBold
+
                     // The 480px coverflow capture left a 70px title measure.
                     // Use the cover column and elide on one line if needed, so
                     // a word is never split mid-letter.
-                    wrapMode: player.width<600 ? Text.NoWrap : Text.Wrap; elide: player.width<600 ? Text.ElideRight : Text.ElideNone; maximumLineCount: player.width<600 ? 1 : 2 }
+                    wrapMode: player.width<600 ? Text.NoWrap : Text.Wrap
+                    elide: player.width<600 ? Text.ElideRight : Text.ElideNone
+                    maximumLineCount: player.width<600 ? 1 : 2
+                }
                 AbstractButton {
-                    objectName:"immersiveArtistButton";Layout.fillWidth:true;Layout.maximumWidth:immersiveArt.width;Layout.alignment:Qt.AlignHCenter;implicitHeight:48;leftPadding:0;rightPadding:8
+                    objectName: "immersiveArtistButton"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: immersiveArt.width
+                    Layout.alignment: Qt.AlignHCenter
+                    implicitHeight: 48
+                    leftPadding: 0; rightPadding: 8
                     enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
                     Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
                     onClicked: player.collectionRequested(player.artistTarget)
@@ -155,7 +174,13 @@ Item {
                     Rectangle { objectName: "immersiveArtistFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
                 }
                 AbstractButton {
-                    objectName:"immersiveAlbumButton";Layout.fillWidth:true;Layout.maximumWidth:immersiveArt.width;Layout.alignment:Qt.AlignHCenter;implicitHeight:40;leftPadding:0;rightPadding:8;visible:!!app.current.album
+                    objectName: "immersiveAlbumButton"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: immersiveArt.width
+                    Layout.alignment: Qt.AlignHCenter
+                    implicitHeight: 40
+                    leftPadding: 0; rightPadding: 8
+                    visible: !!app.current.album
                     enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
                     Accessible.name: "Open album \u00b7 "+(app.current.album || "")
                     onClicked: player.collectionRequested(player.albumTarget)
