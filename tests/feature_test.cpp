@@ -2856,6 +2856,15 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   // ListTokens.ItemLabelTextFont is BodyLarge, whose own weight is regular.
   c.check(ordinaryTitle && ordinaryTitle->property("font").value<QFont>().weight() == QFont::Normal,
           "the row title uses BodyLarge's regular weight");
+  const int idleRowObjects = ordinaryRow ? ordinaryRow->findChildren<QObject *>().size() : -1;
+  const int idleIndicators = ordinaryRow ? ordinaryRow->findChildren<QObject *>("playingIndicator").size() : -1;
+  auto idleLeadingLoader = ordinaryRow ? anyItem(ordinaryRow, "albumIndicatorLoader") : nullptr;
+  auto idleTrailingLoader = ordinaryRow ? anyItem(ordinaryRow, "trailingIndicatorLoader") : nullptr;
+  c.check(ordinaryRow && !ordinaryRow->property("active").toBool() && idleIndicators == 0 &&
+              idleLeadingLoader && !idleLeadingLoader->isVisible() &&
+              idleTrailingLoader && !idleTrailingLoader->isVisible(),
+          QString("an idle track row has no playing indicator (%1 descendants, %2 indicators)")
+              .arg(idleRowObjects).arg(idleIndicators));
 
   // --- The fill axis: filled where you are, outlined where you are not ---
   auto railHome = shownItem(w->contentItem(), "navBar_home");
@@ -2946,6 +2955,12 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     c.check(queueRow && queueLead && qAbs(queueRow->height() - 72) < 1 &&
                 qAbs(queueLead->width() - 56) < 1,
             "queue rows use ListTokens' 72dp body and 56dp image too");
+    const auto queueIndicators = queueRow ? queueRow->findChildren<QObject *>("playingIndicator") : QList<QObject *>{};
+    auto queueBars = queueIndicators.size() == 1 ? qobject_cast<QQuickItem *>(queueIndicators.first()) : nullptr;
+    c.check(queueRow && queueLead && queueRow->property("active").toBool() && queueIndicators.size() == 1 &&
+                queueBars && queueBars->isVisible() &&
+                queueLead->findChildren<QObject *>("playingIndicator").isEmpty(),
+            "an active queue row builds one visible trailing indicator");
     b->setCompactDensity(true);
     QTest::qWait(250);
     c.check(queueRow && queueLead && qAbs(queueRow->height() - 56) < 1 &&
@@ -3388,6 +3403,22 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   albumList = shownItem(w->contentItem(), "tracksView");
   albumRow = albumList ? shownItem(albumList, "trackRow_0") : nullptr;
   albumLead = albumRow ? anyItem(albumRow, "trackLeading") : nullptr;
+  if (auto selection = albumList ? albumList->findChild<RowSelection *>() : nullptr)
+    selection->clear();
+  if (auto settingsButton = shownItem(w->contentItem(), "settingsButton"))
+    settingsButton->forceActiveFocus();
+  QTest::mouseMove(w, QPoint(2, 2));
+  b->playCollection(0);
+  c.check(c.until([&] { return albumRow && albumRow->property("active").toBool(); }),
+          "the first album row becomes active");
+  const auto albumIndicators = albumRow ? albumRow->findChildren<QObject *>("playingIndicator") : QList<QObject *>{};
+  auto albumBars = albumIndicators.size() == 1 ? qobject_cast<QQuickItem *>(albumIndicators.first()) : nullptr;
+  c.check(albumRow && albumLead && !albumRow->property("selectionVisible").toBool() &&
+              albumIndicators.size() == 1 && albumBars && albumBars->isVisible() &&
+              albumLead->findChildren<QObject *>("playingIndicator").size() == 1,
+          "an active album row builds one visible leading indicator");
+  b->stop();
+  b->clearQueue();
   if (albumRow && albumLead) {
     const auto point = albumLead->mapToScene(albumLead->boundingRect().center()).toPoint();
     QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
@@ -3405,11 +3436,14 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     if (auto settingsButton = shownItem(w->contentItem(), "settingsButton"))
       settingsButton->forceActiveFocus();
     QTest::mouseMove(w, QPoint(2, 2));
+    const bool activeAlbumRow = c.until([&] { return albumRow->property("active").toBool(); });
     auto leadingIndicator = anyItem(albumLead, "playingIndicator");
-    c.check(c.until([&] { return albumRow->property("active").toBool(); }) && leadingIndicator &&
+    // The checkbox wins while selection is offered; the Loader releases the
+    // bars then, and creates them again when the leading slot is free.
+    c.check(activeAlbumRow &&
                 (albumRow->property("selectionVisible").toBool()
-                     ? checkbox && checkbox->isVisible() && !leadingIndicator->isVisible()
-                     : leadingIndicator->isVisible()),
+                     ? checkbox && checkbox->isVisible() && !leadingIndicator
+                     : leadingIndicator && leadingIndicator->isVisible()),
             "the album leading slot shows selection or the active playing indicator");
     b->stop();
     b->clearQueue();

@@ -195,7 +195,16 @@ ItemDelegate {
                 font.pixelSize: Theme.labelSmall; labelRole: true; font.features: {"tnum": 1}
                 color: row.supportInk
             }
-            PlayingIndicator { ink: row.titleInk; anchors.centerIn: parent; visible: row.albumMode && row.active && !row.selectionVisible }
+            // Loader creates the bars only for the active album row. With no
+            // explicit size, it takes PlayingIndicator's 25x20 implicit size
+            // (Qt Loader Sizing Behavior), then centres it in this slot.
+            Loader {
+                objectName: "albumIndicatorLoader"
+                anchors.centerIn: parent
+                active: row.albumMode && row.active && !row.selectionVisible
+                visible: active
+                sourceComponent: PlayingIndicator { ink: row.titleInk }
+            }
             // Material puts a selection control in a list item's leading slot,
             // and for a list you can take several rows from that is a checkbox.
             MCheckbox {
@@ -220,7 +229,14 @@ ItemDelegate {
             // only the artist already stated in the album heading.
             MatchText { objectName: "trackSupport"; visible: row.track.kind==="smart" || !row.repeatedAlbumArtist; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.kind==="smart" ? (row.track.description || "") : row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
         }
-        PlayingIndicator { ink: row.titleInk; visible: row.active && !row.albumMode }
+        // Qt Loader.active releases the inactive indicator. Keep this Loader
+        // invisible too, so RowLayout adds no spacing before the duration.
+        Loader {
+            objectName: "trailingIndicatorLoader"
+            active: row.active && !row.albumMode
+            visible: active
+            sourceComponent: PlayingIndicator { ink: row.titleInk }
+        }
         // A row's trailing supporting text is label small
         // (ListTokens.ItemTrailingSupportingTextFont), not body small.
         SungText { font.features: {"tnum": 1}; visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: Theme.labelSmall; labelRole: true; color: row.supportInk; Layout.rightMargin: 2 }
