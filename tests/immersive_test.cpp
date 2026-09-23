@@ -755,6 +755,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   auto waveMotion=w->findChild<QObject*>("seekWaveMotion");
   check(waveMotion&&waveMotion->property("duration").toInt()==1000,
         "the 28px seek wave advances one wavelength per second");
+  auto seek480=visibleItem(w->contentItem(),"immersiveSeek");
+  check(seek480&&seek480->width()>=300,"480px seek has at least 300px of travel");
   resizeTo(1180,800);
   title=visibleItem(w->contentItem(),"immersiveTitle");
   check(title&&title->property("typeRole")=="headlineLarge"&&title->property("emphasized").toBool()&&

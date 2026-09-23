@@ -263,20 +263,26 @@ Item {
         // the bar off centre while the row stayed centred, which is the kind of
         // thing that reads as crooked without being obviously wrong. The empty
         // slot at the leading end mirrors them, so the two ends weigh the same.
-        RowLayout {
+        GridLayout {
             id: seekRow; objectName: "immersiveSeekRow"
-            Layout.fillWidth: true; spacing: 12; opacity:player.controlsShown?1:0
+            // SliderTokens.kt:88-111 sizes the handle and track, but gives no
+            // minimum width. Below 700px the time/seek trio gets the whole
+            // first row so a 480px window gives it over 300px; actions wrap
+            // below. Seven columns retain the old centred wide arrangement.
+            readonly property bool compact: player.width<700
+            columns: compact?3:7; columnSpacing:12; rowSpacing:0
+            Layout.fillWidth: true; opacity:player.controlsShown?1:0
             enabled: opacity>0; Accessible.ignored: opacity===0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
-            Item { Layout.preferredWidth: seekTrailing.implicitWidth; Layout.preferredHeight: 1 }
-            Item { Layout.fillWidth: true }
+            Item { visible:!seekRow.compact; Layout.preferredWidth: seekTrailing.implicitWidth; Layout.preferredHeight: 1 }
+            Item { visible:!seekRow.compact; Layout.fillWidth: true }
             SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40; Accessible.ignored: seekRow.opacity===0 }
             SeekBar { objectName: "immersiveSeek"; Layout.fillWidth: true; Layout.maximumWidth: 640; Accessible.ignored: seekRow.opacity===0 }
             SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; Accessible.ignored: seekRow.opacity===0 }
-            Item { Layout.fillWidth: true }
+            Item { visible:!seekRow.compact; Layout.fillWidth: true }
             RowLayout {
                 id: seekTrailing
-                spacing: 12
+                spacing: 12; Layout.columnSpan: seekRow.compact?3:1; Layout.alignment:Qt.AlignRight
                 MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue \u00b7 Ctrl+L";Accessible.name:"Queue \u00b7 Ctrl+L";Accessible.ignored:seekRow.opacity===0;onClicked:player.queueRequested()}
                 Item {
                     id: volumeSlot
