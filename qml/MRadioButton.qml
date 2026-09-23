@@ -51,7 +51,8 @@ AbstractButton {
                 height: width
                 radius: Theme.shapeFull(width)
                 color: control.mark
-                Behavior on width { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
+                // RadioButton.kt:137-142 grows the dot on FastSpatial.
+                Behavior on width { enabled: app.motion; NumberAnimation { id: radioDotSpring; objectName: "radioDotSpring"; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             }
         }
     }

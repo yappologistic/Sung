@@ -5483,6 +5483,50 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
                                   .arg(cramped.join(", ")));
   c.shot("01-type-scale");
 
+  // RadioButton.kt:137-142, Switch.kt:180-189 and ToggleButton.kt:173-181
+  // name FastSpatial. SplitButton.kt:693-697,773-780 names DefaultEffects.
+  const auto checkComponentSpring = [&](const char *sourceFile, const char *animationName,
+                                        const QString &spring, const QVariantList &options = {}) {
+    QQmlComponent source(qmlEngine(w), QUrl(QString("qrc:/qml/%1.qml").arg(sourceFile)));
+    QScopedPointer<QObject> made(source.create(qmlContext(w)));
+    auto item = qobject_cast<QQuickItem *>(made.data());
+    c.check(item, QString("%1 can be made to inspect its spring").arg(sourceFile));
+    if (!item) return;
+    item->setParentItem(w->contentItem());
+    if (!options.isEmpty()) item->setProperty("options", options);
+    QTest::qWait(50);
+    // Behavior animations are not QObject children of the component root.
+    // QML IDs live in the component or delegate context (QQmlContext).
+    QQuickItem *scopeItem = item;
+    if (QString::fromLatin1(sourceFile) == "MSegmentedControl")
+      scopeItem = anyItem(item, "segmentBackground");
+    auto context = scopeItem ? qmlContext(scopeItem) : nullptr;
+    auto animation = context ? context->objectForName(animationName) : nullptr;
+    const int duration = animation ? animation->property("duration").toInt() : -1;
+    const int wantedDuration = c.evaluate("Theme." + spring + "Ms").toInt();
+    const auto curveValue = animation
+        ? QQmlProperty::read(animation, "easing.bezierCurve", qmlContext(animation)) : QVariant();
+    const auto actualCurve = curveValue.toList();
+    const auto wantedCurve = c.evaluate("Theme." + spring).toList();
+    c.check(animation && duration == wantedDuration && actualCurve == wantedCurve,
+            QString("%1 uses the %2 duration and curve (found=%3, duration=%4/%5, "
+                    "curveType=%6, count=%7/%8, first=%9/%10)")
+                .arg(animationName, spring).arg(bool(animation)).arg(duration).arg(wantedDuration)
+                .arg(curveValue.typeName() ? curveValue.typeName() : "null")
+                .arg(actualCurve.size()).arg(wantedCurve.size())
+                .arg(actualCurve.isEmpty() ? -1 : actualCurve.first().toDouble())
+                .arg(wantedCurve.isEmpty() ? -1 : wantedCurve.first().toDouble()));
+    item->setVisible(false);
+    item->setParentItem(nullptr);
+  };
+  checkComponentSpring("MRadioButton", "radioDotSpring", "springFastSpatial");
+  checkComponentSpring("MSwitch", "switchThumbSpring", "springFastSpatial");
+  checkComponentSpring("MSplitButton", "splitLeadingShapeSpring", "springEffects");
+  checkComponentSpring("MSplitButton", "splitTrailingShapeSpring", "springEffects");
+  checkComponentSpring("MSegmentedControl", "segmentShapeSpring", "springFastSpatial",
+                       QVariantList{QVariantMap{{"key", "a"}, {"label", "A"}},
+                                    QVariantMap{{"key", "b"}, {"label", "B"}}});
+
   // --- The app bar says when content is under it ---
   auto bar = anyItem(w->contentItem(), "appBarSurface");
   auto tracks = shownItem(w->contentItem(), "tracksView");

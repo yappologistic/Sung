@@ -70,7 +70,8 @@ Item {
             bottomRightRadius: topRightRadius
             border.width: control.filled || control.tonal ? 0 : 1
             border.color: Theme.outlineVariant
-            Behavior on topRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+            // SplitButton.kt:693-697 morphs the leading shape on DefaultEffects.
+            Behavior on topRightRadius { enabled: app.motion; NumberAnimation { id: splitLeadingShapeSpring; objectName: "splitLeadingShapeSpring"; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Rectangle {
                 anchors.fill: parent
                 topLeftRadius: parent.topLeftRadius; bottomLeftRadius: parent.bottomLeftRadius
@@ -133,7 +134,8 @@ Item {
             topRightRadius: control.outer; bottomRightRadius: control.outer
             border.width: control.filled || control.tonal ? 0 : 1
             border.color: Theme.outlineVariant
-            Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+            // SplitButton.kt:773-780 morphs the trailing shape on DefaultEffects.
+            Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { id: splitTrailingShapeSpring; objectName: "splitTrailingShapeSpring"; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Rectangle {
                 anchors.fill: parent
                 topLeftRadius: parent.topLeftRadius; bottomLeftRadius: parent.bottomLeftRadius

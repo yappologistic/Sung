@@ -56,7 +56,8 @@ Switch {
             // Material gives the switch the fast spatial spring for it, so it
             // carries a little of the overshoot a spatial spring has.
             Behavior on x { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
-            Behavior on width { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+            // Switch.kt:180-189 gives thumb resizing the same FastSpatial spring.
+            Behavior on width { NumberAnimation { id: switchThumbSpring; objectName: "switchThumbSpring"; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         }
     }
     contentItem: SungText { id:label;opacity: control.dimmed ? Theme.disabledContentOpacity : 1;text: control.text;rightPadding:68;verticalAlignment:Text.AlignVCenter;wrapMode:Text.Wrap;font.pixelSize:Theme.bodyLarge }
