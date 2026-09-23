@@ -1268,17 +1268,31 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                     readonly property bool twoRow: width < 604
                     readonly property bool showQueue: !window.compactWindow
-                    readonly property bool showLike: !twoRow && window.width >= 1050
-                    readonly property bool showLyrics: !twoRow && window.width >= 840
-                    readonly property bool showOutput: !twoRow && window.width >= 1050
-                    readonly property bool showVolume: !twoRow && window.width >= 1050
-                    // SmallIconButtonTokens supplies 40dp actions. The left
-                    // needs 64 artwork + 16 gap + 100 title, plus 56 for Like.
-                    // On the right, 156 fits Queue and 100 of overflow;
-                    // Lyrics adds 56. Four inline icons need 208; the 66dp
-                    // volume slider raises that group to 274.
-                    readonly property real leftNeed: showLike ? 236 : 180
-                    readonly property real rightNeed: showVolume ? (window.width >= 1160 ? 274 : 208) : showLyrics ? 212 : 156
+                    // AppBarDsl.kt:312-346 reserves an overflow action before
+                    // measuring the others. Keep the 120dp seek minimum and
+                    // fold the least-used actions until both measured sides fit.
+                    function needRight(like, output, lyrics, volume) {
+                        const overflow = window.width < 980 || !like || !output || !lyrics || !volume || !showQueue
+                        const widths = []
+                        if (lyrics) widths.push(lyricsButton.implicitWidth)
+                        if (showQueue) widths.push(queueButton.implicitWidth)
+                        if (overflow) widths.push(playerOverflow.itemWidth)
+                        if (output) widths.push(outputButton.implicitWidth)
+                        if (volume) widths.push(volumeControl.implicitWidth)
+                        return widths.reduce((sum, value) => sum + value, 0) + Math.max(0, widths.length-1)*playerRightRow.spacing
+                    }
+                    function fits(like, output, lyrics, volume) {
+                        const left = nowButton.implicitWidth + playerLeftRow.spacing + nowDetails.Layout.minimumWidth
+                                   + (like ? playerLeftRow.spacing + likeButton.implicitWidth : 0)
+                        return width >= 212 + 32 + 2*Math.max(left, needRight(like, output, lyrics, volume))
+                    }
+                    readonly property bool showLike: !twoRow && fits(true, true, true, true)
+                    readonly property bool showOutput: !twoRow && (showLike || fits(false, true, true, true))
+                    readonly property bool showLyrics: !twoRow && (showOutput || fits(false, false, true, true))
+                    readonly property bool showVolume: !twoRow && (showLyrics || fits(false, false, false, true))
+                    readonly property real leftNeed: nowButton.implicitWidth + playerLeftRow.spacing + nowDetails.Layout.minimumWidth
+                                                     + (showLike ? playerLeftRow.spacing + likeButton.implicitWidth : 0)
+                    readonly property real rightNeed: needRight(showLike, showOutput, showLyrics, showVolume)
                     readonly property real sideNeed: Math.max(leftNeed,rightNeed)
                     // Time labels and gaps use 92dp, so a 212dp centre leaves
                     // the chosen 120dp seek minimum. The side slots hold the
@@ -1291,18 +1305,19 @@ ApplicationWindow {
                         id: playerLeft; objectName: "playerLeft"; x: 0; y: playerLayout.twoRow ? 8 : (parent.height-64)/2
                         width: playerLayout.leftWidth; height: 64
                         RowLayout {
-                            anchors.fill: parent; spacing: 16
+                            id: playerLeftRow; anchors.fill: parent; spacing: 16
                             AbstractButton { id: nowButton; objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
                                 contentItem: Artwork { id: nowArtwork; objectName: "nowArtwork"; url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; radius: Theme.shapeMedium; pixels: 150; fit:app.currentArtworkFit; opacity: window.coverFlying?0:1 }
                                 background: Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; radius: Theme.shapeLarge; border.width: parent.activeFocus?2:0; border.color: Theme.focusRing }
                             }
                             ColumnLayout {
+                                id: nowDetails
                                 Layout.fillWidth: true; Layout.minimumWidth: 100; Layout.maximumWidth: 220
                                 spacing: 6; opacity: nowPresentation.fade*window.coverDetailsOpacity; transform: Translate { x: nowPresentation.offset }
                                 AbstractButton { objectName: "nowTitle"; Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.title || "Nothing playing"; font.pixelSize: Theme.titleMedium; font.weight: Font.DemiBold } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
                                 AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open(window.relatedItem(app.current,"artist")); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.artist || ""; color: Theme.muted; font.pixelSize: Theme.bodyMedium } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
                             }
-                            MButton { symbol: "heart"; tip: app.liked?"Unlike":"Like"; toggle: true; selected: app.liked; enabled: app.currentIndex>=0; visible: playerLayout.showLike; onClicked: app.toggleLike(app.current) }
+                            MButton { id: likeButton; symbol: "heart"; tip: app.liked?"Unlike":"Like"; toggle: true; selected: app.liked; enabled: app.currentIndex>=0; visible: playerLayout.showLike; onClicked: app.toggleLike(app.current) }
                         }
                     }
                     Item {
@@ -1340,10 +1355,13 @@ ApplicationWindow {
                         y: playerLayout.twoRow ? 20 : (parent.height-48)/2
                         width: playerLayout.rightWidth; height: 48
                         RowLayout {
-                            anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 16
-                            MButton { symbol: "lyrics"; tip: "Lyrics · Ctrl+Y"; toggle: true; selected: window.side==="lyrics"; enabled: app.currentIndex>=0; visible: playerLayout.showLyrics; onClicked: window.activateSide("lyrics") }
+                            // DockedToolbarTokens.ContainerMinSpacing and
+                            // ContainerMaxSpacing allow 4 to 32dp. Keep this
+                            // bar's existing 16dp gap between trailing controls.
+                            id: playerRightRow; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; spacing: 16
+                            MButton { id: lyricsButton; symbol: "lyrics"; tip: "Lyrics · Ctrl+Y"; toggle: true; selected: window.side==="lyrics"; enabled: app.currentIndex>=0; visible: playerLayout.showLyrics; onClicked: window.activateSide("lyrics") }
                             MButton {
-                                objectName: "queueButton"; symbol: "queue"; tip: "Queue · Ctrl+L"; visible: playerLayout.showQueue
+                                id: queueButton; objectName: "queueButton"; symbol: "queue"; tip: "Queue · Ctrl+L"; visible: playerLayout.showQueue
                                 toggle: true; selected: window.side==="queue"; onClicked: window.activateSide("queue")
                                 MBadge {
                                     objectName: "queueBadge"
@@ -1353,13 +1371,11 @@ ApplicationWindow {
                                     x: parent.width/2+12-inset; y: (parent.height-24)/2-height+lift
                                 }
                             }
-                            // AppBarDsl.kt:312-346 gives overflow a slot before
-                            // measuring actions. Sung folds these in the order:
-                            // lyrics, queue, like, shuffle, repeat, output,
-                            // then volume.
+                            // AppBarDsl.kt:312-346 keeps the overflow action
+                            // reachable after inline actions leave the row.
                             MAppBarRow {
                                 id: playerOverflow; objectName: "playerOverflow"
-                                Layout.preferredWidth: playerLayout.twoRow ? itemWidth : Math.min(implicitWidth, itemWidth*2+spacing)
+                                Layout.preferredWidth: playerLayout.twoRow ? itemWidth : Math.min(implicitWidth, Math.max(itemWidth, playerLayout.rightWidth-playerLayout.rightNeed+itemWidth))
                                 Layout.preferredHeight: 48
                                 visible: live.length > 0
                                 actions: [

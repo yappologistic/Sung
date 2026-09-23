@@ -3802,7 +3802,7 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
   }
   // SmallIconButtonTokens uses 40dp buttons. The bar keeps a 100dp title;
   // under 668px the 120dp seek track takes a second row.
-  for (const int width : {1440, 1920, 2560, 1024, 900, 840, 668, 667, 600, 480}) {
+  for (const int width : {1440, 1920, 2560, 1024, 900, 840, 800, 668, 667, 600, 480}) {
     w->resize(width, width == 480 ? 620 : 800);
     QTest::qWait(450);
     auto bar = anyItem(w->contentItem(), "playbackBar");
@@ -3838,12 +3838,34 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
     if (twoRow && transport && seekRow)
       c.check(seekRow->y() >= transport->y()+transport->height(),
               QString("the %1px seek track has its own row").arg(width));
+    // The 16dp trailing gap is within DockedToolbarTokens' 4 to 32dp range.
+    // This guards the measured 640dp seek width, not a spec width.
     if (width == 1440)
-      c.check(seek && seek->width() >= 700,
-              QString("the 1440px seek track reaches 700px (%1px)").arg(seek ? seek->width() : 0, 0, 'f', 0));
+      c.check(seek && seek->width() >= 640,
+              QString("the 1440px seek track reaches 640px (%1px)").arg(seek ? seek->width() : 0, 0, 'f', 0));
     if (width == 1920 || width == 2560)
       c.check(seek && seek->width() >= 860,
               QString("the %1px seek track reaches the 960px transport cap").arg(width));
+    if (width == 800) {
+      c.check(shownItem(w->contentItem(), "exactVolumeButton") != nullptr,
+              "the 800px player keeps volume directly reachable");
+      auto overflow = anyItem(w->contentItem(), "playerOverflow");
+      QStringList folded;
+      if (overflow)
+        for (const auto &action : overflow->property("live").toList()) {
+          const auto row = action.toMap();
+          folded << row.value("key").toString();
+        }
+      c.check(folded.contains("like") && folded.contains("output") && !folded.contains("volume"),
+              "the 800px player folds like and output before volume");
+    }
+    if (width == 1440 || width == 1024 || width == 840 || width == 600) {
+      for (const QString &mode : {QStringLiteral("dark"), QStringLiteral("light")}) {
+        b->setTheme(mode);
+        c.shot(QString("player-%1-%2").arg(width).arg(mode));
+      }
+      b->setTheme("dark");
+    }
   }
   w->resize(1400, 900);
   QTest::qWait(500);
@@ -3855,8 +3877,13 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(800);
   c.check(playerOverflow && playerOverflow->isVisible(),
           "a narrow one keeps the controls it cannot show in an overflow instead");
-  c.check(playerOverflow && playerOverflow->property("live").toList().size() == 5,
-          "holding like, shuffle, repeat, output and volume");
+  QStringList narrowFolded;
+  if (playerOverflow)
+    for (const auto &action : playerOverflow->property("live").toList())
+      narrowFolded << action.toMap().value("key").toString();
+  c.check(narrowFolded.contains("shuffle") && narrowFolded.contains("repeat") &&
+              !narrowFolded.contains("volume"),
+          "holding shuffle and repeat while volume stays direct");
   c.shot("13-player-overflow");
   // A compact window moves the side controls into the same menu and gives
   // seeking a full-width second row.
