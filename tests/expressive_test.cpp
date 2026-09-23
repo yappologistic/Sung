@@ -420,6 +420,7 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(500);
   player = shownItem(w->contentItem(), "immersivePlayer");
   c.check(player && player->property("coverflow").toBool(), "carousel preference survives player recreation");
+  backdrop = player ? itemNamed(player, "ambientBackdrop") : nullptr;
   c.click("immersiveLayoutButton");
   c.click("immersiveCoverflowToggle");
   QTest::qWait(300);
@@ -429,6 +430,11 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   b->setTheme("light");
   QTest::qWait(400);
   c.shot("04-backdrop-light");
+  b->setColorContrast(1);
+  c.check(backdrop && qAbs(backdrop->property("inkTarget").toReal() - 11) < 0.001,
+          "high contrast uses the onSurfaceVariant 11:1 target");
+  c.shot("04b-backdrop-light-high");
+  b->setColorContrast(0);
   b->setTheme("dark");
 
   // --- Now playing panel ---

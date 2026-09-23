@@ -16,6 +16,16 @@ Item {
     property real corner: 0
     property real drift: 1
     readonly property bool active: app.ambientBackdrop && !!url
+    // MCU color_spec_2021.ts:241-248 gives onSurfaceVariant a surface
+    // contrast curve. The cover is part of that surface, so the decoded
+    // pixels determine the smallest scrim meeting the same text target.
+    // color_spec_2021.ts:247 gives 4.5:1 at standard, 7:1 at medium and
+    // 11:1 at high. Keep dim whenever the decoded cover already passes.
+    readonly property real inkTarget: app.colorContrast <= 0.5
+        ? 4.5 + 5 * app.colorContrast
+        : 7 + 8 * (app.colorContrast - 0.5)
+    readonly property real effectiveDim: art.ready
+        ? art.minimumScrim(scrim, Theme.muted, dim, inkTarget) : dim
     readonly property bool drifts: corner <= 0
     readonly property bool animating: drifts && active && visible && app.motion && Window.window && Window.window.visible && Window.window.visibility!==Window.Minimized
     // The decoded low end already drives the playing indicator. Reusing it here
@@ -72,7 +82,7 @@ Item {
         objectName: "ambientScrim"
         anchors.fill: parent
         radius: backdrop.corner
-        color: Qt.rgba(backdrop.scrim.r,backdrop.scrim.g,backdrop.scrim.b,backdrop.dim)
+        color: Qt.rgba(backdrop.scrim.r,backdrop.scrim.g,backdrop.scrim.b,backdrop.effectiveDim)
     }
     // Controls sit at the bottom of these surfaces and need the deepest scrim.
     Rectangle {

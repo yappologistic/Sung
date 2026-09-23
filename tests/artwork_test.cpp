@@ -15,6 +15,7 @@
 #include <QMediaPlayer>
 #include <QMediaMetaData>
 #include <QVideoFrame>
+#include <cmath>
 
 // A response the loader will take from the network cache instead of the
 // network, so what a surface fetches for a URL can be checked offline.
@@ -75,6 +76,128 @@ private slots:
     art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(wideFile));art.setFit(true);QTRY_VERIFY(art.ready());QTest::qWait(100);mixed.fill(Qt::transparent);{QPainter p(&mixed);art.paint(&p);}QVERIFY(qAbs(mixed.pixelColor(50,8).alphaF()-(1-art.m_mix))<0.02);QVERIFY(mixed.pixelColor(50,50).alpha()>250);
     art.setCrossfade(true);art.setSource(QUrl::fromLocalFile(dir.filePath("missing.png")));QTRY_VERIFY(!art.ready());QVERIFY(!art.transitioning());
     art.setSource(QUrl::fromLocalFile(files[0]));art.setSource({});QVERIFY(!art.ready());QVERIFY(art.m_previous.isNull());
+  }
+  void backdropScrimProtectsInk() {
+    QTemporaryDir dir;
+    RoundedArt art;
+    art.setBlur(22);
+    const auto check = [&](const QColor &cover, const QColor &surface,
+                           const QColor &ink, qreal base, bool mustRise) {
+      QImage image(160, 160, QImage::Format_RGB32);
+      image.fill(cover);
+      const auto path = dir.filePath(cover.name() + ".png");
+      if (!image.save(path)) return false;
+      art.setSource(QUrl::fromLocalFile(path));
+      QElapsedTimer timer;
+      timer.start();
+      while (art.m_image.isNull() && timer.elapsed() < 3000) QTest::qWait(10);
+      if (art.m_image.isNull()) return false;
+      const qreal alpha = art.minimumScrim(surface, ink, base, 4.5);
+      if (mustRise && alpha <= base) return false;
+      if (!mustRise && qAbs(alpha - base) > 0.001) return false;
+      return art.minimumContrast(surface, ink, alpha) >= 4.5;
+    };
+    QVERIFY(check(Qt::black, QColor("#fff8f7"), QColor("#705c53"), 0.8, true));
+    QVERIFY(check(QColor("#b97962"), QColor("#fff8f7"), QColor("#705c53"), 0.8, false));
+    QVERIFY(check(Qt::white, QColor("#151211"), QColor("#d8c3bd"), 0.8, false));
+  }
+  void scrimSolveCost() {
+    QTemporaryDir dir;
+    QImage cover(160, 160, QImage::Format_RGB32);
+    cover.fill(Qt::black);
+    const auto path = dir.filePath("black.png");
+    QVERIFY(cover.save(path));
+    RoundedArt art;
+    art.setPixels(160);
+    art.setBlur(22);
+    art.setSource(QUrl::fromLocalFile(path));
+    QTRY_VERIFY(art.ready());
+    QCOMPARE(art.m_scrimSamples.size(), 256);
+    const QColor surface("#fff8f7"), ink("#705c53");
+    QElapsedTimer timer;
+    timer.start();
+    qreal total = 0;
+    for (int i = 0; i < 100; ++i)
+      total += art.minimumScrim(surface, ink, 0.8, 4.5);
+    qInfo().noquote() << "SCRIM_100_CALLS_MS" << timer.nsecsElapsed() / 1e6;
+    QVERIFY(total > 80);
+  }
+  void scrimGridMatchesFullScan() {
+    QTemporaryDir dir;
+    QVector<QImage> covers;
+    for (const QColor color : {QColor(Qt::black), QColor(Qt::white),
+                               QColor("#ee2244"), QColor("#164fe5")}) {
+      QImage image(160, 160, QImage::Format_RGB32);
+      image.fill(color);
+      covers.append(image);
+    }
+    QImage split(160, 160, QImage::Format_RGB32);
+    split.fill(QColor("#ec283d"));
+    { QPainter painter(&split); painter.fillRect(0, 80, 160, 80, QColor("#163cd0")); }
+    covers.append(split);
+    QImage checks(160, 160, QImage::Format_RGB32);
+    QImage gradient(160, 160, QImage::Format_RGB32);
+    for (int y = 0; y < 160; ++y) for (int x = 0; x < 160; ++x) {
+      checks.setPixelColor(x, y, ((x / 8 + y / 8) & 1) ? QColor("#101018") : QColor("#f9d856"));
+      gradient.setPixelColor(x, y, QColor(x * 255 / 159, y * 255 / 159, 170));
+    }
+    covers.append(checks);
+    covers.append(gradient);
+
+    const auto linear = [](double value) {
+      return value <= 0.04045 ? value / 12.92 : std::pow((value + 0.055) / 1.055, 2.4);
+    };
+    const auto luma = [&](double red, double green, double blue) {
+      return 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue);
+    };
+    const auto fullContrast = [&](const QImage &image, const QColor &surface,
+                                  const QColor &ink, qreal alpha) {
+      const double sr = surface.redF(), sg = surface.greenF(), sb = surface.blueF();
+      const double inkL = luma(ink.redF(), ink.greenF(), ink.blueF());
+      double minimum = 100;
+      for (int y = 0; y < image.height(); ++y) for (int x = 0; x < image.width(); ++x) {
+        const QRgb pixel = image.pixel(x, y);
+        const double reveal = (1 - alpha) * qAlpha(pixel) / 255.0;
+        const double washL = luma(sr + reveal * (qRed(pixel) / 255.0 - sr),
+                                  sg + reveal * (qGreen(pixel) / 255.0 - sg),
+                                  sb + reveal * (qBlue(pixel) / 255.0 - sb));
+        minimum = qMin(minimum, (qMax(washL, inkL) + 0.05) / (qMin(washL, inkL) + 0.05));
+      }
+      return minimum;
+    };
+    const auto fullScrim = [&](const QImage &image, const QColor &surface,
+                               const QColor &ink) {
+      qreal low = 0.8, high = 1;
+      if (fullContrast(image, surface, ink, low) >= 4.5) return low;
+      for (int i = 0; i < 12; ++i) {
+        const qreal middle = (low + high) / 2;
+        if (fullContrast(image, surface, ink, middle) >= 4.5) high = middle;
+        else low = middle;
+      }
+      return high;
+    };
+
+    RoundedArt art;
+    art.setPixels(160);
+    art.setBlur(22);
+    qreal largestDifference = 0;
+    for (int i = 0; i < covers.size(); ++i) {
+      const auto path = dir.filePath(QString::number(i) + ".png");
+      QVERIFY(covers[i].save(path));
+      art.setSource(QUrl::fromLocalFile(path));
+      QTRY_VERIFY(!art.m_image.isNull());
+      QCOMPARE(art.m_scrimSamples.size(), 256);
+      QCOMPARE(art.m_scrimPreviousSamples.size(), 0);
+      for (const auto &pair : {std::pair{QColor("#fff8f7"), QColor("#705c53")},
+                              std::pair{QColor("#151211"), QColor("#d8c3bd")}}) {
+        const qreal sparse = art.minimumScrim(pair.first, pair.second, 0.8, 4.5);
+        const qreal full = fullScrim(art.m_softImage, pair.first, pair.second);
+        largestDifference = qMax(largestDifference, qAbs(sparse - full));
+        QVERIFY2(qAbs(sparse - full) < 0.01,
+                 qPrintable(QString("cover %1 sparse %2 full %3").arg(i).arg(sparse).arg(full)));
+      }
+    }
+    qInfo().noquote() << "SCRIM_MAX_OPACITY_DELTA" << largestDifference;
   }
   void fitAndLargeArtwork() {
     QTemporaryDir dir;QImage source(1600,800,QImage::Format_RGB32);source.fill(Qt::red);const auto file=dir.filePath("wide.jpg");QVERIFY(source.save(file));
