@@ -10,7 +10,7 @@
 MotionArtwork::MotionArtwork(QObject *parent):QObject(parent) {}
 MotionArtwork::~MotionArtwork() { clear(); }
 void MotionArtwork::clear() {
-  m_movie.reset();m_player.reset();m_sink.reset();m_frame={};
+  m_movie.reset();m_player.reset();m_sink.reset();m_frame={};m_movieFailed=false;
 }
 void MotionArtwork::publish(QImage frame) {
   if(frame.isNull())return;
@@ -37,8 +37,17 @@ void MotionArtwork::setSource(const QUrl &source) {
     m_movie->setCacheMode(QMovie::CacheNone);
     m_movie->setScaledSize(size.scaled(800,800,Qt::KeepAspectRatio));
     connect(m_movie.get(),&QMovie::frameChanged,m_movie.get(),[this]{publish(m_movie->currentImage());});
-    connect(m_movie.get(),&QMovie::finished,m_movie.get(),[this]{if(m_running)m_movie->start();});
-    connect(m_movie.get(),&QMovie::error,m_movie.get(),[this]{m_frame={};emit frameChanged();});
+    // QMovie emits finished() in the call that detects an unreadable frame.
+    // Queue the next pass so start() cannot recurse through that signal, and
+    // leave a failed decoder stopped even when finished() follows error().
+    connect(m_movie.get(),&QMovie::finished,m_movie.get(),[this]{
+      if(m_running && !m_movieFailed)m_movie->start();
+    },Qt::QueuedConnection);
+    connect(m_movie.get(),&QMovie::error,m_movie.get(),[this]{
+      m_movieFailed=true;
+      m_movie->stop();
+      m_frame={};emit frameChanged();
+    });
     if(m_running)m_movie->start();
   } else if(suffix=="mp4" || suffix=="webm") {
     m_sink=std::make_unique<QVideoSink>();m_player=std::make_unique<QMediaPlayer>();
@@ -54,6 +63,9 @@ void MotionArtwork::setSource(const QUrl &source) {
 void MotionArtwork::setRunning(bool running) {
   if(m_running==running)return;
   m_running=running;emit runningChanged();
-  if(m_movie){if(running && m_movie->state()==QMovie::NotRunning)m_movie->start();else m_movie->setPaused(!running);}
+  if(m_movie){
+    if(running && !m_movieFailed && m_movie->state()==QMovie::NotRunning)m_movie->start();
+    else if(m_movie->state()!=QMovie::NotRunning)m_movie->setPaused(!running);
+  }
   if(m_player){if(running)m_player->play();else m_player->pause();}
 }

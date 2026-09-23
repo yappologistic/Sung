@@ -165,6 +165,36 @@ private slots:
     // Repeated source replacement must release the previous decoder and frames.
     for(int i=0;i<4;++i){motion.setSource(QUrl::fromLocalFile(path));QTest::qWait(60);motion.setSource({});QVERIFY(motion.frame().isNull());}
   }
+  void removedAnimatedCoverStopsDecoder_data() {
+    QTest::addColumn<QString>("extension");
+    QTest::newRow("gif") << QString("gif");
+    QTest::newRow("webp") << QString("webp");
+  }
+  void removedAnimatedCoverStopsDecoder() {
+    QFETCH(QString,extension);
+    QTemporaryDir dir;QVERIFY(dir.isValid());
+    const auto path=dir.filePath("cover."+extension);
+    QStringList args={"-nostdin","-v","error","-f","lavfi","-i",
+                      "testsrc2=size=64x64:rate=10:duration=0.6"};
+    if(extension=="gif")args<<"-loop"<<"0";
+    args<<"-y"<<path;
+    QProcess ff;ff.start("ffmpeg",args);
+    QVERIFY(ff.waitForFinished(10000));QVERIFY2(ff.exitCode()==0,ff.readAllStandardError());
+    MotionArtwork motion;QSignalSpy frames(&motion,&MotionArtwork::frameChanged);
+    motion.setRunning(true);motion.setSource(QUrl::fromLocalFile(path));
+    QVERIFY(motion.m_movie);
+    QSignalSpy errors(motion.m_movie.get(),&QMovie::error);
+    // The six-frame WebP plays once in its file; Sung keeps it moving.
+    QTRY_VERIFY_WITH_TIMEOUT(frames.count()>12&&!motion.frame().isNull(),3000);
+    QVERIFY(QFile::remove(path));
+    QTRY_VERIFY_WITH_TIMEOUT(!errors.isEmpty(),3000);
+    QCOMPARE(motion.m_movie->state(),QMovie::NotRunning);
+    QVERIFY(motion.frame().isNull());
+    const auto count=frames.count();QTest::qWait(800);QCOMPARE(frames.count(),count);
+    motion.setRunning(false);motion.setRunning(true);
+    QCOMPARE(motion.m_movie->state(),QMovie::NotRunning);
+    QCOMPARE(frames.count(),count);
+  }
   void videoOrientationAndFrameBounds() {
     QImage image(2,3,QImage::Format_RGB32);image.fill(Qt::red);image.setPixelColor(0,2,Qt::blue);
     QVideoFrame frame(image);frame.setRotation(QtVideo::Rotation::Clockwise90);

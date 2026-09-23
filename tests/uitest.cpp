@@ -1445,7 +1445,22 @@ void runLocalArtworkTests(Backend *b,QQuickWindow *w) {
     if(QGuiApplication::platformName()=="offscreen"){
       QMetaObject::invokeMethod(w,"openMiniPlayer");QTest::qWait(500);auto mini=w->property("miniPlayer").value<QQuickWindow*>();check(mini&&mini->isVisible()&&motion->running(),"mini player retains shared animation");if(mini)check(mini->grabWindow().save(dir+"/04-mini-cover.png"),"mini capture");QMetaObject::invokeMethod(w,"restorePlayer");QTest::qWait(300);
     }
-    QFile::remove(cover);b->rescanMusicFolders();check(until([&]{return !b->importingLocal();},15000),"rescan completes after sidecar removal");check(b->current().value("motionArt").toString().isEmpty()&&motion->source().isEmpty(),"rescan removes stale animation from playing song");check(b->playing(),"artwork rescan preserves ongoing playback");
+    static QAtomicInt seekWarnings(0);
+    static QtMessageHandler previousHandler=nullptr;
+    seekWarnings.storeRelease(0);
+    previousHandler=qInstallMessageHandler([](QtMsgType type,const QMessageLogContext &context,const QString &message){
+      if(message.contains("QFileDevice::seek: IODevice is not open"))seekWarnings.fetchAndAddRelaxed(1);
+      if(previousHandler)previousHandler(type,context,message);
+    });
+    check(!motion->frame().isNull(),"animated cover is active before removal");
+    check(QFile::remove(cover),"playing cover sidecar is removed");
+    check(until([&]{return motion->frame().isNull();},3000),"unreadable cover clears its published frame");
+    const auto stoppedFrames=frames.count();QTest::qWait(400);
+    check(frames.count()==stoppedFrames&&motion->frame().isNull(),"unreadable cover stops publishing frames");
+    check(b->playing(),"cover read failure preserves playback");
+    b->rescanMusicFolders();check(until([&]{return !b->importingLocal();},15000),"rescan completes after sidecar removal");check(b->current().value("motionArt").toString().isEmpty()&&motion->source().isEmpty(),"rescan removes stale animation from playing song");check(b->playing(),"artwork rescan preserves ongoing playback");
+    qInstallMessageHandler(previousHandler);
+    check(seekWarnings.loadAcquire()<=4,"missing cover produces no warning flood");
     encode(coverArgs);b->rescanMusicFolders();check(until([&]{return !b->importingLocal()&&!motion->frame().isNull();},15000),"rescan discovers restored artwork during playback");
     b->playCollection(2);check(until([&]{return b->playing();})&&motion->source().isEmpty(),"next song without artwork releases previous animation");
   }

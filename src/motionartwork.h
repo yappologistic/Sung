@@ -34,6 +34,7 @@ private:
   QUrl m_source;
   QImage m_frame;
   bool m_running=false;
+  bool m_movieFailed=false;
   std::unique_ptr<QMovie> m_movie;
   std::unique_ptr<QVideoSink> m_sink;
   std::unique_ptr<QMediaPlayer> m_player;
