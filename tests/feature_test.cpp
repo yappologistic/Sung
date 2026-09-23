@@ -4385,10 +4385,8 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
         c.check(qAbs(item->property("topLeftRadius").toDouble() - 12) < 0.5,
                 QString("with the run's end at the medium step (%1)")
                     .arg(item->property("topLeftRadius").toDouble(), 0, 'f', 0));
-      // Material marks a chosen menu item with the tertiary container, not the
-      // secondary one it marks a chosen anything else with. A menu is a list
-      // of things you might do, and the one you are on is a different kind of
-      // statement from a row you have picked out.
+      // MenuDefaults.kt:788-814 reads StandardMenuTokens.ItemSelected*
+      // (tertiary pair) and ItemContainerColor (surfaceContainerLow).
       if (list) {
         const auto chosen = c.themeColor("tertiaryContainer");
         QList<QQuickItem *> containers;
@@ -4430,6 +4428,16 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
                     .arg(containers.size()).arg(marked));
         c.check(containers.size() > 1 && plain == containers.size()-1,
                 "unchecked menu items use StandardMenuTokens.ItemContainerColor");
+        QList<QQuickItem *> labels;
+        collectItems(list, "menuItemLabel", labels);
+        int selectedInk = 0, plainInk = 0;
+        for (auto label : labels)
+          if (label->property("color").value<QColor>() == c.themeColor("tertiaryContainerText"))
+            ++selectedInk;
+          else if (label->property("color").value<QColor>() == c.themeColor("text"))
+            ++plainInk;
+        c.check(selectedInk == 1 && plainInk == labels.size()-1 && labels.size() > 1,
+                "selected and unchecked labels use the StandardMenuTokens ink roles");
         c.check(chosen != c.themeColor("secondaryContainer"),
                 "in the tertiary container, which is not what marks a chosen row");
       }

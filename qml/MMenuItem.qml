@@ -16,9 +16,9 @@ MenuItem {
     // shape one group; the menu marks the first and last items.
     property bool firstInRun: false
     property bool lastInRun: false
-    // MenuTokens marks a chosen item with the secondary pair, the same one
-    // that marks a chosen anything else: ListItemSelectedContainerColor is the
-    // secondary container and ListItemSelectedLabelTextColor the ink on it.
+    // MenuDefaults.defaultMenuSelectableItemColors reads
+    // StandardMenuTokens.ItemSelectedContainerColor and ItemSelectedLabelTextColor:
+    // a checked item takes tertiaryContainer and onTertiaryContainer.
     // The unselected item uses ItemContainerColor (surfaceContainerLow) and
     // ItemLabelTextColor (onSurface); its leading icon uses onSurfaceVariant.
     //
@@ -26,7 +26,7 @@ MenuItem {
     // (StandardMenuTokens.ItemDisabledLabelTextColor and its opacity).
     readonly property color disabledInk: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, Theme.disabledContentOpacity)
     readonly property color ink: !control.enabled ? disabledInk
-                               : control.checked ? Theme.secondaryContainerText
+                               : control.checked ? Theme.tertiaryContainerText
                                : Theme.text
     // The leading icon is the variant ink until the item is chosen, when it
     // takes the ink of the container it has been given.
@@ -115,9 +115,9 @@ MenuItem {
             topRightRadius: topLeftRadius
             bottomLeftRadius: control.checked || control.lastInRun ? Theme.shapeMedium : Theme.shapeExtraSmall
             bottomRightRadius: bottomLeftRadius
-            // A chosen item takes the secondary container; ItemContainerColor
-            // keeps the unchecked item on surfaceContainerLow.
-            color: control.checked ? Theme.secondaryContainer : Theme.surfaceLow
+            // StandardMenuTokens.ItemSelectedContainerColor is tertiaryContainer;
+            // ItemContainerColor keeps the unchecked item on surfaceContainerLow.
+            color: control.checked ? Theme.tertiaryContainer : Theme.surfaceLow
             Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
         Rectangle {
