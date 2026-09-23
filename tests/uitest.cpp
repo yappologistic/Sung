@@ -1336,6 +1336,12 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
   QTest::qWait(120);check(settings&&settings->property("searchQuery").toString()=="vol","settings search accepts typing");
   auto volume=findItem(w->contentItem(),"volumeStepButton");auto notification=findItem(w->contentItem(),"trackNotificationsSwitch");
   check(volume&&volume->isVisible()&&notification&&!notification->isVisible(),"settings filters unrelated controls");shot("01-settings-search");
+  if(settings)settings->setProperty("searchQuery","Keep played songs offline");
+  QTest::qWait(120);
+  auto keptPicker=findItem(w->contentItem(),"keepPlayedPicker");
+  check(keptPicker&&keptPicker->isVisible()&&keptPicker->property("label").toString()=="Keep played songs offline",
+        "the kept-songs setting names its offline purpose");
+  shot("01b-kept-songs-offline");
   if(settings){settings->setProperty("searchQuery","no-such-setting");}QTest::qWait(100);auto empty=findItem(w->contentItem(),"settingsNoResults");check(empty&&empty->isVisible(),"settings no matches state");
   if(settings){QMetaObject::invokeMethod(settings,"close");}QTest::qWait(250);
   QAccessible::setActive(true);
