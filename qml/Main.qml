@@ -2230,13 +2230,26 @@ ApplicationWindow {
         MMenuItem { text: "90 minutes"; onTriggered: app.setSleep(90) }
     }
     Rectangle {
-        objectName: "errorBar"
+        id: errorBar; objectName: "errorBar"
         anchors.bottom: parent.bottom; anchors.bottomMargin: 140; anchors.horizontalCenter: parent.horizontalCenter
         width: Math.min(window.width-120,errorText.implicitWidth+(app.canRetry?180:100)); height: Math.min(150,errorText.implicitHeight+32)
         // Material has a pair of roles for this and nothing else in the app
         // wears them: an error is the one thing on screen that should not look
         // like everything else.
         radius: Theme.shapeLarge; color: Theme.errorContainer; visible: !!app.error && !window.modalOpen; z: 50
+        // Qt 6.8 Accessible.announce reports a changed error once. A dialog
+        // can hide the bar without making the same error a new announcement.
+        Accessible.role: Accessible.AlertMessage
+        Accessible.name: app.error
+        property string lastAnnouncedError: ""
+        function announceNewError() {
+            if (visible && app.error && lastAnnouncedError !== app.error) {
+                Accessible.announce(app.error)
+                lastAnnouncedError = app.error
+            }
+        }
+        onVisibleChanged: announceNewError()
+        Connections { target: app; function onErrorChanged() { if (!app.error) errorBar.lastAnnouncedError=""; errorBar.announceNewError() } }
         SungText { id: errorText; anchors.fill: parent; anchors.margins: 16; anchors.rightMargin: app.canRetry?140:58; text: app.error; wrapMode: Text.Wrap; elide: Text.ElideRight; maximumLineCount: 5; color: Theme.errorContainerText; font.pixelSize: Theme.bodyMedium }
         MButton { anchors.right: parent.right; anchors.rightMargin: 48; anchors.verticalCenter: parent.verticalCenter; text: "Retry"; visible: app.canRetry; ink: Theme.errorContainerText; onClicked: app.retry() }
         MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; symbol: "close"; ink: Theme.errorContainerText; tip: "Dismiss error"; onClicked: app.dismissError() }
