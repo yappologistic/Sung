@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls
 
 // Material 3 bottom sheet.
 //
@@ -18,6 +19,34 @@ Item {
     property bool modal: false
     default property alias content: body.data
     signal closed()
+    property Item returnFocusItem: null
+    property bool focusPending: false
+
+    function focusableItems(root, result) {
+        for (const child of root.children) {
+            if (!child.visible || !child.enabled) continue
+            if (child.activeFocusOnTab && child.width > 0 && child.height > 0)
+                result.push(child)
+            focusableItems(child, result)
+        }
+    }
+    function moveFocus(backward) {
+        const items = []
+        focusableItems(body, items)
+        if (!items.length) { sheet.forceActiveFocus(); return }
+        const current = items.indexOf(sheet.Window.window.activeFocusItem)
+        const next = (current + (backward ? items.length - 1 : 1)) % items.length
+        items[next].forceActiveFocus(backward ? Qt.BacktabFocusReason : Qt.TabFocusReason)
+    }
+    function focusFirst() {
+        if (!focusPending || !open || !visible) return
+        const items = []
+        focusableItems(body, items)
+        if (!items.length) { sheet.forceActiveFocus(Qt.PopupFocusReason); return }
+        focusPending = false
+        items[0].forceActiveFocus(Qt.PopupFocusReason)
+    }
+    function dismiss() { if (open) { open = false; closed() } }
 
     readonly property real restingY: sheet.open ? Math.max(0, parent.height-height) : parent.height
     property real drag: 0
@@ -28,14 +57,20 @@ Item {
         objectName: "bottomSheetScrimHost"
         anchors.fill: parent
         z: sheet.z - 1
-        visible: sheet.modal && sheet.open
+        visible: sheet.modal && (sheet.open || scrim.opacity > 0)
         Rectangle {
+            id: scrim
             objectName: "bottomSheetScrim"
             anchors.fill: parent
             color: Theme.scrimColor()
             opacity: sheet.open ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-            TapHandler { onTapped: { sheet.open = false; sheet.closed() } }
+            // ModalBottomSheet.kt:146-157 fades the scrim on DefaultEffects
+            // and gives its dismiss action the CloseSheet description.
+            Behavior on opacity { NumberAnimation { objectName: "bottomSheetScrimFade"; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+            Accessible.role: Accessible.Button
+            Accessible.name: "Close sheet"
+            Accessible.onPressAction: sheet.dismiss()
+            TapHandler { onTapped: sheet.dismiss() }
         }
     }
 
@@ -47,8 +82,26 @@ Item {
     height: Math.round(parent ? parent.height*peek : 0)
     y: restingY + drag
     visible: y < (parent ? parent.height : 0)
+    onVisibleChanged: if (visible && focusPending) Qt.callLater(() => focusFirst())
     Behavior on y { enabled: app.motion && !grab.active; NumberAnimation { duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
-    onOpenChanged: drag = 0
+    onOpenChanged: {
+        drag = 0
+        if (open && modal) {
+            returnFocusItem = sheet.Window.window.activeFocusItem
+            focusPending = true
+            Qt.callLater(() => focusFirst())
+        } else if (!open && returnFocusItem) {
+            focusPending = false
+            const previous = returnFocusItem
+            returnFocusItem = null
+            Qt.callLater(() => { if (previous.visible && previous.enabled) previous.forceActiveFocus(Qt.PopupFocusReason) })
+        } else if (!open) focusPending = false
+    }
+    // Qt Quick's window focus chain continues through a FocusScope. A modal
+    // sheet cycles its reachable controls here so Tab cannot enter the page.
+    Shortcut { sequence: "Tab"; enabled: sheet.modal && sheet.open; onActivated: sheet.moveFocus(false) }
+    Shortcut { sequence: "Shift+Tab"; enabled: sheet.modal && sheet.open; onActivated: sheet.moveFocus(true) }
+    Shortcut { sequence: "Escape"; enabled: sheet.modal && sheet.open; onActivated: sheet.dismiss() }
 
     Rectangle {
         objectName: "bottomSheetSurface"
@@ -79,7 +132,7 @@ Item {
                 target: null; xAxis.enabled: false
                 onActiveTranslationChanged: if (active) sheet.drag = Math.max(0, activeTranslation.y)
                 onActiveChanged: if (!active) {
-                    if (sheet.drag > sheet.height/3) { sheet.open = false; sheet.closed() }
+                    if (sheet.drag > sheet.height/3) sheet.dismiss()
                     sheet.drag = 0
                 }
             }

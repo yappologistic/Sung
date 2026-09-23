@@ -2,6 +2,7 @@
 #include "backend.h"
 #include "rowselection.h"
 #include <QColor>
+#include <QAccessible>
 #include <QDir>
 #include <QFile>
 #include <QGuiApplication>
@@ -1571,6 +1572,55 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   b->server()->disconnectServer();
   b->dismissError();
   b->home();
+
+  // ModalBottomSheet.kt keeps keyboard traversal inside the sheet and returns
+  // focus to the opener when the sheet is dismissed.
+  b->setMotion(true);
+  c.click("queueButton");
+  auto sheet = itemNamed(w->contentItem(), "panelSheet");
+  auto queueButton = itemNamed(w->contentItem(), "queueButton");
+  auto scrim = itemNamed(w->contentItem(), "bottomSheetScrim");
+  auto accessibleScrim = scrim ? QAccessible::queryAccessibleInterface(scrim) : nullptr;
+  c.check(accessibleScrim && accessibleScrim->text(QAccessible::Name) == "Close sheet" &&
+          accessibleScrim->actionInterface(),
+          "the scrim has a named accessible dismiss action");
+  auto fade = scrim ? scrim->findChild<QObject *>("bottomSheetScrimFade") : nullptr;
+  c.check(fade && fade->property("duration").toInt() == c.evaluate("Theme.springEffectsMs").toInt(),
+          "the modal scrim fades on Material's DefaultEffects spring");
+  auto inSheet = [&] {
+    for (auto item = w->activeFocusItem(); item; item = item->parentItem())
+      if (item == sheet) return true;
+    return false;
+  };
+  c.check(sheet && sheet->property("open").toBool() && w->property("modalOpen").toBool(),
+          "the narrow queue opens as a modal sheet");
+  auto firstSheetControl = shownItem(w->contentItem(), "revealPlayingButton");
+  if (!firstSheetControl || !firstSheetControl->isEnabled())
+    firstSheetControl = shownItem(w->contentItem(), "closePanelButton");
+  c.check(c.until([&] { return firstSheetControl && w->activeFocusItem() == firstSheetControl; }),
+          "opening the queue focuses its first reachable control once");
+  for (int i = 0; i < 10; ++i) {
+    QTest::keyClick(w, Qt::Key_Tab);
+    c.check(inSheet(), QString("Tab %1 stays inside the queue sheet").arg(i+1));
+  }
+  for (int i = 0; i < 10; ++i) {
+    QTest::keyClick(w, Qt::Key_Backtab, Qt::ShiftModifier);
+    c.check(inSheet(), QString("Shift+Tab %1 stays inside the queue sheet").arg(i+1));
+  }
+  c.shot("00-modal-queue");
+  QTest::keyClick(w, Qt::Key_Escape);
+  c.check(c.until([&] { return sheet && !sheet->property("open").toBool(); }),
+          "Escape dismisses the queue sheet");
+  c.check(c.until([&] { return w->activeFocusItem() == queueButton; }),
+          "focus returns to the queue button");
+  c.click("queueButton");
+  if (accessibleScrim && accessibleScrim->actionInterface())
+    accessibleScrim->actionInterface()->doAction(QAccessibleActionInterface::pressAction());
+  c.check(c.until([&] { return sheet && !sheet->property("open").toBool(); }),
+          "the scrim's accessibility press dismisses the sheet");
+  b->setMotion(false);
+  w->resize(1280, 850);
+  QTest::qWait(400);
 
   auto settings = w->findChild<QObject *>("settingsDialog");
   c.check(settings, "the settings dialog exists");
