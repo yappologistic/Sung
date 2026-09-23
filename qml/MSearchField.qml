@@ -30,6 +30,8 @@ TextField {
         objectName: "clearSearchButton"
         anchors.right: parent.right; anchors.rightMargin: 4; anchors.verticalCenter: parent.verticalCenter
         width: 48; height: 48; symbol: "close"; tip: field.clearTip
+        // SearchBarTokens.TrailingIconColor, as the comment above says.
+        ambientInk: Theme.muted
         visible: field.clearEnabled && field.length > 0
         onClicked: { field.clear(); field.textEdited(); field.cleared(); field.forceActiveFocus(); }
     }
