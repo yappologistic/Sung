@@ -81,7 +81,13 @@ ColumnLayout {
         }
         onDraggingChanged: if(dragging)keyboardMove=false
         onMovementEnded: if(!keyboardMove){keyboardIndex=currentIndex;settle.restart();}
-        onActiveFocusChanged: if(activeFocus)keyboardIndex=currentIndex
+        // A keyboard preview that was never chosen returns to the playing
+        // track when focus leaves, so the large cover never stands for a
+        // track that is not playing.
+        onActiveFocusChanged: {
+            if(activeFocus)keyboardIndex=currentIndex;
+            else if(keyboardMove){keyboardMove=false;center(true);}
+        }
         function focusCover(index) {
             if(count<1)return;
             keyboardIndex=Math.max(0,Math.min(count-1,index));

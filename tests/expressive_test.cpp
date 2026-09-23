@@ -284,6 +284,14 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
                 focusedCover->text(QAccessible::Name).contains(focusedTitle),
             "the focused cover announces title and position in the list");
     c.shot("03-coverflow-keyboard");
+    // A preview that is never chosen must not outlive the keyboard's visit.
+    QTest::keyClick(w, Qt::Key_Right);
+    c.check(covers->property("currentIndex").toInt() == b->currentIndex() + 1,
+            "Right previews the next cover");
+    QTest::keyClick(w, Qt::Key_Tab);
+    c.check(c.until([&] { return covers && !covers->hasActiveFocus() &&
+                                 covers->property("currentIndex").toInt() == b->currentIndex(); }),
+            "leaving the carousel returns it to the playing track");
   }
 
   const auto secondId = b->queue()->get(2).value("id");
