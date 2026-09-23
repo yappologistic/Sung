@@ -254,6 +254,97 @@ private slots:
           }
   }
 
+  // MCU color_spec_2021.ts:130-282, 312-739 gives each role its own
+  // background and curve. The highest achievable sRGB ratio caps a target
+  // when the background cannot reach it, notably 21:1 over a dark surface.
+  void everyRoleFollowsItsContrastCurve() {
+    for (const auto &source : {QColor("#3f6ad8"), QColor("#c0392b"), QColor("#2f8f5b"),
+                               QColor("#808080"), QColor("#b75f38")})
+      for (const auto &name : m3::variantNames())
+        for (bool dark : {false, true})
+          for (double level : {0.0, 0.5, 1.0}) {
+            const auto roles = m3::scheme(source, dark, m3::variantFor(name), level);
+            const auto color = [&](const QString &role) { return roles.value(role).value<QColor>(); };
+            const QString where = QString("%1 %2 %3 contrast %4")
+                                      .arg(source.name(), name, dark ? "dark" : "light")
+                                      .arg(level);
+            const auto check = [&](const QString &front, const QString &back, double requested) {
+              const auto background = color(back);
+              const double possible = std::max(contrast(QColor("#000000"), background),
+                                               contrast(QColor("#ffffff"), background));
+              const double wanted = std::min(requested, possible);
+              QVERIFY2(contrast(color(front), background) >= wanted - 0.16,
+                       qPrintable(QString("%1: %2 on %3 is %4, needs %5")
+                                      .arg(where, front, back)
+                                      .arg(contrast(color(front), background), 0, 'f', 2)
+                                      .arg(wanted, 0, 'f', 2)));
+            };
+            const double on = level == 0 ? 7 : level == 0.5 ? 11 : 21;
+            const double onContainer = level == 0 ? 4.5 : level == 0.5 ? 7 : 11;
+            const double onVariant = level == 0 ? 4.5 : level == 0.5 ? 7 : 11;
+            const QString surface = dark ? "surfaceBright" : "surfaceDim";
+            check("onSurface", surface, on);
+            check("onSurfaceVariant", surface, onVariant);
+            check("inverseOnSurface", "inverseSurface", on);
+            check("inversePrimary", "inverseSurface", level == 0 ? 4.5 : 7);
+            for (const auto &family : {"Primary", "Secondary", "Tertiary", "Error"}) {
+              const QString base = QString(family).toLower();
+              check("on" + QString(family), base, on);
+              check("on" + QString(family) + "Container", base + "Container", onContainer);
+            }
+            for (const auto &family : {"Primary", "Secondary", "Tertiary"}) {
+              const QString base = QString(family).toLower();
+              check("on" + QString(family) + "Fixed", base + "Fixed", on);
+              check("on" + QString(family) + "Fixed", base + "FixedDim", on);
+              check("on" + QString(family) + "FixedVariant", base + "Fixed", onContainer);
+              check("on" + QString(family) + "FixedVariant", base + "FixedDim", onContainer);
+            }
+          }
+  }
+
+  // MCU color_spec_2021.ts:156-221 and 250-282: backgrounds and inverse
+  // inks answer contrast independently of the accents.
+  void highContrastMovesTheWholeScheme() {
+    const QColor source("#3f6ad8");
+    for (bool dark : {false, true}) {
+      const auto normal = m3::scheme(source, dark, m3::Variant::TonalSpot, 0);
+      const auto high = m3::scheme(source, dark, m3::Variant::TonalSpot, 1);
+      const auto tone = [&](const QVariantMap &roles, const char *name) {
+        return m3::toneOf(roles.value(name).value<QColor>());
+      };
+      QVERIFY2(qAbs(tone(high, "surfaceContainerHighest") - (dark ? 30 : 80)) < 1,
+               "surfaceContainerHighest reaches MCU's high-contrast tone");
+      for (const auto &role : {"surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest",
+                               "primaryContainer", "onPrimaryContainer",
+                               "inverseOnSurface"})
+        QVERIFY2(normal.value(role) != high.value(role), qPrintable(QString(role) + " changes at high contrast"));
+      QVERIFY(normal.value("onPrimaryFixed") != high.value("onPrimaryFixed") ||
+              normal.value("onPrimaryFixedVariant") != high.value("onPrimaryFixedVariant"));
+      // MCU dynamic_color.ts:490-503 leaves an already sufficient tone alone.
+      // Light inversePrimary at T80 can already clear 7:1 on T20.
+      if (dark)
+        QVERIFY(normal.value("inversePrimary") != high.value("inversePrimary"));
+    }
+  }
+
+  // MCU dynamic_color.ts:392-479 makes Fixed nearer in light and FixedDim
+  // nearer in dark. Both move together when either reaches T50-59.
+  void fixedPairsUseTheirActualNearerRole() {
+    const QColor source("#b75f38");
+    const auto darkHigh = m3::scheme(source, true, m3::Variant::TonalSpot, 1);
+    const auto darkFixed = m3::toneOf(darkHigh.value("primaryFixed").value<QColor>());
+    const auto darkDim = m3::toneOf(darkHigh.value("primaryFixedDim").value<QColor>());
+    // At the published dark-high surface T34, FixedDim T80 already clears
+    // 4.5:1, so case 1 leaves both base tones alone.
+    QVERIFY2(qAbs(darkDim-80) < 1 && qAbs(darkFixed-90) < 1 && darkFixed-darkDim >= 9.5,
+             "dark FixedDim is nearer but needs no adjustment at this background");
+    const auto lightQuarter = m3::scheme(source, false, m3::Variant::TonalSpot, 0.25);
+    const auto lightFixed = m3::toneOf(lightQuarter.value("primaryFixed").value<QColor>());
+    const auto lightDim = m3::toneOf(lightQuarter.value("primaryFixedDim").value<QColor>());
+    QVERIFY2(qAbs(lightFixed-49) < 1 && lightDim <= 39.5,
+             "light Fixed and FixedDim leave the awkward zone together");
+  }
+
   // Raising the level moves text and boundaries further from their surface.
   void contrastLevelsClimb() {
     const QColor source("#3f6ad8");

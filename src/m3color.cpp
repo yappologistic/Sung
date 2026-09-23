@@ -1,6 +1,7 @@
 #include "m3color.h"
 #include <QtGlobal>
 #include <cmath>
+#include <utility>
 
 namespace m3 {
 namespace {
@@ -264,28 +265,7 @@ double contrastRatio(const QColor &a, const QColor &b) {
 }
 
 namespace {
-// Material shifts a role's tone away from its backgrounds when a scheme asks
-// for more contrast than the standard tones carry. Sung sets text on its accent
-// colour, so primary holds the 4.5:1 text floor against every surface it can
-// land on rather than the 3:1 floor a purely decorative accent would need.
-double toneMeeting(const TonalPalette &palette, double start, bool lighten,
-                   const QList<QColor> &backgrounds, double target) {
-  for (double tone = start; lighten ? tone <= 100 : tone >= 0; tone += lighten ? 1 : -1) {
-    const auto candidate = palette.tone(tone);
-    bool clears = true;
-    for (const auto &background : backgrounds)
-      if (contrastRatio(candidate, background) < target)
-        clears = false;
-    if (clears)
-      return tone;
-  }
-  return lighten ? 100 : 0;
-}
-} // namespace
-
-namespace {
-// Material gives every role that carries text or a boundary four target
-// contrast ratios, one for each contrast level, and interpolates between them.
+// MCU contrast_curve.ts interpolates each role's four published ratios.
 struct ContrastCurve {
   double low, normal, medium, high;
   double at(double level) const {
@@ -296,120 +276,203 @@ struct ContrastCurve {
     return high;
   }
 };
-// The curves Material publishes for the roles this scheme hands out.
+double toneContrast(double a, double b) {
+  const double x = yFromTone(a) / 100.0, y = yFromTone(b) / 100.0;
+  return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
+}
+
+double mcuForegroundTone(double background, double ratio) {
+  // MCU contrast.ts:63-146 converts the target ratio to a tone, adding or
+  // subtracting 0.4 to allow for gamut mapping. dynamic_color.ts:319-358
+  // chooses the better side and prefers light ink below rounded T60.
+  const double backgroundY = yFromTone(background);
+  const double lightY = ratio * (backgroundY + 5.0) - 5.0;
+  const double darkY = (backgroundY + 5.0) / ratio - 5.0;
+  const double lightCandidate = toneFromY(lightY) + 0.4;
+  const double darkCandidate = toneFromY(darkY) - 0.4;
+  const double lighter = lightCandidate >= 0 && lightCandidate <= 100 ? lightCandidate : 100;
+  const double darker = darkCandidate >= 0 && darkCandidate <= 100 ? darkCandidate : 0;
+  const double lighterRatio = toneContrast(lighter, background);
+  const double darkerRatio = toneContrast(darker, background);
+  if (std::round(background) < 60) {
+    const bool nearlyEqualMiss = std::abs(lighterRatio - darkerRatio) < 0.1 &&
+                                 lighterRatio < ratio && darkerRatio < ratio;
+    return lighterRatio >= ratio || lighterRatio >= darkerRatio || nearlyEqualMiss
+               ? lighter : darker;
+  }
+  return darkerRatio >= ratio || darkerRatio >= lighterRatio ? darker : lighter;
+}
+
+// MCU dynamic_color.ts:388-548 keeps a role's normal tone when it already
+// clears its curve, otherwise it searches away from its background. Sung also
+// checks every supplied background because the same ink spans its surface
+// ladder. Searching in tone space avoids repeated HCT gamut solves.
+double toneFor(double initial, bool lighter, const QList<double> &backgrounds, double target) {
+  const auto clears = [&](double tone) {
+    for (double background : backgrounds)
+      if (toneContrast(tone, background) + 0.0001 < target) return false;
+    return true;
+  };
+  if (clears(initial)) return initial;
+  const auto search = [&](int direction) {
+    for (double tone = initial; tone >= 0 && tone <= 100; tone += direction * 0.25)
+      if (clears(tone)) return qBound(0.0, tone, 100.0);
+    return -1.0;
+  };
+  if (double found = search(lighter ? 1 : -1); found >= 0) return found;
+  if (double found = search(lighter ? -1 : 1); found >= 0) return found;
+  const auto weakest = [&](double tone) {
+    double ratio = 21;
+    for (double background : backgrounds) ratio = std::min(ratio, toneContrast(tone, background));
+    return ratio;
+  };
+  return weakest(100) > weakest(0) ? 100 : 0;
+}
+
+struct AccentTones { double accent, container; };
+struct PairTones { double nearer, farther; };
+PairTones resolvePair(double nearer, double farther, bool dark, double background,
+                      double nearRatio, double farRatio, bool stayTogether) {
+  // MCU dynamic_color.ts:392-479: solve each member against the common
+  // background, expand the farther member to ten tones, then avoid T50-59.
+  constexpr double delta = 10;
+  const double direction = dark ? 1 : -1;
+  if (toneContrast(background, nearer) < nearRatio)
+    nearer = mcuForegroundTone(background, nearRatio);
+  if (toneContrast(background, farther) < farRatio)
+    farther = mcuForegroundTone(background, farRatio);
+  if ((farther - nearer) * direction < delta) {
+    farther = qBound(0.0, nearer + delta * direction, 100.0);
+    if ((farther - nearer) * direction < delta)
+      nearer = qBound(0.0, farther - delta * direction, 100.0);
+  }
+  const auto awkward = [](double tone) { return tone >= 50 && tone < 60; };
+  if (awkward(nearer) || (stayTogether && awkward(farther))) {
+    if (dark) {
+      nearer = 60;
+      farther = std::max(farther, nearer + delta);
+    } else {
+      nearer = 49;
+      farther = std::min(farther, nearer - delta);
+    }
+  } else if (awkward(farther)) {
+    farther = dark ? 60 : 49;
+  }
+  return {nearer, farther};
+}
+
+AccentTones accentTones(double accent, double container, bool dark, double background,
+                        double accentRatio, double containerRatio) {
+  // MCU color_spec_2021.ts:325-326 pairs Container as nearer and Accent as
+  // farther, with stayTogether false.
+  const auto pair = resolvePair(container, accent, dark, background,
+                                containerRatio, accentRatio, false);
+  return {pair.farther, pair.nearer};
+}
+
+AccentTones fixedTones(bool dark, double background, double ratio) {
+  // MCU color_spec_2021.ts:604-740 uses ToneDeltaPair(Fixed, FixedDim, 10,
+  // lighter, true): Fixed is nearer in light, FixedDim nearer in dark. If
+  // their gap contracts in dark, round two moves the farther Fixed role.
+  const auto pair = dark ? resolvePair(80, 90, true, background, ratio, ratio, true)
+                         : resolvePair(90, 80, false, background, ratio, ratio, true);
+  return dark ? AccentTones{pair.farther, pair.nearer}
+              : AccentTones{pair.nearer, pair.farther};
+}
+
+// MCU color_spec_2021.ts:130-739 publishes these distinct role curves.
 constexpr ContrastCurve kOnSurface{4.5, 7, 11, 21};
 constexpr ContrastCurve kOnSurfaceVariant{3, 4.5, 7, 11};
 constexpr ContrastCurve kPrimary{3, 4.5, 7, 7};
+constexpr ContrastCurve kContainer{1, 1, 3, 4.5};
+constexpr ContrastCurve kOnContainer{3, 4.5, 7, 11};
+constexpr ContrastCurve kOnAccent{4.5, 7, 11, 21};
+constexpr ContrastCurve kFixedVariant{3, 4.5, 7, 11};
 constexpr ContrastCurve kOutline{1.5, 3, 4.5, 7};
 constexpr ContrastCurve kOutlineVariant{1, 1, 3, 4.5};
 } // namespace
 
 QVariantMap scheme(const QColor &source, bool dark, Variant variant, double contrast) {
+  if (!source.isValid() || source.alpha() == 0) return {};
   const auto p = palettesFor(source, variant);
   QVariantMap roles;
   const auto put = [&roles](const char *name, const QColor &color) { roles.insert(name, color); };
-  // The surfaces primary can be drawn on, so its tone can be checked against
-  // all of them before any of them are published.
-  const QList<QColor> surfaces =
-      dark ? QList<QColor>{p.neutral.tone(6), p.neutral.tone(10), p.neutral.tone(12),
-                           p.neutral.tone(17), p.neutral.tone(22)}
-           : QList<QColor>{p.neutral.tone(98), p.neutral.tone(96), p.neutral.tone(94),
-                           p.neutral.tone(92), p.neutral.tone(90)};
   contrast = qBound(0.0, contrast, 1.0);
-  // Text and boundaries move to meet the ratio their curve asks for at this
-  // level; the containers they sit on stay where Material puts them.
-  const auto surfaceTone = dark ? p.neutral.tone(6) : p.neutral.tone(98);
-  const double primaryTone = toneMeeting(p.primary, dark ? 80 : 40, dark, surfaces, kPrimary.at(contrast));
-  const double onSurfaceTone =
-      toneMeeting(p.neutral, dark ? 90 : 10, dark, {surfaceTone}, kOnSurface.at(contrast));
-  const double onSurfaceVariantTone =
-      toneMeeting(p.neutralVariant, dark ? 80 : 30, dark, {surfaceTone}, kOnSurfaceVariant.at(contrast));
-  const double outlineTone =
-      toneMeeting(p.neutralVariant, dark ? 60 : 50, dark, {surfaceTone}, kOutline.at(contrast));
-  const double outlineVariantTone =
-      toneMeeting(p.neutralVariant, dark ? 30 : 80, dark, {surfaceTone}, kOutlineVariant.at(contrast));
-  // Error is drawn on the same surfaces as primary and answers the same
-  // contrast curve, so it tightens with the rest of the scheme rather than
-  // staying where a fixed colour would leave it.
-  const double errorTone = toneMeeting(p.error, dark ? 80 : 40, dark, surfaces, kPrimary.at(contrast));
-  if (dark) {
-    put("primary", p.primary.tone(primaryTone));
-    put("onPrimary", p.primary.tone(20));
-    put("primaryContainer", p.primary.tone(30));
-    put("onPrimaryContainer", p.primary.tone(90));
-    put("secondary", p.secondary.tone(80));
-    put("onSecondary", p.secondary.tone(20));
-    put("secondaryContainer", p.secondary.tone(30));
-    put("onSecondaryContainer", p.secondary.tone(90));
-    put("tertiary", p.tertiary.tone(80));
-    put("onTertiary", p.tertiary.tone(20));
-    put("tertiaryContainer", p.tertiary.tone(30));
-    put("onTertiaryContainer", p.tertiary.tone(90));
-    put("background", p.neutral.tone(6));
-    put("surface", p.neutral.tone(6));
-    put("surfaceDim", p.neutral.tone(6));
-    put("surfaceBright", p.neutral.tone(24));
-    put("surfaceContainerLowest", p.neutral.tone(4));
-    put("surfaceContainerLow", p.neutral.tone(10));
-    put("surfaceContainer", p.neutral.tone(12));
-    put("surfaceContainerHigh", p.neutral.tone(17));
-    put("surfaceContainerHighest", p.neutral.tone(22));
-    put("onSurface", p.neutral.tone(onSurfaceTone));
-    put("onSurfaceVariant", p.neutralVariant.tone(onSurfaceVariantTone));
-    put("outline", p.neutralVariant.tone(outlineTone));
-    put("outlineVariant", p.neutralVariant.tone(outlineVariantTone));
-    put("scrim", p.neutral.tone(0));
-    put("inverseSurface", p.neutral.tone(90));
-    put("inverseOnSurface", p.neutral.tone(20));
-    put("inversePrimary", p.primary.tone(40));
-    put("error", p.error.tone(errorTone));
-    put("onError", p.error.tone(20));
-    put("errorContainer", p.error.tone(30));
-    put("onErrorContainer", p.error.tone(90));
-  } else {
-    put("primary", p.primary.tone(primaryTone));
-    put("onPrimary", p.primary.tone(100));
-    put("primaryContainer", p.primary.tone(90));
-    put("onPrimaryContainer", p.primary.tone(10));
-    put("secondary", p.secondary.tone(40));
-    put("onSecondary", p.secondary.tone(100));
-    put("secondaryContainer", p.secondary.tone(90));
-    put("onSecondaryContainer", p.secondary.tone(10));
-    put("tertiary", p.tertiary.tone(40));
-    put("onTertiary", p.tertiary.tone(100));
-    put("tertiaryContainer", p.tertiary.tone(90));
-    put("onTertiaryContainer", p.tertiary.tone(10));
-    put("background", p.neutral.tone(98));
-    put("surface", p.neutral.tone(98));
-    put("surfaceDim", p.neutral.tone(87));
-    put("surfaceBright", p.neutral.tone(98));
-    put("surfaceContainerLowest", p.neutral.tone(100));
-    put("surfaceContainerLow", p.neutral.tone(96));
-    put("surfaceContainer", p.neutral.tone(94));
-    put("surfaceContainerHigh", p.neutral.tone(92));
-    put("surfaceContainerHighest", p.neutral.tone(90));
-    put("onSurface", p.neutral.tone(onSurfaceTone));
-    put("onSurfaceVariant", p.neutralVariant.tone(onSurfaceVariantTone));
-    put("outline", p.neutralVariant.tone(outlineTone));
-    put("outlineVariant", p.neutralVariant.tone(outlineVariantTone));
-    put("scrim", p.neutral.tone(0));
-    put("inverseSurface", p.neutral.tone(20));
-    put("inverseOnSurface", p.neutral.tone(95));
-    put("inversePrimary", p.primary.tone(80));
-    put("error", p.error.tone(errorTone));
-    put("onError", p.error.tone(100));
-    put("errorContainer", p.error.tone(90));
-    put("onErrorContainer", p.error.tone(10));
-  }
-  // The fixed accents. Every other role flips its tone between light and dark;
-  // these hold the same tone in both, so anything painted with them keeps its
-  // identity when the theme changes underneath it.
-  const auto putFixed = [&roles](const QString &accent, const TonalPalette &palette) {
-    const QString capital = accent.at(0).toUpper() + accent.mid(1);
-    roles.insert(accent + "Fixed", palette.tone(90));
-    roles.insert(accent + "FixedDim", palette.tone(80));
-    roles.insert("on" + capital + "Fixed", palette.tone(10));
-    roles.insert("on" + capital + "FixedVariant", palette.tone(30));
+  const auto curve = [contrast](ContrastCurve c) { return c.at(contrast); };
+  // MCU color_spec_2021.ts:130-221. The contrast ladder moves independently
+  // of the source palette. Standard level retains the existing 2021 tones.
+  const double surface = dark ? 6 : 98;
+  const double dim = dark ? 6 : (contrast <= 0.5 ? 87 - 14 * contrast : 80 - 10 * (contrast - 0.5));
+  const double bright = dark ? (contrast <= 0.5 ? 24 + 10 * contrast : 29 + 10 * (contrast - 0.5)) : 98;
+  const double lowest = dark ? 4 - 4 * contrast : 100;
+  const double low = dark ? 10 + 2 * contrast : (contrast <= 0.5 ? 96 : 96 - 2 * (contrast - 0.5));
+  const double middle = dark ? (contrast <= 0.5 ? 12 + 8 * contrast : 16 + 8 * (contrast - 0.5))
+                             : 94 - 4 * contrast;
+  const double high = dark ? (contrast <= 0.5 ? 17 + 8 * contrast : 21 + 8 * (contrast - 0.5))
+                           : (contrast <= 0.5 ? 92 - 8 * contrast : 88 - 6 * (contrast - 0.5));
+  const double highest = dark ? (contrast <= 0.5 ? 22 + 8 * contrast : 26 + 8 * (contrast - 0.5))
+                              : (contrast <= 0.5 ? 90 - 12 * contrast : 84 - 8 * (contrast - 0.5));
+  const double adjacent = dark ? bright : dim; // highestSurface in MCU.
+  for (const auto &entry : {std::pair{"background", surface}, {"surface", surface},
+                            {"surfaceDim", dim}, {"surfaceBright", bright},
+                            {"surfaceContainerLowest", lowest}, {"surfaceContainerLow", low},
+                            {"surfaceContainer", middle}, {"surfaceContainerHigh", high},
+                            {"surfaceContainerHighest", highest}})
+    put(entry.first, p.neutral.tone(entry.second));
+  put("surfaceVariant", p.neutralVariant.tone(dark ? 30 : 90));
+  put("scrim", p.neutral.tone(0));
+  put("shadow", p.neutral.tone(0));
+
+  const auto ink = [&](const char *name, const TonalPalette &palette, double initial,
+                       bool lighter, const QList<double> &backgrounds, double ratio) {
+    const double tone = toneFor(initial, lighter, backgrounds, ratio);
+    put(name, palette.tone(tone));
+  };
+  ink("onBackground", p.neutral, dark ? 90 : 10, dark, {surface},
+      curve({3, 3, 4.5, 7}));
+  ink("onSurface", p.neutral, dark ? 90 : 10, dark, {adjacent, surface, low, middle, high, highest},
+      curve(kOnSurface));
+  ink("onSurfaceVariant", p.neutralVariant, dark ? 80 : 30, dark,
+      {adjacent, surface, low, middle, high, highest}, curve(kOnSurfaceVariant));
+  ink("outline", p.neutralVariant, dark ? 60 : 50, dark, {adjacent}, curve(kOutline));
+  ink("outlineVariant", p.neutralVariant, dark ? 30 : 80, dark, {adjacent}, curve(kOutlineVariant));
+
+  // MCU color_spec_2021.ts:250-265 and 385-392. Inverse roles have their own
+  // background and their own contrast curves.
+  const double inverseSurface = dark ? 90 : 20;
+  put("inverseSurface", p.neutral.tone(inverseSurface));
+  ink("inverseOnSurface", p.neutral, dark ? 20 : 95, !dark, {inverseSurface}, curve(kOnSurface));
+  ink("inversePrimary", p.primary, dark ? 40 : 80, !dark, {inverseSurface}, curve(kPrimary));
+
+  const auto family = [&](const QString &name, const TonalPalette &palette, double containerInitial) {
+    const QString capital = name.at(0).toUpper() + name.mid(1);
+    const auto pair = accentTones(dark ? 80 : 40, containerInitial, dark, adjacent,
+                                  curve(kPrimary), curve(kContainer));
+    roles.insert(name, palette.tone(pair.accent));
+    roles.insert(name + "Container", palette.tone(pair.container));
+    roles.insert("on" + capital,
+                 palette.tone(toneFor(dark ? 20 : 100, !dark, {pair.accent}, curve(kOnAccent))));
+    roles.insert("on" + capital + "Container",
+                 palette.tone(toneFor(variant == Variant::Content ? (pair.container < 60 ? 90 : 10)
+                                                                 : (dark ? 90 : 30),
+                                      pair.container < 60, {pair.container}, curve(kOnContainer))));
+  };
+  // MCU color_spec_2021.ts:312-599 keeps each accent and container apart.
+  family("primary", p.primary, dark ? 30 : 90);
+  family("secondary", p.secondary, dark ? 30 : 90);
+  family("tertiary", p.tertiary, dark ? 30 : 90);
+  family("error", p.error, dark ? 30 : 90);
+  put("surfaceTint", roles.value("primary").value<QColor>());
+
+  const auto putFixed = [&](const QString &name, const TonalPalette &palette) {
+    const QString capital = name.at(0).toUpper() + name.mid(1);
+    const auto pair = fixedTones(dark, adjacent, curve(kContainer));
+    const auto fixedInk = toneFor(10, pair.accent < 60, {pair.accent, pair.container}, curve(kOnAccent));
+    const auto variantInk = toneFor(30, pair.accent < 60, {pair.accent, pair.container}, curve(kFixedVariant));
+    roles.insert(name + "Fixed", palette.tone(pair.accent));
+    roles.insert(name + "FixedDim", palette.tone(pair.container));
+    roles.insert("on" + capital + "Fixed", palette.tone(fixedInk));
+    roles.insert("on" + capital + "FixedVariant", palette.tone(variantInk));
   };
   putFixed("primary", p.primary);
   putFixed("secondary", p.secondary);

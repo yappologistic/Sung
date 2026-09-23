@@ -10,13 +10,31 @@ QtObject {
     readonly property bool useAccent: !useArtwork && accentSeed.a > 0
     readonly property bool useSource: useArtwork || useAccent
     readonly property color sourceColor: useArtwork ? artworkSeed : accentSeed
-    // Material spreads five tonal palettes around one source color and reads
-    // every role off them at fixed tones. Surfaces included: that trace of the
-    // cover's hue in the neutrals is what ties the window to the music.
-    // The scheme depends on the variant and the contrast level as much as on
-    // the source colour, so the binding has to read them or a change to either
-    // would never reach the window.
-    readonly property var roles: useSource ? (app.colorVariant, app.colorContrast, app.colorScheme(sourceColor,dark)) : ({})
+    // The warm default source runs through MCU's role resolver. Its standard
+    // Tonal Spot roles retain the original palette, while contrast and variant
+    // alternatives take the published curves (color_spec_2021.ts:130-739).
+    readonly property color defaultSeed: "#b75f38"
+    function standardDefaultRoles(generated) {
+        // These are the existing standard palette, kept pixel-for-pixel for
+        // the no-source Tonal Spot state. Contrast and variant alternatives
+        // are always the generated MCU roles.
+        const old = dark ? ({background:"#181211",surface:"#181211",surfaceContainerLow:"#201a18",surfaceContainer:"#2b2320",surfaceContainerHigh:"#382c28",surfaceContainerHighest:"#433733",onSurface:"#f5ded5",onSurfaceVariant:"#d5bfb5",outlineVariant:"#57443b",primary:"#ffb596",onPrimary:"#572008",primaryContainer:"#75351b",onPrimaryContainer:"#ffdbcb",secondary:"#d8c4a0",onSecondary:"#3b2f15",secondaryContainer:"#54432a",onSecondaryContainer:"#f5e0bb",tertiary:"#b8ceb0",onTertiary:"#243420",tertiaryContainer:"#3b5236",onTertiaryContainer:"#d4eacb",inverseSurface:"#f5ded5",inverseOnSurface:"#392e2a",inversePrimary:"#964829",error:"#ffb4ab",onError:"#690005",errorContainer:"#93000a",onErrorContainer:"#ffdad6",primaryFixed:"#ffdbcb",onPrimaryFixed:"#360f00",onPrimaryFixedVariant:"#743419"})
+                         : ({background:"#fff8f6",surface:"#fff8f6",surfaceContainerLow:"#fff1ec",surfaceContainer:"#f6e5de",surfaceContainerHigh:"#efddd5",surfaceContainerHighest:"#e9d8d0",onSurface:"#281912",onSurfaceVariant:"#705c53",outlineVariant:"#dcc5b9",primary:"#964829",onPrimary:"#ffffff",primaryContainer:"#ffdbcb",onPrimaryContainer:"#743419",secondary:"#6c5b3b",onSecondary:"#ffffff",secondaryContainer:"#f5e0bb",onSecondaryContainer:"#221a04",tertiary:"#3b5236",onTertiary:"#ffffff",tertiaryContainer:"#d4eacb",onTertiaryContainer:"#233a1f",inverseSurface:"#3c2c25",inverseOnSurface:"#ffede6",inversePrimary:"#ffb596",error:"#ba1a1a",onError:"#ffffff",errorContainer:"#ffdad6",onErrorContainer:"#410002",primaryFixed:"#ffdbcb",onPrimaryFixed:"#360f00",onPrimaryFixedVariant:"#743419"})
+        // Qt color values expose normalized r/g/b channels. Resolve the hex
+        // entries before blending them into an animated scheme.
+        function asColor(hex) {return Qt.rgba(parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255,1)}
+        for(const name in old)old[name]=asColor(old[name])
+        old.outline=blend(old.outlineVariant,old.onSurfaceVariant,0.5)
+        return Object.assign({},generated,old)
+    }
+    // QML must read these settings here even with artwork active: an
+    // invokable's internal C++ reads do not create binding dependencies.
+    readonly property var roles: {
+        const variant=app.colorVariant, contrast=app.colorContrast
+        const map=app.colorScheme(useSource?sourceColor:defaultSeed,dark)
+        return !useSource && variant==="tonalSpot" && contrast===0
+               ? standardDefaultRoles(map) : map
+    }
     function role(name,fallback) {const c=roles[name];return c===undefined?fallback:c;}
     function blend(a,b,t) {return Qt.rgba(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t,1);}
     function luminance(c) {
@@ -356,10 +374,10 @@ QtObject {
                                    : role("outline", blend(outlineVariant, muted, 0.5))
     readonly property color outlineVariant: followDesktop ? desktopTheme.colors.outline
                                           : role("outlineVariant", dark ? "#57443b" : "#dcc5b9")
-    readonly property color primary: useSource ? role("primary",sourceColor) : followDesktop ? desktopTheme.colors.primary : (dark ? "#ffb596" : "#964829")
-    readonly property color primaryText: useSource ? role("onPrimary",luminance(primary)>0.179?"#000000":"#ffffff") : followDesktop ? desktopTheme.colors.primaryText : (dark ? "#572008" : "#ffffff")
-    readonly property color primaryContainer: useSource ? role("primaryContainer",blend(container,primary,0.16)) : followDesktop ? desktopTheme.colors.primaryContainer : (dark ? "#75351b" : "#ffdbcb")
-    readonly property color containerText: useSource ? role("onPrimaryContainer",readable(primary,[primaryContainer])) : followDesktop ? desktopTheme.colors.containerText : (dark ? "#ffdbcb" : "#743419")
+    readonly property color primary: useSource ? role("primary",sourceColor) : followDesktop ? desktopTheme.colors.primary : role("primary",dark ? "#ffb596" : "#964829")
+    readonly property color primaryText: useSource ? role("onPrimary",luminance(primary)>0.179?"#000000":"#ffffff") : followDesktop ? desktopTheme.colors.primaryText : role("onPrimary",dark ? "#572008" : "#ffffff")
+    readonly property color primaryContainer: useSource ? role("primaryContainer",blend(container,primary,0.16)) : followDesktop ? desktopTheme.colors.primaryContainer : role("primaryContainer",dark ? "#75351b" : "#ffdbcb")
+    readonly property color containerText: useSource ? role("onPrimaryContainer",readable(primary,[primaryContainer])) : followDesktop ? desktopTheme.colors.containerText : role("onPrimaryContainer",dark ? "#ffdbcb" : "#743419")
     readonly property color secondaryContainer: role("secondaryContainer", dark ? "#54432a" : "#f5e0bb")
     // Material's third accent. A vibrant surface takes it where the usual
     // container would disappear into what it is sitting over.

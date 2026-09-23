@@ -282,12 +282,81 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
   b->library("files");
   c.check(c.until([&] { return b->results()->count() == 1; }), "the fixture is in the library");
 
-  // --- Nothing chosen: the built-in palette is untouched ---
+  // --- Nothing chosen: the built-in palette still resolves every role ---
   const auto plainBackground = c.themeColor("background");
   const auto plainSurface = c.themeColor("surface");
   c.check(!c.evaluate("Theme.useSource").toBool(), "no source colour by default");
   c.check(plainBackground == QColor("#181211"), "the built-in dark background is unchanged");
+  const auto oldOutline = QColor::fromRgbF((QColor("#57443b").redF()+QColor("#d5bfb5").redF())/2,
+                                         (QColor("#57443b").greenF()+QColor("#d5bfb5").greenF())/2,
+                                         (QColor("#57443b").blueF()+QColor("#d5bfb5").blueF())/2);
+  c.check(c.themeColor("outline") == oldOutline,
+          "the built-in standard outline keeps its previous colour");
+  c.check(c.evaluate("Theme.roles['surfaceContainerHighest']").value<QColor>().isValid(),
+          "the default palette goes through the complete scheme path");
   c.shot("01-default-palette");
+  QTest::qWait(3500); // Let the import confirmation leave the later captures.
+
+  b->setColorContrast(1);
+  QTest::qWait(350);
+  c.check(c.themeColor("highest") != c.evaluate("Theme.roles['surfaceContainerHigh']").value<QColor>(),
+          "the high-contrast default retains distinct surface steps");
+  c.check(c.themeColor("highest") != QColor("#433733"),
+          "high contrast moves the default's highest container");
+  c.shot("01-default-high-contrast");
+  b->setColorContrast(0);
+  b->setColorVariant("expressive");
+  QTest::qWait(350);
+  c.check(c.themeColor("primary") != QColor("#ffb596"),
+          "the default source answers a scheme variant change");
+  c.shot("01-default-expressive");
+  b->setColorVariant("tonalSpot");
+  QTest::qWait(350);
+  c.check(c.themeColor("background") == plainBackground,
+          "standard contrast restores the built-in appearance");
+  b->setTheme("light");
+  QTest::qWait(350);
+  c.check(c.themeColor("background") == QColor("#fff8f6") &&
+              c.themeColor("primary") == QColor("#964829"),
+          "the built-in light palette keeps its standard colours");
+  c.shot("01-default-light");
+  b->setTheme("dark");
+  QTest::qWait(350);
+
+  // A person reaches these scheme settings through Settings search. Drive
+  // the exposed segments with pointer clicks and the search field with keys.
+  c.click("settingsButton");
+  auto colorSettings = w->findChild<QObject *>("settingsDialog");
+  c.check(colorSettings && colorSettings->property("opened").toBool(),
+          "Settings opens from its visible button");
+  if (colorSettings && colorSettings->property("opened").toBool()) {
+    const auto typeSearch = [&](const QString &value) {
+      for (const QChar letter : value) QTest::keyClick(w, letter.toLatin1());
+    };
+    c.click("settingsSearch");
+    typeSearch("Contrast");
+    QTest::qWait(250);
+    c.click("contrastHigh");
+    c.check(b->colorContrast() == 1, "clicking High changes the default palette contrast");
+    c.check(c.themeColor("highest") != QColor("#433733"),
+            "High visibly moves the default surface container");
+    c.shot("01-ui-contrast");
+    c.click("contrastStandard");
+    c.check(b->colorContrast() == 0, "clicking Standard restores the default contrast level");
+    c.click("settingsSearch");
+    QTest::keyClick(w, Qt::Key_A, Qt::ControlModifier);
+    typeSearch("Color scheme");
+    QTest::qWait(250);
+    c.click("variantExpressive");
+    c.check(b->colorVariant() == "expressive", "clicking Expressive changes the default palette variant");
+    c.check(c.themeColor("primary") != QColor("#ffb596"),
+            "Expressive visibly changes the default accent");
+    c.shot("01-ui-variant");
+    c.closeDialog(colorSettings);
+    b->setColorVariant("tonalSpot");
+    b->setColorContrast(0);
+    QTest::qWait(350);
+  }
 
   // --- A chosen source colour reaches the surfaces, not just the accent ---
   b->setAccentColor("#386a20");
@@ -376,6 +445,22 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
   c.check(coverBackground != plainBackground, "the cover re-tints the window");
   floors("cover dark");
   c.shot("04-artwork-source");
+
+  // QML cannot track settings read only inside app.colorScheme(). Changing
+  // both controls while artwork drives the source must repaint the scheme.
+  const auto artworkPrimary = c.themeColor("primary");
+  const auto artworkHighest = c.themeColor("highest");
+  b->setColorVariant("expressive");
+  QTest::qWait(250);
+  c.check(c.themeColor("primary") != artworkPrimary,
+          "the scheme variant repaints while artwork drives the source");
+  b->setColorContrast(1);
+  QTest::qWait(250);
+  c.check(c.themeColor("highest") != artworkHighest,
+          "the contrast level repaints while artwork drives the source");
+  b->setColorVariant("tonalSpot");
+  b->setColorContrast(0);
+  QTest::qWait(250);
 
   const auto warmHue = m3::measure(c.themeColor("primary")).hue;
   c.evaluate("Theme.artworkSeed=Qt.rgba(0.20,0.36,0.78,1)");

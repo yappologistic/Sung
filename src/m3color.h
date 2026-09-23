@@ -4,7 +4,8 @@
 // A cover supplies one source color; Material derives the whole interface from
 // it. The path is the one the Material 3 guidelines describe: measure the source
 // in HCT (CAM16 hue and chroma over CIE L* tone), spread five tonal palettes
-// around it, then read the color roles off those palettes at fixed tones.
+// around it, then resolve each role's tone against its backgrounds and
+// contrast curve.
 //
 // Tone is L*, so the tone numbers the guidelines quote are what carry the
 // contrast guarantees. This solver reproduces the requested tone and hue
@@ -62,8 +63,8 @@ Palettes palettesFor(const QColor &source, Variant variant = Variant::TonalSpot)
 // Every color role the interface uses, keyed by its Material name.
 //
 // `contrast` runs from 0 for Material's standard tones to 1 for its high
-// contrast ones, passing through 0.5 for medium. It moves the roles that carry
-// text and boundaries; the containers they sit on stay where they are.
+// contrast ones, passing through 0.5 for medium. Surface containers, accents,
+// fixed roles and text each follow their own curve.
 QVariantMap scheme(const QColor &source, bool dark, Variant variant = Variant::TonalSpot,
                    double contrast = 0);
 
