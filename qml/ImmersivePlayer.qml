@@ -186,39 +186,46 @@ Item {
                     maximumLineCount: 2
                     clip: true
                 }
-                AbstractButton {
-                    objectName: "immersiveArtistButton"
+                // Button.kt:1015,1025 places 12dp inside a text button. The
+                // target grows into the margin so its ink keeps the title edge.
+                Item {
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
                     implicitHeight: 48
-                    leftPadding: 0; rightPadding: 8
-                    enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
-                    Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
-                    onClicked: player.collectionRequested(player.artistTarget)
-                    contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
-                    background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
-                    // MButton's ring sits 3px outside the control and follows
-                    // its shape, with a 2px Theme.focusRing stroke.
-                    Rectangle { objectName: "immersiveArtistFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                    AbstractButton {
+                        objectName: "immersiveArtistButton"
+                        anchors.fill: parent; anchors.leftMargin: -12; anchors.rightMargin: -12
+                        leftPadding: 12; rightPadding: 12
+                        enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
+                        Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
+                        onClicked: player.collectionRequested(player.artistTarget)
+                        contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
+                        background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
+                        // MButton's ring sits 3px outside the control and follows
+                        // its shape, with a 2px Theme.focusRing stroke.
+                        Rectangle { objectName: "immersiveArtistFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                    }
                 }
-                AbstractButton {
+                Item {
                     // IconButton.kt:242-249 applies a 48dp minimum hit area.
-                    // Zero column spacing keeps both 48dp slots contiguous;
-                    // the text stays centred inside each larger target.
-                    objectName: "immersiveAlbumButton"
+                    // Zero column spacing keeps the 48dp slots contiguous.
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
                     implicitHeight: 48
-                    leftPadding: 0; rightPadding: 8
                     visible: !!app.current.album
-                    enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
-                    Accessible.name: "Open album \u00b7 "+(app.current.album || "")
-                    onClicked: player.collectionRequested(player.albumTarget)
-                    contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
-                    background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
-                    Rectangle { objectName: "immersiveAlbumFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                    AbstractButton {
+                        objectName: "immersiveAlbumButton"
+                        anchors.fill: parent; anchors.leftMargin: -12; anchors.rightMargin: -12
+                        leftPadding: 12; rightPadding: 12
+                        enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
+                        Accessible.name: "Open album \u00b7 "+(app.current.album || "")
+                        onClicked: player.collectionRequested(player.albumTarget)
+                        contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
+                        background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
+                        Rectangle { objectName: "immersiveAlbumFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                    }
                 }
             }
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}

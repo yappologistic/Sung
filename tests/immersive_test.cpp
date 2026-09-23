@@ -747,9 +747,11 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
       auto detailTitle=visibleItem(w->contentItem(),"immersiveTitle");
       auto detailArtist=visibleItem(w->contentItem(),"immersiveArtistButton");
       auto detailAlbum=visibleItem(w->contentItem(),"immersiveAlbumButton");
-      check(detailTitle&&detailArtist&&detailAlbum&&
-            qAbs(detailTitle->mapToScene({0,0}).x()-detailArtist->mapToScene({0,0}).x())<1&&
-            qAbs(detailTitle->mapToScene({0,0}).x()-detailAlbum->mapToScene({0,0}).x())<1&&
+      auto artistInk=detailArtist?detailArtist->property("contentItem").value<QQuickItem*>():nullptr;
+      auto albumInk=detailAlbum?detailAlbum->property("contentItem").value<QQuickItem*>():nullptr;
+      check(detailTitle&&detailArtist&&detailAlbum&&artistInk&&albumInk&&
+            qAbs(detailTitle->mapToScene({0,0}).x()-artistInk->mapToScene({0,0}).x())<1&&
+            qAbs(detailTitle->mapToScene({0,0}).x()-albumInk->mapToScene({0,0}).x())<1&&
             detailTitle->mapToScene({detailTitle->width(),0}).x()<=width+1,
             qPrintable(QString("%1px %2 details align and stay inside the window").arg(width).arg(theme)));
       if(width>=1024){
@@ -872,10 +874,16 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   auto title=visibleItem(w->contentItem(),"immersiveTitle");
   auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
   auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
-  check(title&&artistLink&&albumLink&&qAbs(title->mapToScene({0,0}).x()-artistLink->mapToScene({0,0}).x())<1&&
-        qAbs(title->mapToScene({0,0}).x()-albumLink->mapToScene({0,0}).x())<1&&
-        qAbs(title->width()-artistLink->width())<1&&qAbs(title->width()-albumLink->width())<1,
-        "title and collection links share one column measure and alignment");
+  auto artistText=artistLink?artistLink->property("contentItem").value<QQuickItem*>():nullptr;
+  auto albumText=albumLink?albumLink->property("contentItem").value<QQuickItem*>():nullptr;
+  // Button.kt:1015,1025 puts 12dp inside a text button on each side.
+  // Its container extends outside the title measure so the ink shares x.
+  check(title&&artistLink&&albumLink&&artistText&&albumText&&
+        qAbs(title->mapToScene({0,0}).x()-artistText->mapToScene({0,0}).x())<1&&
+        qAbs(title->mapToScene({0,0}).x()-albumText->mapToScene({0,0}).x())<1&&
+        qAbs(artistLink->width()-title->width()-24)<1&&
+        qAbs(albumLink->width()-title->width()-24)<1,
+        "metadata ink shares the title edge inside 12dp padded state layers");
   check(title&&title->property("wrapMode").toInt()==QQmlExpression(qmlContext(title),title,"Text.WordWrap").evaluate().toInt()&&
         title->property("elide").toInt()==QQmlExpression(qmlContext(title),title,"Text.ElideRight").evaluate().toInt()&&
         title->property("maximumLineCount").toInt()==2,
@@ -931,6 +939,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           qAbs(ring->width()-button->width()-6)<0.5&&ring->property("radius").toDouble()>12&&
           QQmlProperty::read(ring,"border.width",qmlContext(ring)).toInt()==2,
           qPrintable(QString("%1 uses an external 2px shaped focus ring").arg(pair.first)));
+    check(button&&button->property("leftPadding").toDouble()==12&&
+          button->property("rightPadding").toDouble()==12&&button->height()>=48,
+          qPrintable(QString("%1 gives its label Material text-button padding in a 48dp target").arg(pair.first)));
   }
   if(artistLink)artistLink->forceActiveFocus(Qt::TabFocusReason);
   QTest::keyClick(w,Qt::Key_Tab);
@@ -953,6 +964,27 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(title&&title->property("typeRole")=="headlineLarge"&&title->property("emphasized").toBool()&&
         title->property("font").value<QFont>().pixelSize()==32,
         "wide title uses emphasized 32sp headline-large");
+  for(const QSize size:{QSize(480,780),QSize(1440,900)}){
+    resizeTo(size.width(),size.height());
+    for(const auto &theme:{"dark","light"}){
+      b->setTheme(theme);
+      auto heading=visibleItem(w->contentItem(),"immersiveTitle");
+      for(const auto &kind:{"Artist","Album"}){
+        const QString kindName=QString::fromLatin1(kind);
+        auto link=visibleItem(w->contentItem(),QString("immersive%1Button").arg(kindName));
+        auto label=link?link->property("contentItem").value<QQuickItem*>():nullptr;
+        if(link)link->forceActiveFocus(Qt::TabFocusReason);
+        check(heading&&link&&label&&link->height()>=48&&
+              link->property("leftPadding").toDouble()==12&&
+              link->property("rightPadding").toDouble()==12&&
+              qAbs(label->mapToScene({0,0}).x()-heading->mapToScene({0,0}).x())<1,
+              qPrintable(QString("%1px %2 %3 link pads its focus container without moving text")
+                .arg(size.width()).arg(theme).arg(kindName)));
+        shot(QString("focus-%1-%2-%3").arg(kindName.toLower()).arg(size.width()).arg(theme));
+      }
+    }
+  }
+  resizeTo(1180,800);b->setTheme("dark");
   b->setMotion(true);
   b->setTheme("light");shot("light");b->setMotion(false);
   choose("artwork");check(player->property("displayedLayout")=="artwork","reduced motion applies layout immediately");
