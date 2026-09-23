@@ -781,7 +781,10 @@ ApplicationWindow {
                         // title and the tabs each time one of them came up. A
                         // grid's first cover starts at its cell's edge, so at
                         // the shared margin it lines up with the title.
-                        anchors.fill: parent; anchors.margins: window.paneMargin; spacing: app.page==="server"?8:16
+                        anchors.fill: parent; anchors.margins: window.paneMargin
+                        // SearchBar.kt:932-937 gives compact search the room for results.
+                        // SearchBarVerticalPadding at :4174 supplies this 8dp rhythm.
+                        spacing: app.page==="server" || (app.page==="search" && window.compactWindow) ? 8 : 16
                         ArtistHero {
                             objectName: "artistHero"
                             Layout.fillWidth: true
@@ -854,12 +857,20 @@ ApplicationWindow {
                                 ]
                             }
                         }
-                        Flow {
+                        Flickable {
                             objectName: "searchFilters"
-                            visible: app.page==="search"; Layout.fillWidth: true; spacing: 8
-                            Repeater {
-                                model: [{label:"Songs",key:"songs"},{label:"Albums",key:"albums"},{label:"Artists",key:"artists"},{label:"Playlists",key:"playlists"},{label:"Videos",key:"videos"}]
-                                MChip { required property var modelData; objectName: "filter_"+modelData.key; text: modelData.label; selected: window.filter===modelData.key; onClicked: {window.filter=modelData.key;if(searchField.text.trim())app.search(searchField.text,window.filter);} }
+                            visible: app.page==="search"; Layout.fillWidth: true; Layout.preferredHeight: 32
+                            // FilterChipTokens.ContainerHeight is 32dp. A horizontal
+                            // chip run keeps that single row at compact widths.
+                            contentWidth: filterRow.implicitWidth; contentHeight: height
+                            clip: true; boundsBehavior: Flickable.StopAtBounds
+                            interactive: contentWidth>width
+                            Row {
+                                id: filterRow; spacing: 8
+                                Repeater {
+                                    model: [{label:"Songs",key:"songs"},{label:"Albums",key:"albums"},{label:"Artists",key:"artists"},{label:"Playlists",key:"playlists"},{label:"Videos",key:"videos"}]
+                                    MChip { required property var modelData; objectName: "filter_"+modelData.key; text: modelData.label; selected: window.filter===modelData.key; onClicked: {window.filter=modelData.key;if(searchField.text.trim())app.search(searchField.text,window.filter);} }
+                                }
                             }
                         }
                         RowLayout {
@@ -918,7 +929,9 @@ ApplicationWindow {
                             // An artist's hero owns these actions while it is
                             // open; the row takes them back as it collapses, so
                             // exactly one Play is ever on screen.
-                            visible: (tracks.selection.count===0 && app.results.count>0 && !window.feedShowing && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong) && (!window.artistPage || content.compactHeader)) || (app.page==="library" && app.libraryId==="files")
+                            // SearchBar.kt:932-937 favours results on compact screens.
+                            // Each song row still opens and plays directly.
+                            visible: !(app.page==="search" && window.compactWindow) && ((tracks.selection.count===0 && app.results.count>0 && !window.feedShowing && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong) && (!window.artistPage || content.compactHeader)) || (app.page==="library" && app.libraryId==="files"))
                             Layout.fillWidth: true; spacing: 12
                             MSplitButton {
                                 objectName: "collectionPlay"

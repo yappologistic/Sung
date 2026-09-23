@@ -682,6 +682,20 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
   if(qEnvironmentVariableIsSet("SUNG_TEST_BACKGROUND_ACTIVATION")){QWindowSystemInterface::handleFocusWindowChanged(w);QTest::qWait(100);}
   w->resize(1180,900);b->setVolume(0);b->setMotion(true);b->setAutoplay(false);b->clearQueue();
   QVariantList songs;for(int i=0;i<8;++i)songs.append(QVariantMap{{"id",QString("select%1").arg(i,5,10,QChar('0'))},{"videoId",QString("select%1").arg(i,5,10,QChar('0'))},{"title",QString("Aurora %1").arg(i)},{"artist","Fixture artist"},{"kind","song"},{"seconds",120}});
+  // SearchBar.kt:932-937 gives compact search its result area. Test the
+  // visible second row against the playback bar, not only the list count.
+  b->search("Test","songs");check(until([&]{return !b->busy() && b->results()->count()>2;},5000),"compact search fixture loads");
+  w->setProperty("destination","search");w->resize(480,620);QTest::qWait(450);
+  for(const auto &theme:{"light","dark"}){
+    b->setTheme(theme);QTest::qWait(180);flush();
+    auto filters=findItem(w->contentItem(),"searchFilters");auto firstChip=findItem(w->contentItem(),"filter_songs");auto lastChip=findItem(w->contentItem(),"filter_videos");
+    check(filters&&firstChip&&lastChip&&qAbs(firstChip->mapToItem(filters,QPointF()).y()-lastChip->mapToItem(filters,QPointF()).y())<1&&filters->property("contentWidth").toReal()>filters->width(),"compact filters stay on one scrollable line");
+    auto second=findItem(w->contentItem(),"trackRow_1"),player=findItem(w->contentItem(),"playbackBar");
+    check(second&&player&&second->mapToScene(QPointF(0,second->height())).y()<=player->mapToScene(QPointF()).y()+1,"two complete compact search rows fit above playback");
+    shot(QString("compact-search-%1").arg(theme));
+  }
+  w->setProperty("destination","home");w->resize(1180,900);
+  w->contentItem()->forceActiveFocus();QTest::qWait(250);
   const auto id=b->createPlaylist("Aurora evenings");b->addItemsToPlaylist(id,songs);b->openPlaylist(id);QTest::qWait(400);
   auto selection=select("tracksView");check(selection,"collection selection exists");
   click("trackRow_0",Qt::ControlModifier);click("trackRow_2",Qt::ShiftModifier);
