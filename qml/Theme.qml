@@ -35,7 +35,6 @@ QtObject {
     // says so. Two values below the grid are Material's own: components hold
     // 6dp between an icon and the label beside it, which several component
     // token files publish, and a hairline is a hairline.
-    readonly property var spacingScale: [4,8,12,16,24,32,40,48,56,64]
     readonly property int spaceSmall: 4
     readonly property int space: 8
     readonly property int spaceMedium: 12
@@ -64,7 +63,6 @@ QtObject {
     // Material's six levels, and the two shadows it casts at each one: a tight
     // key light at 30% and a wider ambient at 15%. Levels are dp of elevation;
     // the shadows are the published values for that level.
-    readonly property var elevationDp: [0,1,3,6,8,12]
     // [vertical offset, blur, spread] for the key shadow and then the ambient.
     readonly property var elevationKey: [[0,0,0],[1,2,0],[1,2,0],[1,3,0],[2,3,0],[4,4,0]]
     readonly property var elevationAmbient: [[0,0,0],[1,3,1],[2,6,2],[4,8,3],[6,10,4],[8,12,6]]
@@ -151,7 +149,6 @@ QtObject {
     // take a type role from the size.
     readonly property var appBarHeight: ({small:64, medium:112, large:120})
     readonly property var appBarHeightSubtitled: ({small:64, medium:136, large:152})
-    readonly property var appBarTitle: ({small:titleLarge, medium:headlineMedium, large:displaySmall})
     readonly property var appBarSubtitle: ({small:labelMedium, medium:labelLarge, large:titleMedium})
 
     // --- Sheets --------------------------------------------------------------
@@ -169,7 +166,6 @@ QtObject {
     readonly property int toolbarHeight: 64
     readonly property int toolbarInset: 16
     readonly property int toolbarSpacingMin: 4
-    readonly property int toolbarSpacingMax: 32
 
     // --- Selection controls --------------------------------------------------
     // A checkbox is a small square with a large target; a radio is a ring.
@@ -390,7 +386,6 @@ QtObject {
     // Material's fixed accents keep one tone in both themes, so anything drawn
     // with them holds its identity when the rest of the window flips.
     readonly property color primaryFixed: role("primaryFixed","#ffdbcb")
-    readonly property color primaryFixedDim: role("primaryFixedDim","#ffb596")
     readonly property color primaryFixedText: role("onPrimaryFixed","#360f00")
     readonly property color primaryFixedVariantText: role("onPrimaryFixedVariant","#743419")
     // The names the rest of the application already uses, now resolved through
