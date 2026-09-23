@@ -35,6 +35,9 @@ Item {
     // title, artist and album, which the layout works out rather than a
     // constant guessing at it.
     readonly property real coverColumnWidth: Math.max(80,width*(displayedLayout==="artwork"?0.55:0.34))
+    // At the immersive 40px lyric size, 760px holds roughly 35 characters.
+    // The measure is centred only where the window content also fits gutters.
+    readonly property real lyricMeasure: 760
     readonly property real coverSize: immersiveArt.width
     // What sits against the bottom of this view, so anything that has to clear
     // it knows how much to clear. A snackbar is the one that has to.
@@ -114,6 +117,9 @@ Item {
         RowLayout {
             id: body; objectName:"immersiveBody"
             Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: Math.max(24,player.width*0.055)
+            // shell is anchored to the window, so this decision cannot feed
+            // back into the width of the RowLayout it sizes.
+            readonly property bool lyricMeasureFits: shell.width >= player.lyricMeasure+2*spacing
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
             ColumnLayout {
                 id: coverColumn
@@ -159,14 +165,14 @@ Item {
                 }
             }
             Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
-            // Matching flexible space centres the bounded lyric measure.
-            Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" }
-            LyricsView { id: immersiveLyrics; expanded: true; visible:player.displayedLayout!=="artwork" && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics"; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
-                // At the immersive 40px lyric size, 760px holds roughly 35
-                // characters per line. Centre that measure only when alone.
-                Layout.preferredWidth: player.displayedLayout==="lyrics" ? Math.min(760,body.width-2*body.spacing) : -1
-                Layout.maximumWidth: player.displayedLayout==="lyrics" ? 760 : Infinity; Layout.alignment: Qt.AlignHCenter }
-            Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" }
+            // Matching flexible space centres the measure when it fits. On a
+            // narrower window, lyrics fill the content width without gutters.
+            Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" && body.lyricMeasureFits }
+            LyricsView { id: immersiveLyrics; expanded: true; visible:player.displayedLayout!=="artwork" && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics" || !body.lyricMeasureFits; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
+                Layout.preferredWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : -1
+                Layout.maximumWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : Infinity
+                Layout.alignment: Qt.AlignHCenter }
+            Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" && body.lyricMeasureFits }
             SingAlong { id: immersiveSingAlong; visible:player.displayedLayout==="singalong"; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0 }
         }
         ImmersiveCoverflow {

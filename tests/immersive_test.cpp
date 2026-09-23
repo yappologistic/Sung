@@ -14,6 +14,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QProcess>
+#include <QStringList>
 #include <QTest>
 #include <qpa/qwindowsysteminterface.h>
 #include <functional>
@@ -34,6 +35,13 @@ void collectItems(QQuickItem *root,const QString &name,QList<QQuickItem*> &found
   if(!root)return;
   if(root->objectName()==name)found.append(root);
   for(auto child:root->childItems())collectItems(child,name,found);
+}
+void collectImmersiveControls(QQuickItem *root,QList<QQuickItem*> &found,bool inFlickable=false) {
+  if(!root||!root->isVisible()||!root->isEnabled())return;
+  const bool scrolling=inFlickable||root->inherits("QQuickFlickable");
+  if(!scrolling&&root->inherits("QQuickControl")&&!root->inherits("QQuickScrollBar")&&
+     (root->property("pressed").isValid()||root->property("value").isValid()))found.append(root);
+  for(auto child:root->childItems())collectImmersiveControls(child,found,scrolling);
 }
 }
 
@@ -213,6 +221,45 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           pane->mapToScene({0,pane->height()/2}).y())<30,
           qPrintable(QString("%1px current lyric stays at the vertical reading centre").arg(width)));
     shot(QString("lyrics-%1").arg(width));
+    b->setTheme("light");shot(QString("lyrics-%1-light").arg(width));
+    b->setTheme("dark");
+  }
+  // The wide measure cannot force the other immersive rows past the window
+  // edge on compact widths. These are the same widths as the layout audit.
+  for(const QSize size:{QSize(840,800),QSize(600,800),QSize(480,620)}){
+    w->showNormal();w->setMinimumSize({0,0});w->setMaximumSize({16777215,16777215});w->resize(size);
+    check(waitFor([&]{
+            if(w->size()!=size)return false;
+            auto body=visibleItem(w->contentItem(),"immersiveBody");
+            if(!body)return false;
+            const double before=body->width();QTest::qWait(30);
+            return qAbs(body->width()-before)<0.5;
+          }),qPrintable(QString("%1px narrow layout reaches a stable width").arg(size.width())));
+    for(const auto &theme:{"dark","light"}){
+      b->setTheme(theme);
+      auto pane=visibleItem(w->contentItem(),"lyricsView");
+      const int margin=size.width()<600?16:24;
+      const double available=size.width()-2*margin;
+      const double left=pane?pane->mapToScene({0,0}).x():-1;
+      check(pane&&qAbs(pane->width()-available)<2&&left>=margin-2&&
+            left+pane->width()<=size.width()-margin+2,
+            qPrintable(QString("%1px %2 lyric column fits content width (pane %3 at %4, available %5)")
+              .arg(size.width()).arg(theme).arg(pane?pane->width():-1,0,'f',1).arg(left,0,'f',1).arg(available,0,'f',1)));
+      QList<QQuickItem*> controls;collectImmersiveControls(player,controls);
+      QStringList overflow;
+      for(auto control:controls){
+        const auto rect=control->mapRectToScene(control->boundingRect());
+        if(rect.left()<-1||rect.top()<-1||rect.right()>size.width()+1||rect.bottom()>size.height()+1){
+          auto name=control->objectName();if(name.isEmpty())name=control->property("tip").toString();
+          overflow.append(QString("%1 [%2,%3]").arg(name).arg(rect.left(),0,'f',1).arg(rect.right(),0,'f',1));
+        }
+      }
+      check(controls.size()>=10&&overflow.isEmpty(),
+            qPrintable(QString("%1px %2 immersive controls stay inside window (%3 controls; %4)")
+              .arg(size.width()).arg(theme).arg(controls.size()).arg(overflow.join(", "))));
+      QMetaObject::invokeMethod(player,"wake");
+      shot(QString("lyrics-%1-%2").arg(size.width()).arg(theme));
+    }
   }
   b->setTheme("dark");
   resizeTo(1180,800);
