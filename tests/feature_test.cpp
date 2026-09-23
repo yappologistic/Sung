@@ -3173,6 +3173,29 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
   c.check(playerOverflow && playerOverflow->property("live").toList().size() == 3,
           "holding shuffle, repeat and like");
   c.shot("13-player-overflow");
+  // A compact window moves the side controls into the same menu. At 480 the
+  // row used to run past the bar's edge, cutting the last button in half and
+  // squeezing the title to nothing.
+  w->resize(480, 620);
+  QTest::qWait(900);
+  if (auto bar = anyItem(w->contentItem(), "playbackBar"); bar && !bar->childItems().isEmpty()) {
+    double overrun = 0;
+    for (auto child : bar->childItems().first()->childItems())
+      if (child->isVisible() && child->width() > 0)
+        overrun = qMax(overrun, child->mapToItem(bar, QPointF(child->width(), 0)).x() - bar->width());
+    c.check(overrun <= 0.5, QString("a compact player bar holds every control inside it (%1px over)").arg(overrun, 0, 'f', 1));
+  }
+  QStringList folded;
+  if (playerOverflow)
+    for (const auto &action : playerOverflow->property("live").toList())
+      folded << action.toMap().value("key").toString();
+  c.check(folded.contains("lyrics") && folded.contains("queue") && folded.contains("output") && folded.contains("volume"),
+          QString("with lyrics, queue, output and volume in its menu (%1)").arg(folded.join(", ")));
+  if (auto title = shownItem(w->contentItem(), "nowTitle"))
+    c.check(title->width() >= 60, QString("and the song's title keeps its room (%1px)").arg(title->width(), 0, 'f', 0));
+  else
+    c.check(false, "and the song's title stays on the bar");
+  c.shot("13-compact-player");
   w->resize(1400, 900);
   QTest::qWait(700);
 

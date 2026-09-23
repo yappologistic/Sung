@@ -7,13 +7,17 @@ RowLayout {
     property string buttonName:"exactVolumeButton"
     property string sliderName:"popupVolumeSlider"
     readonly property bool popupVisible:popup.visible
+    // What the popup opens from: this control's own button, or the overflow
+    // menu of a bar too narrow to keep the button on show.
+    property Item anchorItem:button
+    function openFrom(item){anchorItem=item||button;popup.open();}
     spacing:0
-    MButton {id:button;objectName:control.buttonName;symbol:app.volume>0?"volume":"mute";tip:"Volume · "+Math.round(app.volume*100)+"%";selected:popup.visible;onClicked:popup.open()}
+    MButton {id:button;objectName:control.buttonName;symbol:app.volume>0?"volume":"mute";tip:"Volume · "+Math.round(app.volume*100)+"%";selected:popup.visible;onClicked:control.openFrom(button)}
     SeekBar {volumeMode:true;visible:control.showSlider;Layout.preferredWidth:66}
     Popup {
         id:popup;objectName:"volumePopup";parent:Overlay.overlay;width:264;height:184;padding:16;focus:true
-        x:Math.max(12,Math.min(parent.width-width-12,button.mapToItem(parent,0,0).x-width+button.width))
-        y:Math.max(12,Math.min(parent.height-height-12,button.mapToItem(parent,0,0).y-height-10))
+        x:Math.max(12,Math.min(parent.width-width-12,control.anchorItem.mapToItem(parent,0,0).x-width+control.anchorItem.width))
+        y:Math.max(12,Math.min(parent.height-height-12,control.anchorItem.mapToItem(parent,0,0).y-height-10))
         property bool built: false
         onAboutToShow: built=true
         onOpened: body.item.beginEdit()
