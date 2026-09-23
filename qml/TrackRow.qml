@@ -189,29 +189,11 @@ ItemDelegate {
             // option uses ItemLeadingAvatarSize (40dp), including in queue rows.
             Layout.preferredWidth: row.queueMode?(app.compactDensity?40:56):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
             Icon { objectName: "mixKindIcon"; anchors.centerIn: parent; name: "filter"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
-            // An album's header already owns its cover. RoundedArt loads a
-            // source even when hidden, so an album row must release its URL.
-            Artwork { objectName: "trackLeadingArtwork"; visible: row.track.kind!=="smart" && !row.albumMode; anchors.fill: parent; url: row.albumMode ? "" : (row.track.art || ""); radius: Theme.shapeSmall; pixels: 112 }
-            // ListTokens.ItemTrailingSupportingTextFont is LabelSmall. A track
-            // number is numeric supporting data, centred where its cover was.
-            SungText {
-                objectName: "albumTrackNumber"
-                anchors.fill: parent; horizontalAlignment: Text.AlignHCenter
-                visible: row.albumMode && Number(row.track.trackNumber)>0 && !row.active && !row.selectionVisible
-                text: Number(row.track.trackNumber)>0 ? String(row.track.trackNumber) : ""
-                font.pixelSize: Theme.labelSmall; labelRole: true; font.features: {"tnum": 1}
-                color: row.supportInk
-            }
-            // Loader creates the bars only for the active album row. With no
-            // explicit size, it takes PlayingIndicator's 25x20 implicit size
-            // (Qt Loader Sizing Behavior), then centres it in this slot.
-            Loader {
-                objectName: "albumIndicatorLoader"
-                anchors.centerIn: parent
-                active: row.albumMode && row.active && !row.selectionVisible
-                visible: active
-                sourceComponent: PlayingIndicator { ink: row.titleInk }
-            }
+            // Every row leads with its cover, album pages included: a track
+            // number is not always known (YouTube Music sends none), and an
+            // empty slot read as missing artwork. RoundedArt's cache decodes
+            // an album's shared cover once for all its rows.
+            Artwork { objectName: "trackLeadingArtwork"; visible: row.track.kind!=="smart"; anchors.fill: parent; url: row.track.art || ""; radius: Theme.shapeSmall; pixels: 112 }
             // Material puts a selection control in a list item's leading slot,
             // and for a list you can take several rows from that is a checkbox.
             MCheckbox {
@@ -240,7 +222,7 @@ ItemDelegate {
         // invisible too, so RowLayout adds no spacing before the duration.
         Loader {
             objectName: "trailingIndicatorLoader"
-            active: row.active && !row.albumMode
+            active: row.active
             visible: active
             sourceComponent: PlayingIndicator { ink: row.titleInk }
         }

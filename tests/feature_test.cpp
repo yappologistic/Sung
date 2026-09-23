@@ -3315,10 +3315,8 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
           "the row title uses BodyLarge's regular weight");
   const int idleRowObjects = ordinaryRow ? ordinaryRow->findChildren<QObject *>().size() : -1;
   const int idleIndicators = ordinaryRow ? ordinaryRow->findChildren<QObject *>("playingIndicator").size() : -1;
-  auto idleLeadingLoader = ordinaryRow ? anyItem(ordinaryRow, "albumIndicatorLoader") : nullptr;
   auto idleTrailingLoader = ordinaryRow ? anyItem(ordinaryRow, "trailingIndicatorLoader") : nullptr;
   c.check(ordinaryRow && !ordinaryRow->property("active").toBool() && idleIndicators == 0 &&
-              idleLeadingLoader && !idleLeadingLoader->isVisible() &&
               idleTrailingLoader && !idleTrailingLoader->isVisible(),
           QString("an idle track row has no playing indicator (%1 descendants, %2 indicators)")
               .arg(idleRowObjects).arg(idleIndicators));
@@ -3896,16 +3894,16 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   auto albumList = shownItem(w->contentItem(), "tracksView");
   auto albumRow = albumList ? shownItem(albumList, "trackRow_0") : nullptr;
   auto albumLead = albumRow ? anyItem(albumRow, "trackLeading") : nullptr;
-  auto albumNumber = albumLead ? anyItem(albumLead, "albumTrackNumber") : nullptr;
   auto albumArt = albumLead ? anyItem(albumLead, "trackLeadingArtwork") : nullptr;
   auto albumSupport = albumRow ? anyItem(albumRow, "trackSupport") : nullptr;
-  const int firstNumber = b->results()->get(0).value("trackNumber").toInt();
-  c.check(albumList && albumList->property("albumRows").toBool() && firstNumber > 0 &&
-              albumRow && albumLead && albumNumber && albumNumber->isVisible() &&
-              albumNumber->property("text").toString() == QString::number(firstNumber) &&
-              albumArt && !albumArt->isVisible() && albumArt->property("url").toString().isEmpty() &&
+  // A streamed album carries no track numbers, and an empty leading slot
+  // read as missing artwork, so album rows lead with the cover like any list.
+  const auto firstArt = b->results()->get(0).value("art").toString();
+  c.check(albumList && albumList->property("albumRows").toBool() && !firstArt.isEmpty() &&
+              albumRow && albumLead && albumArt && albumArt->isVisible() &&
+              albumArt->property("url").toString() == firstArt &&
               qAbs(albumLead->width() - 56) < 1,
-          "album tracks show their stored number in the 56dp leading slot");
+          "album tracks show their cover in the 56dp leading slot");
   // ListTokens.ItemOneLineContainerHeight applies after the repeated artist
   // line is removed; the title and duration still remain.
   c.check(albumRow && albumSupport && !albumSupport->isVisible() &&
@@ -3917,16 +3915,16 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
               guestSupport->property("sourceText").toString() == "Guest Artist" &&
               qAbs(guestRow->height() - 72) < 1,
           "a featured artist keeps the BodyMedium line and two-line height");
-  c.shot("14-album-track-numbers");
+  c.shot("14-album-rows");
   b->setTheme("light");
-  c.shot("15-album-track-numbers-light");
+  c.shot("15-album-rows-light");
   b->setTheme("dark");
   w->resize(600, 900);
   QTest::qWait(450);
   auto narrowAlbumRow = shownItem(w->contentItem(), "trackRow_0");
   c.check(narrowAlbumRow && qAbs(narrowAlbumRow->height() - 56) < 1,
           "the one-line album row keeps its height in a narrow window");
-  c.shot("15a-album-track-numbers-narrow");
+  c.shot("15a-album-rows-narrow");
   w->resize(1400, 900);
   QTest::qWait(450);
   albumList = shownItem(w->contentItem(), "tracksView");
@@ -3942,10 +3940,12 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
           "the first album row becomes active");
   const auto albumIndicators = albumRow ? albumRow->findChildren<QObject *>("playingIndicator") : QList<QObject *>{};
   auto albumBars = albumIndicators.size() == 1 ? qobject_cast<QQuickItem *>(albumIndicators.first()) : nullptr;
+  // With the cover in the leading slot, an album row marks playback at the
+  // trailing edge, as every other list does.
   c.check(albumRow && albumLead && !albumRow->property("selectionVisible").toBool() &&
               albumIndicators.size() == 1 && albumBars && albumBars->isVisible() &&
-              albumLead->findChildren<QObject *>("playingIndicator").size() == 1,
-          "an active album row builds one visible leading indicator");
+              albumLead->findChildren<QObject *>("playingIndicator").isEmpty(),
+          "an active album row builds one visible trailing indicator");
   b->stop();
   b->clearQueue();
   if (albumRow && albumLead) {
@@ -3954,7 +3954,7 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     QTest::qWait(120);
     auto checkbox = anyItem(albumLead, "rowCheckbox");
     c.check(albumRow->property("selected").toBool() && checkbox && checkbox->isVisible(),
-            "clicking an album number still selects through the leading checkbox");
+            "clicking an album cover still selects through the leading checkbox");
     QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
     QTest::qWait(120);
     c.check(!albumRow->property("selected").toBool(), "the same leading click clears selection");
@@ -3966,14 +3966,15 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
       settingsButton->forceActiveFocus();
     QTest::mouseMove(w, QPoint(2, 2));
     const bool activeAlbumRow = c.until([&] { return albumRow->property("active").toBool(); });
-    auto leadingIndicator = anyItem(albumLead, "playingIndicator");
-    // The checkbox wins while selection is offered; the Loader releases the
-    // bars then, and creates them again when the leading slot is free.
-    c.check(activeAlbumRow &&
+    auto leadingArt = anyItem(albumLead, "trackLeadingArtwork");
+    auto trailingIndicator = anyItem(albumRow, "trailingIndicatorLoader");
+    // The checkbox wins the leading slot while selection is offered, and the
+    // cover holds it otherwise; the playing bars stay at the trailing edge.
+    c.check(activeAlbumRow && trailingIndicator && trailingIndicator->isVisible() &&
                 (albumRow->property("selectionVisible").toBool()
-                     ? checkbox && checkbox->isVisible() && !leadingIndicator
-                     : leadingIndicator && leadingIndicator->isVisible()),
-            "the album leading slot shows selection or the active playing indicator");
+                     ? checkbox && checkbox->isVisible()
+                     : leadingArt && leadingArt->isVisible()),
+            "the album leading slot shows selection or the cover, playback the trailing bars");
     b->stop();
     b->clearQueue();
   }
