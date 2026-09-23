@@ -44,15 +44,28 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   auto click=[&](const QString &name){
     auto item=visibleItem(w->contentItem(),name);check(item,qPrintable(name));
     if(item){const auto point=item->mapToScene(item->boundingRect().center()).toPoint();QTest::mouseMove(w,point);QTest::qWait(60);QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);}
-    QTest::qWait(350);
   };
   auto shot=[&](const QString &name){QTest::qWait(250);check(w->grabWindow().save(dir+'/'+name+".png"),qPrintable(name));};
   auto resizeTo=[&](int width,int height){
     w->showNormal();
     w->setMinimumSize({0,0});w->setMaximumSize({16777215,16777215});
-    w->resize(width,height);QTest::qWait(180);
-    check(w->width()==width&&w->height()==height,
-          qPrintable(QString("window measures %1x%2").arg(width).arg(height)));
+    w->resize(width,height);
+    check(waitFor([&]{
+            if(w->width()!=width||w->height()!=height)return false;
+            if(!w->property("immersive").toBool())return true;
+            auto body=visibleItem(w->contentItem(),"immersiveBody");
+            auto layout=visibleItem(w->contentItem(),"immersiveLayoutButton");
+            if(!body||!layout||qAbs(body->width()-(width-2*(width<600?16:24)))>1)return false;
+            const double actionX=layout->mapToScene(layout->boundingRect().center()).x();
+            if(actionX<0||actionX>=width)return false;
+            auto player=visibleItem(w->contentItem(),"immersivePlayer");
+            if(player&&player->property("displayedLayout")=="lyrics"&&width>=1024){
+              auto pane=visibleItem(w->contentItem(),"lyricsView");
+              return pane&&qAbs(pane->width()-760)<1&&
+                     qAbs(pane->mapToScene({pane->width()/2,0}).x()-width/2.0)<2;
+            }
+            return true;
+          }),qPrintable(QString("window and immersive layout measure %1x%2").arg(width).arg(height)));
   };
   // WCAG 1.4.3 measures the actual ink against the background behind it.
   // Read the delegate colour and alpha, then sample the captured backdrop in
@@ -126,12 +139,17 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     const auto target=b->relatedCollection(remote,"album");
     check(target.value("remoteId")=="album-1"&&target.value("browseId")=="album-1"&&target.value("server")=="test-server"&&target.value("source")==source,"provider target preserves source and server identity");
   }
-  w->setProperty("immersive",true);QTest::qWait(400);
+  w->setProperty("immersive",true);
+  check(waitFor([&]{return visibleItem(w->contentItem(),"immersivePlayer");}),"immersive player appears");
   auto player=visibleItem(w->contentItem(),"immersivePlayer");check(player,"immersive player loads");
   if(!player){QCoreApplication::exit(1);return;}
   check(!player->property("autoHideControls").toBool()&&player->property("controlsShown").toBool(),"controls remain visible by default");
-  click("immersiveLayoutButton");click("immersiveAutoHide");
-  check(player->property("autoHideControls").toBool(),"idle hiding can be enabled explicitly");
+  auto menuOpen=[&]{auto menu=w->findChild<QObject*>("immersiveLayoutMenu");return menu&&menu->property("visible").toBool();};
+  click("immersiveLayoutButton");
+  check(waitFor(menuOpen),"layout menu opens");
+  click("immersiveAutoHide");
+  check(waitFor([&]{return player->property("autoHideControls").toBool();}),"idle hiding can be enabled explicitly");
+  check(waitFor([&]{return !menuOpen();}),"layout menu closes after auto-hide choice");
   // The layout menu is the only vibrant menu in the application, and a
   // vibrant menu is not segmented, so its rows have no container of their own.
   // Ink that assumed one left the chosen row at 1.5:1 against the menu it sits
@@ -163,8 +181,14 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     check(worst>=4.5,qPrintable(verdict));
   };
   auto choose=[&](const QString &layout){click("immersiveLayoutButton");
+    check(waitFor(menuOpen),"layout menu opens for choice");
     if(layout=="lyrics"){menuInkIsReadable();shot("layout-menu");}
-    click("immersiveLayout_"+layout);QTest::qWait(100);
+    click("immersiveLayout_"+layout);
+    check(waitFor([&]{auto body=visibleItem(w->contentItem(),"immersiveBody");
+                      return player->property("preferredLayout")==layout&&
+                             player->property("displayedLayout")==player->property("effectiveLayout")&&
+                             body&&qAbs(body->opacity()-1)<0.01&&!menuOpen();}),
+          qPrintable(QString("%1 layout settles").arg(layout)));
   };
   choose("lyrics");check(player->property("preferredLayout")=="lyrics"&&player->property("displayedLayout")=="artwork","missing lyrics falls back without losing preference");
   QFile lrc(dir+"/sample.lrc");check(lrc.open(QIODevice::WriteOnly),"create timed lyrics");
@@ -190,6 +214,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           qPrintable(QString("%1px current lyric stays at the vertical reading centre").arg(width)));
     shot(QString("lyrics-%1").arg(width));
   }
+  b->setTheme("dark");
   resizeTo(1180,800);
   auto lyricLines=QList<QQuickItem*>{};collectItems(w->contentItem(),"lyricLine",lyricLines);
   QQuickItem *seekLine=nullptr;
@@ -197,10 +222,10 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(seekLine,"a non-current lyric can be targeted");
   if(seekLine){
     const auto point=seekLine->mapToScene(seekLine->boundingRect().center()).toPoint();
-    QTest::mouseMove(w,point);QTest::qWait(80);
-    check(seekLine->property("hovered").toBool(),"resting lyric remains hoverable");
-    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);QTest::qWait(100);
-    check(b->position()>=19500&&b->position()<=20500,"clicking a resting lyric seeks its timestamp");
+    QTest::mouseMove(w,point);
+    check(waitFor([&]{return seekLine->property("hovered").toBool();}),"resting lyric remains hoverable");
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
+    check(waitFor([&]{return b->position()>=19500&&b->position()<=20500;}),"clicking a resting lyric seeks its timestamp");
   }
   b->seek(11000);QTest::qWait(100);
   choose("artwork");check(player->property("displayedLayout")=="artwork","artwork layout applies");shot("artwork");
@@ -216,7 +241,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   singAlongContrast("dark sing along");
   b->setTheme("light");QTest::qWait(300);shot("singalong-light");
   singAlongContrast("light sing along");
-  b->setTheme("dark");QTest::qWait(200);
+  b->setTheme("dark");
   auto singSeek=visibleItem(w->contentItem(),"immersiveSeek");
   check(singSeek&&b->lyricIndex()==1,"sing along starts on the second timed line");
   if(singSeek){
@@ -243,7 +268,6 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         if(!sawFade)QTest::qWait(10);
       }
       check(sawFade,"completed lyric fill fades instead of cutting away");
-      QTest::qWait(effectsMs+80);
       QList<QQuickItem*> resting;collectItems(w->contentItem(),"singAlongLine",resting);
       QQuickItem *previousBody=nullptr;
       for(auto body:resting)if(body->parentItem()&&body->parentItem()->property("index").toInt()==1)previousBody=body;
@@ -252,8 +276,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         QQmlExpression muted(qmlContext(previousBody),previousBody,"Theme.muted");
         mutedColor=muted.evaluate().value<QColor>();mutedValid=!muted.hasError();
       }
-      check(previousBody&&mutedValid&&previousBody->property("color").value<QColor>()==mutedColor&&
-            previousFill->opacity()<0.01&&!previousFill->isVisible()&&
+      check(previousBody&&mutedValid&&waitFor([&]{return previousBody->property("color").value<QColor>()==mutedColor&&
+            previousFill->opacity()<0.01&&!previousFill->isVisible();})&&
             qAbs(previousFill->width()-previousBody->width())<1,
             "finished line keeps full-width fill while fading, then reads in onSurfaceVariant");
       int accented=0;
@@ -275,18 +299,23 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   }
   choose("split");
   const auto playingId=b->current().value("id");
-  click("immersiveAlbumButton");check(!w->property("immersive").toBool()&&b->page()=="local-album","album link opens local collection");
+  click("immersiveAlbumButton");
+  check(waitFor([&]{return !w->property("immersive").toBool()&&b->page()=="local-album";}),"album link opens local collection");
   check(b->current().value("id")==playingId&&b->playing(),"collection navigation preserves playback");
-  QMetaObject::invokeMethod(w,"navigateBack");QTest::qWait(600);
-  check(w->property("immersive").toBool(),"Back returns to immersive player");
+  QMetaObject::invokeMethod(w,"navigateBack");
+  check(waitFor([&]{return w->property("immersive").toBool()&&visibleItem(w->contentItem(),"immersivePlayer");}),
+        "Back returns to immersive player");
   QWindowSystemInterface::handleFocusWindowChanged(w);QTest::qWait(50);
   player=visibleItem(w->contentItem(),"immersivePlayer");
   check(player&&player->property("preferredLayout")=="split","layout survives player recreation");
   if(!player){QCoreApplication::exit(1);return;}
   click("immersiveQueueButton");
   auto sheet=w->findChild<QObject*>("immersiveQueueSheet");
-  check(sheet&&sheet->property("visible").toBool()&&w->property("immersive").toBool(),"queue opens without leaving immersion");
-  auto queue=visibleItem(w->contentItem(),"queueView");check(queue&&queue->property("count").toInt()==3,"sheet uses complete live queue");
+  check(sheet&&waitFor([&]{return sheet->property("visible").toBool();})&&w->property("immersive").toBool(),
+        "queue opens without leaving immersion");
+  check(waitFor([&]{auto q=visibleItem(w->contentItem(),"queueView");return q&&q->property("count").toInt()==3;}),
+        "sheet uses complete live queue");
+  auto queue=visibleItem(w->contentItem(),"queueView");
   shot("queue");
   {
     auto button=visibleItem(w->contentItem(),"immersiveQueueButton");
@@ -306,50 +335,59 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
       const auto end=to->mapToScene(QPointF(100,12)).toPoint();
       QTest::mousePress(w,Qt::LeftButton,Qt::NoModifier,start);
       QTest::mouseMove(w,start-QPoint(0,24),40);QTest::mouseMove(w,end,40);
-      QTest::qWait(80);QTest::mouseRelease(w,Qt::LeftButton,Qt::NoModifier,end);QTest::qWait(350);
+      QTest::qWait(80);QTest::mouseRelease(w,Qt::LeftButton,Qt::NoModifier,end);
     }
-    check(queue->property("count").toInt()==3&&b->queue()->get(1).value("id")==lastId,"dragging reorders the immersive queue");
+    check(waitFor([&]{return queue->property("count").toInt()==3&&b->queue()->get(1).value("id")==lastId;}),
+          "dragging reorders the immersive queue");
     b->undo();
     QMetaObject::invokeMethod(queue,"activate",Q_ARG(int,1),Q_ARG(QVariant,b->queue()->get(1)));
     check(waitFor([&]{return b->currentIndex()==1&&b->playing();}),"sheet activation plays requested track");
-    b->removeQueueRows({2});QTest::qWait(200);check(queue->property("count").toInt()==2,"sheet follows removal");b->undo();
+    b->removeQueueRows({2});check(waitFor([&]{return queue->property("count").toInt()==2;}),"sheet follows removal");b->undo();
   }
   QTest::qWait(3700);check(player->property("controlsShown").toBool(),"open sheet prevents idle hiding");
-  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(300);
-  check(sheet&&!sheet->property("visible").toBool()&&w->property("immersive").toBool(),"Escape closes sheet only");
+  QTest::keyClick(w,Qt::Key_Escape);
+  check(sheet&&waitFor([&]{return !sheet->property("visible").toBool();})&&w->property("immersive").toBool(),
+        "Escape closes sheet only");
   b->playAt(0);check(waitFor([&]{return b->playing()&&b->lyricLines().size()==5;}),"original track and lyrics restore");
   player->forceActiveFocus();QTest::mouseMove(w,QPoint(8,8));QMetaObject::invokeMethod(player,"wake");
-  QTest::qWait(3900);check(!player->property("controlsShown").toBool(),"idle playback hides controls");
-  QTest::mouseMove(w,QPoint(30,30));QTest::qWait(250);check(player->property("controlsShown").toBool(),"pointer movement restores controls");
+  check(waitFor([&]{return !player->property("controlsShown").toBool();}),"idle playback hides controls");
+  QTest::mouseMove(w,QPoint(30,30));
+  check(waitFor([&]{return player->property("controlsShown").toBool();}),"pointer movement restores controls");
   b->pause();QTest::qWait(3800);check(player->property("controlsShown").toBool(),"paused playback keeps controls visible");
   b->toggle();check(waitFor([&]{return b->playing();}),"playback resumes");
   auto play=visibleItem(w->contentItem(),"immersivePlayButton");if(play)play->forceActiveFocus(Qt::TabFocusReason);
   QTest::qWait(3800);check(player->property("controlsShown").toBool(),"keyboard-focused controls never disappear");
-  player->forceActiveFocus();QTest::keyClick(w,Qt::Key_Up,Qt::ControlModifier);QTest::qWait(100);
-  auto hud=visibleItem(w->contentItem(),"playbackHud");check(hud&&b->volume()>0,"volume shortcut displays feedback");
-  QTest::keyClick(w,Qt::Key_Up,Qt::ControlModifier);QTest::qWait(80);
-  check(hud&&hud->property("label").toString()==QString::number(qRound(b->volume()*100))+"%","repeated volume shortcuts update one HUD");
-  QTest::keyClick(w,Qt::Key_M);QTest::qWait(100);check(b->volume()==0&&hud&&hud->property("symbol")=="mute","mute shortcut restores feedback");
-  b->pause();b->seek(1000);QTest::qWait(100);QTest::keyClick(w,Qt::Key_Right);QTest::qWait(150);
-  check(b->position()>=10500&&b->position()<=11500,"seek shortcut applies ten seconds");
-  shot("shortcut-feedback");QTest::qWait(1300);check(hud&&!hud->isVisible(),"HUD dismisses after inactivity");
-  click("immersiveLyricSearchButton");const auto before=b->position();QTest::keyClick(w,Qt::Key_Left);
+  player->forceActiveFocus();QTest::keyClick(w,Qt::Key_Up,Qt::ControlModifier);
+  check(waitFor([&]{return visibleItem(w->contentItem(),"playbackHud")&&b->volume()>0;}),
+        "volume shortcut displays feedback");
+  auto hud=visibleItem(w->contentItem(),"playbackHud");
+  QTest::keyClick(w,Qt::Key_Up,Qt::ControlModifier);
+  check(hud&&waitFor([&]{return hud->property("label").toString()==QString::number(qRound(b->volume()*100))+"%";}),
+        "repeated volume shortcuts update one HUD");
+  QTest::keyClick(w,Qt::Key_M);
+  check(hud&&waitFor([&]{return b->volume()==0&&hud->property("symbol")=="mute";}),"mute shortcut restores feedback");
+  b->pause();b->seek(1000);QTest::qWait(100);QTest::keyClick(w,Qt::Key_Right);
+  check(waitFor([&]{return b->position()>=10500&&b->position()<=11500;}),"seek shortcut applies ten seconds");
+  shot("shortcut-feedback");
+  check(hud&&waitFor([&]{return !hud->isVisible();}),"HUD dismisses after inactivity");
+  click("immersiveLyricSearchButton");
+  check(waitFor([&]{auto field=visibleItem(w->contentItem(),"lyricSearchField");return field&&field->hasActiveFocus();}),
+        "lyric search field receives focus");
+  const auto before=b->position();QTest::keyClick(w,Qt::Key_Left);
   check(b->position()==before,"text editing does not seek playback");
   for(auto key:{Qt::Key_L,Qt::Key_I,Qt::Key_G,Qt::Key_H,Qt::Key_T})QTest::keyClick(w,key);
-  QTest::qWait(180);
-  {
-    auto results=visibleItem(w->contentItem(),"lyricSearchResults");
-    check(results&&results->property("count").toInt()==1&&
-          results->property("currentIndex").toInt()==0&&
-          !results->property("highlightFollowsCurrentItem").toBool(),
-          "search results use a custom spatial highlight for the selected match");
-  }
-  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  check(waitFor([&]{auto results=visibleItem(w->contentItem(),"lyricSearchResults");
+                    return results&&results->property("count").toInt()==1&&
+                           results->property("currentIndex").toInt()==0&&
+                           !results->property("highlightFollowsCurrentItem").toBool();}),
+        "search results use a custom spatial highlight for the selected match");
+  QTest::keyClick(w,Qt::Key_Escape);
+  check(waitFor([&]{return !visibleItem(w->contentItem(),"lyricSearchField");}),"lyric search closes");
   // --- The immersive view's own proportions ---
   // The complaint about this screen was never a missing feature: it was that
   // the pieces do not line up and the artwork does not use the room it has.
   // These are the measurements that say so.
-  choose("artwork");QTest::qWait(500);
+  choose("artwork");
   {
     auto top=visibleItem(w->contentItem(),"immersiveTopControls");
     auto bar=visibleItem(w->contentItem(),"immersiveToolbar");
@@ -409,7 +447,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     } else check(false,"a notification appears to place");
     // MenuDefaults.groupStandardContainerColor reads
     // StandardMenuTokens.ContainerColor, surfaceContainerLow.
-    click("immersiveLayoutButton");QTest::qWait(400);
+    click("immersiveLayoutButton");
+    check(waitFor(menuOpen),"layout menu opens for colour check");
     {
       auto menu=w->findChild<QObject*>("immersiveLayoutMenu");
       auto surface=menu?menu->property("background").value<QQuickItem*>():nullptr;
@@ -423,7 +462,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
                          .arg(colour.name()).arg(expected.name())));
       }
       shot("menu");
-      QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(300);
+      QTest::keyClick(w,Qt::Key_Escape);
+      check(waitFor([&]{return !menuOpen();}),"layout menu closes");
     }
     shot("proportions");
   }
@@ -464,8 +504,20 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     shot(QString("artwork-%1").arg(width));
   }
   resizeTo(480,620);
-  click("immersiveLayoutButton");click("immersiveCoverflowToggle");
+  click("immersiveLayoutButton");
+  check(waitFor(menuOpen),"layout menu opens for coverflow");
+  click("immersiveCoverflowToggle");
+  check(waitFor([&]{return visibleItem(w->contentItem(),"coverflowView");}),"coverflow appears");
   auto covers=visibleItem(w->contentItem(),"coverflowView");
+  check(covers&&waitFor([&]{
+          auto first=visibleItem(w->contentItem(),"coverflowItem_0");
+          if(!first)return false;
+          const double before=covers->property("contentX").toDouble();
+          QTest::qWait(30);
+          return qAbs(covers->property("contentX").toDouble()-before)<0.5&&
+                 qAbs(first->mapToScene({first->width()/2,0}).x()-
+                      covers->mapToScene({covers->width()/2,0}).x())<2;
+        }),"coverflow starts centred before the slide probe");
   auto highlight=covers?covers->property("highlightItem").value<QQuickItem*>():nullptr;
   auto currentCover=covers?covers->property("currentItem").value<QQuickItem*>():nullptr;
   check(covers&&highlight&&currentCover&&!covers->property("highlightFollowsCurrentItem").toBool()&&
@@ -488,7 +540,15 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
       check(waitFor([&]{return b->currentIndex()==1;}),"clicking Next changes the playing cover");
       QTest::qWait(spatialMs/3);
       const double middleX=covers->property("contentX").toDouble();
-      QTest::qWait(spatialMs+100);
+      check(waitFor([&]{
+              auto target=visibleItem(w->contentItem(),"coverflowItem_1");
+              if(!target)return false;
+              const double before=covers->property("contentX").toDouble();
+              QTest::qWait(30);
+              return qAbs(covers->property("contentX").toDouble()-before)<0.5&&
+                     qAbs(target->mapToScene({target->width()/2,0}).x()-
+                          covers->mapToScene({covers->width()/2,0}).x())<2;
+            }),"the next cover finishes its spring slide");
       const double endX=covers->property("contentX").toDouble();
       check(qAbs(endX-startX)>20&&middleX>qMin(startX,endX)+2&&middleX<qMax(startX,endX)-2,
             qPrintable(QString("coverflow slides through contentX %1 -> %2 -> %3")
@@ -523,8 +583,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     auto button=visibleItem(w->contentItem(),pair.first);
     auto ring=w->findChild<QQuickItem*>(pair.second);
     if(button)button->forceActiveFocus(Qt::TabFocusReason);
-    QTest::qWait(30);
-    check(button&&ring&&ring->isVisible()&&qAbs(ring->x()+3)<0.5&&
+    check(button&&ring&&waitFor([&]{return ring->isVisible();})&&qAbs(ring->x()+3)<0.5&&
           qAbs(ring->width()-button->width()-6)<0.5&&ring->property("radius").toDouble()>12&&
           QQmlProperty::read(ring,"border.width",qmlContext(ring)).toInt()==2,
           qPrintable(QString("%1 uses an external 2px shaped focus ring").arg(pair.first)));
@@ -546,34 +605,41 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   choose("split");b->setTheme("dark");
   w->setProperty("immersive",false);resizeTo(1440,900);
   if(w->property("side")!="lyrics")QTest::keyClick(w,Qt::Key_Y,Qt::ControlModifier);
-  QTest::qWait(300);
-  check(w->property("side")=="lyrics"&&visibleItem(w->contentItem(),"lyricsView"),
+  check(waitFor([&]{return w->property("side")=="lyrics"&&visibleItem(w->contentItem(),"lyricsView");}),
         "side lyric panel opens at wide width");
   b->setTheme("light");QTest::qWait(180);shot("side-lyrics-light");
   lyricContrast(4.5,"light side pane");
   b->setTheme("dark");QTest::qWait(180);shot("side-lyrics-dark");
   lyricContrast(4.5,"dark side pane");
   QMetaObject::invokeMethod(w,"activateSide",Q_ARG(QString,QString("lyrics")));
-  w->setProperty("immersive",false);QTest::qWait(150);w->showNormal();w->setMinimumSize({780,580});w->setMaximumSize({780,580});w->resize(780,580);w->setProperty("immersive",true);QTest::qWait(250);
+  w->setProperty("immersive",false);w->showNormal();w->setMinimumSize({780,580});w->setMaximumSize({780,580});w->resize(780,580);w->setProperty("immersive",true);
+  check(waitFor([&]{return visibleItem(w->contentItem(),"immersivePlayer")&&w->width()==780&&w->height()==580;}),
+        "compact immersive player opens at the requested size");
   player=visibleItem(w->contentItem(),"immersivePlayer");shot("compact");
   const auto art=visibleItem(w->contentItem(),"immersiveArtwork");const auto seek=visibleItem(w->contentItem(),"immersiveSeek");
   check(art&&seek&&art->mapToScene({0,art->height()}).y()<seek->mapToScene({0,0}).y(),
         qPrintable(QString("compact artwork stays above transport (%1 against %2)")
                    .arg(art?art->mapToScene(QPointF(0,art->height())).y():-1,0,'f',0)
                    .arg(seek?seek->mapToScene(QPointF(0,0)).y():-1,0,'f',0)));
-  QMetaObject::invokeMethod(w,"openMiniPlayer");QTest::qWait(350);
-  auto mini=qvariant_cast<QQuickWindow*>(w->property("miniPlayer"));check(mini&&mini->isVisible(),"mini player opens");
+  QMetaObject::invokeMethod(w,"openMiniPlayer");
+  check(waitFor([&]{auto window=qvariant_cast<QQuickWindow*>(w->property("miniPlayer"));return window&&window->isVisible();}),
+        "mini player opens");
+  auto mini=qvariant_cast<QQuickWindow*>(w->property("miniPlayer"));
   if(mini){
-    b->setMotion(true);b->seek(1000);QTest::qWait(300);
-    auto line=visibleItem(mini->contentItem(),"miniLyricContainer");check(line,"mini lyric line is visible");
+    b->setMotion(true);b->seek(1000);
+    check(waitFor([&]{return visibleItem(mini->contentItem(),"miniLyricContainer");}),"mini lyric line is visible");
+    auto line=visibleItem(mini->contentItem(),"miniLyricContainer");
     const int height=mini->height();b->seek(11000);QTest::qWait(80);
     check(line&&line->property("progress").toDouble()>0&&line->property("progress").toDouble()<1,"mini lyric change crossfades");
-    QTest::qWait(250);check(line&&line->property("shown")=="Across the still water"&&mini->height()==height,"line changes keep transport geometry stable");
-    b->seek(21000);QTest::qWait(20);b->seek(31000);QTest::qWait(300);check(line&&line->property("shown")=="We move with the tide","rapid seeking shows latest lyric");
+    check(line&&waitFor([&]{return line->property("shown")=="Across the still water"&&mini->height()==height;}),
+          "line changes keep transport geometry stable");
+    b->seek(21000);QTest::qWait(20);b->seek(31000);
+    check(line&&waitFor([&]{return line->property("shown")=="We move with the tide";}),"rapid seeking shows latest lyric");
     b->setMotion(false);b->seek(1000);QTest::qWait(30);check(line&&line->property("progress").toDouble()==1&&line->property("shown")=="The light arrives","reduced motion settles mini lyrics immediately");
     check(mini->grabWindow().save(dir+"/mini-lyrics.png"),"mini lyric capture");
-    b->playAt(1);check(waitFor([&]{return b->currentIndex()==1&&b->lyricLines().isEmpty();}),"track without lyrics clears line");QTest::qWait(200);
-    check(mini->height()<height&&!visibleItem(mini->contentItem(),"miniLyricContainer"),"missing lyrics collapses unused mini-player space");
+    b->playAt(1);check(waitFor([&]{return b->currentIndex()==1&&b->lyricLines().isEmpty();}),"track without lyrics clears line");
+    check(waitFor([&]{return mini->height()<height&&!visibleItem(mini->contentItem(),"miniLyricContainer");}),
+          "missing lyrics collapses unused mini-player space");
     check(mini->grabWindow().save(dir+"/mini-no-lyrics.png"),"compact mini capture");
   }
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
