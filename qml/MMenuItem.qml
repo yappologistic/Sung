@@ -12,28 +12,21 @@ MenuItem {
     property string symbol: ""
     // The keyboard shortcut that reaches this item without the menu.
     property string shortcut: ""
-    // Material's segmented menu draws its items as one run: each one carries a
-    // container of its own, nearly square inside the run and round at its
-    // ends, set apart rather than divided by a rule. The menu sets these.
-    property bool segmented: false
+    // MenuDefaults.leadingItemShape, middleItemShape and trailingItemShape
+    // shape one group; the menu marks the first and last items.
     property bool firstInRun: false
     property bool lastInRun: false
     // MenuTokens marks a chosen item with the secondary pair, the same one
     // that marks a chosen anything else: ListItemSelectedContainerColor is the
     // secondary container and ListItemSelectedLabelTextColor the ink on it.
-    // This asked for the tertiary pair, which is the source hue rotated and so
-    // belongs to no other surface in the window.
-    //
-    // Only a segmented menu draws the item a container of its own, so only
-    // there is there a secondary container for that ink to sit on. Elsewhere
-    // the row keeps the menu's own ink and the tick alone marks the choice,
-    // which is how Material's list marks a selection without a container.
+    // The unselected item uses ItemContainerColor (surfaceContainerLow) and
+    // ItemLabelTextColor (onSurface); its leading icon uses onSurfaceVariant.
     //
     // A disabled item is onSurface at 38%, label and icon alike
     // (StandardMenuTokens.ItemDisabledLabelTextColor and its opacity).
     readonly property color disabledInk: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, Theme.disabledContentOpacity)
     readonly property color ink: !control.enabled ? disabledInk
-                               : control.checked && control.segmented ? Theme.secondaryContainerText
+                               : control.checked ? Theme.secondaryContainerText
                                : Theme.text
     // The leading icon is the variant ink until the item is chosen, when it
     // takes the ink of the container it has been given.
@@ -58,7 +51,8 @@ MenuItem {
     // every item unless the item says it has none.
     arrow: null
 
-    implicitHeight: segmented ? 44 : 48
+    // Menu.kt:2374-2375 gives a menu item a 48dp container height.
+    implicitHeight: 48
     height: visible ? implicitHeight : 0
     leftPadding: 14; rightPadding: 14
     palette.windowText: control.ink
@@ -82,6 +76,8 @@ MenuItem {
             anchors.verticalCenter: parent.verticalCenter
             x: control.mirrored ? 0 : control.leadingSpace
             width: parent.width-control.leadingSpace-(shortcutLabel.visible ? shortcutLabel.width+12 : 0)
+            // SegmentedMenuTokens.ItemLabelTextFont is BodyLarge; Menu.kt:2053
+            // still uses labelLarge under a TODO, so the token sets the style.
             text: control.text; color: control.ink; font.pixelSize: Theme.bodyLarge
             elide: Text.ElideRight
         }
@@ -100,29 +96,32 @@ MenuItem {
     }
     Accessible.name: control.text + (control.shortcut ? ", " + control.shortcut : "")
     background: Loader {
+      // Menu.kt:2038-2046 pads the selectable item's Surface 4dp on each
+      // side. Inset the whole background so selection and state layers agree.
+      x: 4; width: control.width-8; height: control.height
       active: control.built
       sourceComponent: Item {
-        // The run's own container. Material rounds the ends of the run to the
-        // medium step and leaves the corners inside it at extra small, and
+        // The group's item container. Material rounds the ends to the medium
+        // step and leaves the corners inside it at extra small, and
         // rounds the chosen item to medium all round (MenuDefaults.kt,
         // leadingItemShape, middleItemShape, trailingItemShape,
         // selectedItemShape). The shape follows the choice alone, not the
         // pointer (Menu.kt, shapeByInteraction).
         Rectangle {
             objectName: "menuItemContainer"
-            visible: control.segmented
-            y: 1; height: parent.height-2
+            height: parent.height
             width: parent.width
             topLeftRadius: control.checked || control.firstInRun ? Theme.shapeMedium : Theme.shapeExtraSmall
             topRightRadius: topLeftRadius
             bottomLeftRadius: control.checked || control.lastInRun ? Theme.shapeMedium : Theme.shapeExtraSmall
             bottomRightRadius: bottomLeftRadius
-            // The run sits on the menu's own container, so an item in it takes
-            // the step above to read as a container rather than a hole.
-            color: control.checked ? Theme.secondaryContainer : Theme.high
+            // A chosen item takes the secondary container; ItemContainerColor
+            // keeps the unchecked item on surfaceContainerLow.
+            color: control.checked ? Theme.secondaryContainer : Theme.surfaceLow
             Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
         Rectangle {
+            objectName: "menuItemStateLayer"
             anchors.fill: parent; radius: Theme.shapeMedium; color: control.ink
             opacity: control.down || control.visualFocus ? Theme.pressedOpacity : control.highlighted ? Theme.hoverOpacity : 0
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }

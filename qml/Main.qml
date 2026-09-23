@@ -1948,7 +1948,7 @@ ApplicationWindow {
             y:settingsSearch.height+12;width:parent.width;leftAligned:true;tonal:true
             text:settingsDialog.searchQuery.trim()?"Search results":settingsDialog.categories[settingsDialog.category];symbol:"chevron"
             onClicked:settingsCategoryMenu.popup(this,0,height+4)
-            MMenu {id:settingsCategoryMenu;objectName:"settingsCategoryMenu";segmented:true;width:settingsCategoryPicker.width
+            MMenu {id:settingsCategoryMenu;objectName:"settingsCategoryMenu";width:settingsCategoryPicker.width
                 Repeater {model:settingsDialog.categories
                     // A segmented menu is a choice between peers, so it has to
                     // say which peer you are on. This one never did.

@@ -4356,7 +4356,7 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
   b->collection()->setProperty("sortKey", QString("original"));
   QTest::qWait(300);
 
-  // --- A menu that is a choice between peers is drawn as a run ---
+  // --- The settings choices share one expressive menu group ---
   w->resize(700, 820);
   QTest::qWait(500);
   if (auto settings = w->findChild<QObject *>("settingsDialog")) {
@@ -4365,8 +4365,8 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
     c.click("settingsCategoryPicker");
     QTest::qWait(500);
     auto menu = w->findChild<QObject *>("settingsCategoryMenu");
-    c.check(menu && menu->property("segmented").toBool(),
-            "the settings categories open as a segmented menu");
+    c.check(menu && menu->property("visible").toBool(),
+            "the settings categories open in one expressive menu group");
     if (menu) {
       auto frame = menu->property("background").value<QQuickItem *>();
       c.check(frame && frame->property("color").value<QColor>() == c.themeColor("surfaceLow"),
@@ -4374,11 +4374,11 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
       c.check(frame && qAbs(frame->property("radius").toDouble() - 16) < 0.5,
               QString("at the large corner (%1)")
                   .arg(frame ? frame->property("radius").toDouble() : 0, 0, 'f', 0));
-      // Every menu item owns one of these, so it has to be the open menu's.
+      // Every item owns a Surface inside the group (Menu.kt:2038-2046).
       auto list = menu->property("contentItem").value<QQuickItem *>();
       auto item = list ? anyItem(list, "menuItemContainer") : nullptr;
       c.check(item && item->isVisible(), "and each item carries a container of its own");
-      // The run's ends and a chosen item are the medium step; 24 is
+      // The group's ends and a chosen item are the medium step; 24 is
       // SegmentedMenuTokens.ActiveContainerShape, which no item reads
       // (MenuDefaults.kt, leadingItemShape and selectedItemShape).
       if (item)
@@ -4393,13 +4393,43 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
         const auto chosen = c.themeColor("tertiaryContainer");
         QList<QQuickItem *> containers;
         collectItems(list, "menuItemContainer", containers);
-        int marked = 0;
+        QQuickItem *first = nullptr, *last = nullptr;
+        for (auto container : containers) {
+          if (!first || container->mapToItem(frame, QPointF(0, 0)).y() <
+                            first->mapToItem(frame, QPointF(0, 0)).y())
+            first = container;
+          if (!last || container->mapToItem(frame, QPointF(0, 0)).y() >
+                           last->mapToItem(frame, QPointF(0, 0)).y())
+            last = container;
+        }
+        // DropdownMenuGroupContentPadding is 2dp vertically; each item's
+        // Surface adds 4dp horizontally (MenuDefaults.kt:886, Menu.kt:2381).
+        const auto firstTop = first && frame ? first->mapToItem(frame, QPointF(0, 0)) : QPointF();
+        const auto lastTop = last && frame ? last->mapToItem(frame, QPointF(0, 0)) : QPointF();
+        c.check(first && last && frame &&
+                    firstTop.x() >= 3.5 && firstTop.x()+first->width() <= frame->width()-3.5 &&
+                    firstTop.y() >= 1.5 &&
+                    qAbs(first->property("topLeftRadius").toDouble()-12) < 0.5 &&
+                    lastTop.x() >= 3.5 && lastTop.x()+last->width() <= frame->width()-3.5 &&
+                    lastTop.y()+last->height() <= frame->height()-1.5 &&
+                    qAbs(last->property("bottomLeftRadius").toDouble()-12) < 0.5,
+                "first and last item corners sit inside the 16dp group corner");
+        auto stateLayer = anyItem(list, "menuItemStateLayer");
+        const auto stateX = stateLayer && frame ? stateLayer->mapToItem(frame, QPointF(0, 0)).x() : 0;
+        c.check(stateLayer && frame && stateX >= 3.5 &&
+                    stateX+stateLayer->width() <= frame->width()-3.5,
+                "hover and press layers share the 4dp item inset");
+        int marked = 0, plain = 0;
         for (auto container : containers)
           if (container->property("color").value<QColor>() == chosen)
             ++marked;
+          else if (container->property("color").value<QColor>() == c.themeColor("surfaceLow"))
+            ++plain;
         c.check(marked == 1,
                 QString("one of the %1 menu items is marked as the one you are on (%2)")
                     .arg(containers.size()).arg(marked));
+        c.check(containers.size() > 1 && plain == containers.size()-1,
+                "unchecked menu items use StandardMenuTokens.ItemContainerColor");
         c.check(chosen != c.themeColor("secondaryContainer"),
                 "in the tertiary container, which is not what marks a chosen row");
       }
@@ -4407,7 +4437,7 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
         c.check(leading->property("ink").value<QColor>() == c.themeColor("muted") ||
                     leading->property("ink").value<QColor>() == c.themeColor("tertiaryContainerText"),
                 "a menu item's leading icon is the variant ink until the item is chosen");
-      c.shotNow("05-segmented-menu");
+      c.shotNow("05-expressive-menu");
       QMetaObject::invokeMethod(menu, "close");
       QTest::qWait(300);
     }
