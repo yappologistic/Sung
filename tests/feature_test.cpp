@@ -60,6 +60,16 @@ QQuickItem *anyItem(QQuickItem *root, const QString &name) {
       return found;
   return nullptr;
 }
+// ListItem.kt centres a short item's leading content inside its padding, so a
+// row's cover must lie wholly within the container it draws, centred on it.
+bool leadingCentredInRow(QQuickItem *row, QQuickItem *lead) {
+  auto container = row ? row->property("background").value<QQuickItem *>() : nullptr;
+  if (!container || !lead)
+    return false;
+  const QRectF box = container->mapRectToScene(container->boundingRect());
+  const QRectF art = lead->mapRectToScene(lead->boundingRect());
+  return box.contains(art) && qAbs(art.center().y() - box.center().y()) < 1;
+}
 QObject *motionObject(QObject *owner, const char *property) {
   if (!owner)
     return nullptr;
@@ -3386,6 +3396,8 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   c.check(ordinaryRow && ordinaryLead && qAbs(ordinaryRow->height() - 72) < 1 &&
               qAbs(ordinaryLead->width() - 56) < 1,
           "ListTokens gives the ordinary two-line row a 72dp body and 56dp image");
+  c.check(leadingCentredInRow(ordinaryRow, ordinaryLead),
+          "the ordinary row's cover sits centred inside its container");
   // ListTokens.ItemLabelTextFont is BodyLarge, whose own weight is regular.
   c.check(ordinaryTitle && ordinaryTitle->property("font").value<QFont>().weight() == QFont::Normal,
           "the row title uses BodyLarge's regular weight");
@@ -3486,6 +3498,10 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     c.check(queueRow && queueLead && qAbs(queueRow->height() - 72) < 1 &&
                 qAbs(queueLead->width() - 56) < 1,
             "queue rows use ListTokens' 72dp body and 56dp image too");
+    // Queue rows are a segmented run: each container is inset by half the
+    // gap, and the cover still centres on the container, not the slot.
+    c.check(leadingCentredInRow(queueRow, queueLead),
+            "the queue row's cover sits centred inside its container");
     const auto queueIndicators = queueRow ? queueRow->findChildren<QObject *>("playingIndicator") : QList<QObject *>{};
     auto queueBars = queueIndicators.size() == 1 ? qobject_cast<QQuickItem *>(queueIndicators.first()) : nullptr;
     c.check(queueRow && queueLead && queueRow->property("active").toBool() && queueIndicators.size() == 1 &&
@@ -3980,11 +3996,13 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
               albumArt->property("url").toString() == firstArt &&
               qAbs(albumLead->width() - 56) < 1,
           "album tracks show their cover in the 56dp leading slot");
-  // ListTokens.ItemOneLineContainerHeight applies after the repeated artist
-  // line is removed; the title and duration still remain.
+  // The repeated artist line is removed, but ListItem.kt:1172 grows the 56dp
+  // one-line container to fit the 56dp cover and its 8dp padding: 72dp.
   c.check(albumRow && albumSupport && !albumSupport->isVisible() &&
-              qAbs(albumRow->height() - 56) < 1,
-          "an album track with the album artist becomes a 56dp one-line row");
+              qAbs(albumRow->height() - 72) < 1,
+          "an album track with the album artist fits its cover in a 72dp row");
+  c.check(leadingCentredInRow(albumRow, albumLead),
+          "the album row's cover sits centred inside its container");
   auto guestRow = albumList ? shownItem(albumList, "trackRow_1") : nullptr;
   auto guestSupport = guestRow ? anyItem(guestRow, "trackSupport") : nullptr;
   c.check(guestRow && guestSupport && guestSupport->isVisible() &&
@@ -3998,8 +4016,9 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   w->resize(600, 900);
   QTest::qWait(450);
   auto narrowAlbumRow = shownItem(w->contentItem(), "trackRow_0");
-  c.check(narrowAlbumRow && qAbs(narrowAlbumRow->height() - 56) < 1,
-          "the one-line album row keeps its height in a narrow window");
+  c.check(narrowAlbumRow && qAbs(narrowAlbumRow->height() - 72) < 1 &&
+              leadingCentredInRow(narrowAlbumRow, anyItem(narrowAlbumRow, "trackLeading")),
+          "the album row keeps its height and centred cover in a narrow window");
   c.shot("15a-album-rows-narrow");
   w->resize(1400, 900);
   QTest::qWait(450);

@@ -79,9 +79,20 @@ ItemDelegate {
     // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
     Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;objectName:"trackRowResizeMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
     Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}
-    // ListTokens.ItemOneLineContainerHeight is 56dp when the album heading
-    // already supplies the artist; ordinary two-line rows remain 72dp.
-    implicitHeight: queueMode ? (app.compactDensity?56:72) : repeatedAlbumArtist ? 56 : Theme.rowHeight
+    // ListTokens.ItemLeadingImageWidth/Height is 56dp. The compact option
+    // uses ItemLeadingAvatarSize (40dp), including in queue rows.
+    readonly property int leadingSize: queueMode ? (app.compactDensity?40:56) : Theme.rowArtwork
+    // ListItem.kt:1275 pads a one- or two-line item 8dp above and below its
+    // content (ListItemVerticalPadding); Basic's 12dp left a 56dp cover no
+    // room in a 72dp row, so it hung below the container.
+    topPadding: 8
+    bottomPadding: 8
+    // ListItem.kt:1172 sizes an item as the larger of its container token and
+    // its padded content. ListTokens.ItemOneLineContainerHeight is 56dp when
+    // the album heading already supplies the artist, but the 56dp cover then
+    // makes the row 72dp, the same as an ordinary two-line row.
+    implicitHeight: Math.max(queueMode ? (app.compactDensity?56:72) : repeatedAlbumArtist ? 56 : Theme.rowHeight,
+                             leadingSize + topPadding + bottomPadding)
     width: ListView.view ? ListView.view.width : 500
     hoverEnabled: true
     enabled: track.available !== false
@@ -197,9 +208,7 @@ ItemDelegate {
         transform: Translate { x: row.swipe }
         Item {
             objectName: "trackLeading"
-            // ListTokens.ItemLeadingImageWidth/Height is 56dp. The compact
-            // option uses ItemLeadingAvatarSize (40dp), including in queue rows.
-            Layout.preferredWidth: row.queueMode?(app.compactDensity?40:56):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
+            Layout.preferredWidth: row.leadingSize; Layout.preferredHeight: row.leadingSize
             Icon { objectName: "mixKindIcon"; anchors.centerIn: parent; name: "filter"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
             // Every row leads with its cover, album pages included: a track
             // number is not always known (YouTube Music sends none), and an
