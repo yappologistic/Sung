@@ -29,9 +29,11 @@ Popup {
     background: Rectangle {
         objectName: "drawerSurface"
         color: Theme.surfaceLow
-        topRightRadius: Theme.shapeExtraLarge
-        bottomRightRadius: Theme.shapeExtraLarge
-        MElevation { anchors.fill: parent; radius: Theme.shapeExtraLarge; level: 1 }
+        // NavigationDrawerTokens.ContainerShape is CornerLargeEnd: square
+        // against the window edge, 16dp on the edge that faces the content.
+        topRightRadius: Theme.shapeLarge
+        bottomRightRadius: Theme.shapeLarge
+        MElevation { anchors.fill: parent; radius: Theme.shapeLarge; level: 1 }
     }
     contentItem: Item { id: body }
 
