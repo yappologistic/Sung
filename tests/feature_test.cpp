@@ -2830,7 +2830,8 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   paintCover(c.directory + "/music/cover.png", QColor("#26405e"), QColor("#c96f2a"));
   for (int i = 1; i <= 6; ++i)
     if (!encodeTrack(c, QString("%1/music/%2.flac").arg(c.directory).arg(i),
-                     QString("Track %1").arg(i), "Detail", "Rill", i))
+                     QString("Track %1").arg(i), "Detail", i == 2 ? "Guest Artist" : "Rill", i,
+                     i == 2 ? QStringList{"-metadata", "album_artist=Rill"} : QStringList{}))
       return c.finish();
   b->importMusicFolder(QUrl::fromLocalFile(c.directory + "/music"));
   c.check(c.until([&] { return !b->importingLocal(); }, 40000), "import the detail fixture");
@@ -3328,6 +3329,85 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     }
   }
   c.shot("13-supporting-pane");
+
+  // Opening the card uses the same route as a person, so the album context
+  // comes from Backend::albumInfo rather than a test-only row property.
+  w->setProperty("side", "");
+  b->stop();
+  b->clearQueue();
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("local-albums")));
+  c.check(c.until([&] { return b->results()->count() == 2; }), "albums are available for the row check");
+  QTest::qWait(350);
+  c.click("openCollectionCard");
+  c.check(c.until([&] { return b->page() == "local-album" && b->results()->count() > 0; }),
+          "the album card opens its tracks");
+  QTest::mouseMove(w, QPoint(2, 2));
+  QTest::qWait(450);
+  auto albumList = shownItem(w->contentItem(), "tracksView");
+  auto albumRow = albumList ? shownItem(albumList, "trackRow_0") : nullptr;
+  auto albumLead = albumRow ? anyItem(albumRow, "trackLeading") : nullptr;
+  auto albumNumber = albumLead ? anyItem(albumLead, "albumTrackNumber") : nullptr;
+  auto albumArt = albumLead ? anyItem(albumLead, "trackLeadingArtwork") : nullptr;
+  auto albumSupport = albumRow ? anyItem(albumRow, "trackSupport") : nullptr;
+  const int firstNumber = b->results()->get(0).value("trackNumber").toInt();
+  c.check(albumList && albumList->property("albumRows").toBool() && firstNumber > 0 &&
+              albumRow && albumLead && albumNumber && albumNumber->isVisible() &&
+              albumNumber->property("text").toString() == QString::number(firstNumber) &&
+              albumArt && !albumArt->isVisible() && albumArt->property("url").toString().isEmpty() &&
+              qAbs(albumLead->width() - 56) < 1,
+          "album tracks show their stored number in the 56dp leading slot");
+  // ListTokens.ItemOneLineContainerHeight applies after the repeated artist
+  // line is removed; the title and duration still remain.
+  c.check(albumRow && albumSupport && !albumSupport->isVisible() &&
+              qAbs(albumRow->height() - 56) < 1,
+          "an album track with the album artist becomes a 56dp one-line row");
+  auto guestRow = albumList ? shownItem(albumList, "trackRow_1") : nullptr;
+  auto guestSupport = guestRow ? anyItem(guestRow, "trackSupport") : nullptr;
+  c.check(guestRow && guestSupport && guestSupport->isVisible() &&
+              guestSupport->property("sourceText").toString() == "Guest Artist" &&
+              qAbs(guestRow->height() - 72) < 1,
+          "a featured artist keeps the BodyMedium line and two-line height");
+  c.shot("14-album-track-numbers");
+  b->setTheme("light");
+  c.shot("15-album-track-numbers-light");
+  b->setTheme("dark");
+  w->resize(600, 900);
+  QTest::qWait(450);
+  auto narrowAlbumRow = shownItem(w->contentItem(), "trackRow_0");
+  c.check(narrowAlbumRow && qAbs(narrowAlbumRow->height() - 56) < 1,
+          "the one-line album row keeps its height in a narrow window");
+  c.shot("15a-album-track-numbers-narrow");
+  w->resize(1400, 900);
+  QTest::qWait(450);
+  albumList = shownItem(w->contentItem(), "tracksView");
+  albumRow = albumList ? shownItem(albumList, "trackRow_0") : nullptr;
+  albumLead = albumRow ? anyItem(albumRow, "trackLeading") : nullptr;
+  if (albumRow && albumLead) {
+    const auto point = albumLead->mapToScene(albumLead->boundingRect().center()).toPoint();
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    QTest::qWait(120);
+    auto checkbox = anyItem(albumLead, "rowCheckbox");
+    c.check(albumRow->property("selected").toBool() && checkbox && checkbox->isVisible(),
+            "clicking an album number still selects through the leading checkbox");
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    QTest::qWait(120);
+    c.check(!albumRow->property("selected").toBool(), "the same leading click clears selection");
+    if (auto selection = albumList->findChild<RowSelection *>())
+      selection->clear();
+    const auto titlePoint = albumRow->mapToScene(QPointF(120, albumRow->height() / 2)).toPoint();
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, titlePoint);
+    if (auto settingsButton = shownItem(w->contentItem(), "settingsButton"))
+      settingsButton->forceActiveFocus();
+    QTest::mouseMove(w, QPoint(2, 2));
+    auto leadingIndicator = anyItem(albumLead, "playingIndicator");
+    c.check(c.until([&] { return albumRow->property("active").toBool(); }) && leadingIndicator &&
+                (albumRow->property("selectionVisible").toBool()
+                     ? checkbox && checkbox->isVisible() && !leadingIndicator->isVisible()
+                     : leadingIndicator->isVisible()),
+            "the album leading slot shows selection or the active playing indicator");
+    b->stop();
+    b->clearQueue();
+  }
   c.finish();
 }
 

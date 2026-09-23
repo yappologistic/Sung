@@ -6,6 +6,12 @@ import Sung.Native 1.0
 ListView {
     id: list
     property bool queueMode: false
+    // Backend::albumInfo returns a summary only for an album detail page.
+    // Keep the queue and every other collection in the ordinary list format.
+    readonly property bool albumRows: !queueMode && !!app.albumInfo.summary
+    // Backend::albumInfo traverses the result set. Read its artist once for
+    // the list, rather than recomputing it in every delegate.
+    readonly property string albumArtist: albumRows ? (app.albumInfo.artist || "") : ""
     // Material's segmented list style, which the panel lists are drawn in.
     property bool segmented: queueMode
     property bool groupFolders: false
@@ -199,6 +205,7 @@ ListView {
             Behavior on y { enabled: app.motion; NumberAnimation { objectName: "trackDropGapMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
         }
         track: entry; rowIndex: list.queueMode?index:app.collection.sourceIndex(index); queueMode: list.queueMode
+        albumMode: list.albumRows; albumArtist: list.albumArtist
         // The queue is drawn as Material's segmented list: one run per group of
         // songs, round where the run ends and nearly square inside it.
         segmented: list.segmented

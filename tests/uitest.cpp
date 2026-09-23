@@ -1839,6 +1839,9 @@ void runVisualRefinementTests(Backend *b,QQuickWindow *w){
   b->library("local-albums");QTest::qWait(350);check(b->collection()->count()==1,"album grid has fixture");shot("01-album-grid");
   click("openCollectionCard");check(w->property("albumFlying").toBool(),"album artwork expansion starts");shot("02-album-flight");check(until([&]{return !w->property("albumFlying").toBool();}),"album artwork expansion settles");QTest::qWait(250);
   auto album=findItem(w->contentItem(),"collectionArtwork"),tracks=findItem(w->contentItem(),"tracksView");const auto expanded=album?album->width():0;check(expanded>100,"expanded album header");shot("03-expanded-header");
+  auto regularRow=findItem(w->contentItem(),"trackRow_0"),regularLead=regularRow?findItem(regularRow,"trackLeading"):nullptr;
+  check(regularRow&&regularLead&&qAbs(regularRow->height()-56)<1&&qAbs(regularLead->width()-56)<1,
+        "ListTokens gives one-line album rows a 56dp body and normal-density leading slot");
   if(tracks){tracks->setProperty("contentY",tracks->property("originY").toDouble()+300);}QTest::qWait(450);check(album&&album->width()<=42,"header collapses during scroll");shot("04-collapsed-header");
   b->setCompactDensity(true);QTest::qWait(300);
   check(b->compactDensity(),"compact density applies");shot("05-compact-list");

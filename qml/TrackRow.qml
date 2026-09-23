@@ -36,6 +36,10 @@ ItemDelegate {
     property point pressPoint
     property int pressModifiers: 0
     property bool queueMode: false
+    property bool albumMode: false
+    property string albumArtist: ""
+    readonly property bool repeatedAlbumArtist: albumMode &&
+        String(track.artist || "").trim().toLocaleLowerCase() === albumArtist.trim().toLocaleLowerCase()
     // Material's segmented list style: a run drawn as one group, its items set
     // apart rather than divided by a rule, round at the ends of the run and
     // nearly square inside it.
@@ -56,7 +60,9 @@ ItemDelegate {
     // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
     Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;objectName:"trackRowResizeMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
     Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}
-    implicitHeight: queueMode ? (app.compactDensity?56:72) : Theme.rowHeight
+    // ListTokens.ItemOneLineContainerHeight is 56dp when the album heading
+    // already supplies the artist; ordinary two-line rows remain 72dp.
+    implicitHeight: queueMode ? (app.compactDensity?56:72) : repeatedAlbumArtist ? 56 : Theme.rowHeight
     width: ListView.view ? ListView.view.width : 500
     hoverEnabled: true
     enabled: track.available !== false
@@ -176,7 +182,20 @@ ItemDelegate {
             // option uses ItemLeadingAvatarSize (40dp), including in queue rows.
             Layout.preferredWidth: row.queueMode?(app.compactDensity?40:56):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
             Icon { anchors.centerIn: parent; name: "shuffle"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
-            Artwork { visible: row.track.kind!=="smart"; anchors.fill: parent; url: row.track.art || ""; radius: Theme.shapeSmall; pixels: 112 }
+            // An album's header already owns its cover. RoundedArt loads a
+            // source even when hidden, so an album row must release its URL.
+            Artwork { objectName: "trackLeadingArtwork"; visible: row.track.kind!=="smart" && !row.albumMode; anchors.fill: parent; url: row.albumMode ? "" : (row.track.art || ""); radius: Theme.shapeSmall; pixels: 112 }
+            // ListTokens.ItemTrailingSupportingTextFont is LabelSmall. A track
+            // number is numeric supporting data, centred where its cover was.
+            SungText {
+                objectName: "albumTrackNumber"
+                anchors.fill: parent; horizontalAlignment: Text.AlignHCenter
+                visible: row.albumMode && Number(row.track.trackNumber)>0 && !row.active && !row.selectionVisible
+                text: Number(row.track.trackNumber)>0 ? String(row.track.trackNumber) : ""
+                font.pixelSize: Theme.labelSmall; labelRole: true; font.features: {"tnum": 1}
+                color: row.supportInk
+            }
+            PlayingIndicator { ink: row.titleInk; anchors.centerIn: parent; visible: row.albumMode && row.active && !row.selectionVisible }
             // Material puts a selection control in a list item's leading slot,
             // and for a list you can take several rows from that is a checkbox.
             MCheckbox {
@@ -197,10 +216,11 @@ ItemDelegate {
             Layout.fillWidth: true; spacing: 4
             // ListTokens.ItemLabelTextFont is BodyLarge at its own weight.
             MatchText { objectName: "trackTitle"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.title || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; typeRole: "bodyLarge"; color: row.titleInk }
-            // ListTokens.ItemSupportingTextFont is BodyMedium.
-            MatchText { visible: row.track.kind!=="smart"; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
+            // ListTokens.ItemSupportingTextFont is BodyMedium. Album rows omit
+            // only the artist already stated in the album heading.
+            MatchText { objectName: "trackSupport"; visible: row.track.kind!=="smart" && !row.repeatedAlbumArtist; query: row.matchQuery; tooltipEnabled: row.titleRevealAllowed; revealFocused: row.keyboardCurrent; sourceText: row.track.artist || (row.track.kind === "artist" ? "Artist" : row.track.kind === "album" ? "Album" : row.track.kind === "playlist" ? "Playlist" : ""); Layout.fillWidth: true; color: row.supportInk; font.pixelSize: Theme.bodyMedium; typeRole: "bodyMedium" }
         }
-        PlayingIndicator { ink: row.titleInk; visible: row.active }
+        PlayingIndicator { ink: row.titleInk; visible: row.active && !row.albumMode }
         // A row's trailing supporting text is label small
         // (ListTokens.ItemTrailingSupportingTextFont), not body small.
         SungText { font.features: {"tnum": 1}; visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: Theme.labelSmall; labelRole: true; color: row.supportInk; Layout.rightMargin: 2 }
