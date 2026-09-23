@@ -10,12 +10,15 @@ Item {
     onLoadingChanged: {delay.stop();revealed=false;if(loading)delay.start();}
     Timer { id: delay; interval: 150; onTriggered: skeleton.revealed=skeleton.loading }
     Component.onCompleted: if(loading)delay.start()
+    // This continuous loading shimmer keeps its 1500ms period, which is not a
+    // control state spring. animating stops it when hidden or motion is off.
     // Material's skeleton pulses, and the pulse travels: it starts at the top
     // left and moves down to the bottom right rather than brightening the whole
     // surface at once, which is what tells the eye the screen is filling rather
     // than flashing. Each block reads the wave at its own place in the layout.
     property real wave: 0
     NumberAnimation on wave {
+        objectName: "catalogShimmerAnimation"
         running: skeleton.animating; loops: Animation.Infinite
         from: 0; to: 2*Math.PI; duration: 1500
     }

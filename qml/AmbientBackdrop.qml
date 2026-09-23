@@ -25,12 +25,15 @@ Item {
     readonly property bool reactive: animating && app.backdropPulse && app.playing
     readonly property real level: reactive ? Math.max(app.audioLevels[0] || 0, app.audioLevels[1] || 0) : 0
     property real pulse: level
-    Behavior on pulse { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    // This 220ms smoothing follows decoded audio, not a control state. Reduced
+    // motion disables the Behavior so its last level change settles at once.
+    Behavior on pulse { enabled: app.motion; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
     visible: active
     opacity: active ? 1 : 0
     // The drifting cover is oversized on purpose and must not paint outside.
     clip: true
-    Behavior on opacity { NumberAnimation { duration: Theme.slow; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    // SlowEffects keeps the ambient wash's fade gentle and monotonic.
+    Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.springSlowEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSlowEffects } }
     RoundedArt {
         id: art
         objectName: "ambientArt"

@@ -1209,6 +1209,12 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return backdrop->property("pulse").toReal() > 0.05; }, 10000), "turning it back on resumes");
 
   b->setMotion(false);
+  // A3-11: a disabled Behavior must snap its last audio level change in the
+  // first event frame. Waiting 400ms alone would also pass the old 220ms fade.
+  QCoreApplication::processEvents();
+  c.check(backdrop->property("level").toReal() < 0.01 &&
+              backdrop->property("pulse").toReal() < 0.01,
+          "reduced motion settles the pulse in one frame");
   QTest::qWait(400);
   c.check(!backdrop->property("reactive").toBool() && backdrop->property("pulse").toReal() < 0.01,
           "reduced motion stops the reaction as well as the drift");

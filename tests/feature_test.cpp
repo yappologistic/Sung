@@ -2125,6 +2125,36 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
                 wave->property("duration").toInt() == 1000,
             "the wavy sweep and wavelength use Compose's independent rates");
   }
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/CatalogSkeleton.qml"));
+    QScopedPointer<QObject> made(source.create(qmlContext(w)));
+    auto skeleton = qobject_cast<QQuickItem *>(made.data());
+    if (skeleton) {
+      skeleton->setParentItem(w->contentItem());
+      skeleton->setWidth(240);
+      skeleton->setHeight(160);
+      skeleton->setProperty("loading", true);
+      QTest::qWait(220);
+    }
+    auto shimmer = skeleton ? skeleton->findChild<QObject *>("catalogShimmerAnimation") : nullptr;
+    c.check(skeleton && shimmer && shimmer->property("duration").toInt() == 1500 &&
+                skeleton->property("animating").toBool(),
+            "the visible loading shimmer keeps its continuous 1500ms period");
+    b->setMotion(false);
+    QCoreApplication::processEvents();
+    const double stoppedWave = skeleton ? skeleton->property("wave").toDouble() : 0;
+    QTest::qWait(64);
+    c.check(skeleton && !skeleton->property("animating").toBool() &&
+                qAbs(skeleton->property("wave").toDouble() - stoppedWave) < 0.001,
+            "reduced motion stops the shimmer instead of keeping a timer awake");
+    b->setMotion(true);
+    if (skeleton) {
+      skeleton->setVisible(false);
+      QCoreApplication::processEvents();
+      c.check(!skeleton->property("animating").toBool(), "a hidden skeleton stops its shimmer");
+      skeleton->setParentItem(nullptr);
+    }
+  }
   // A spatial spring passes its target and an effects spring does not, which
   // is the whole reason Material separates them.
   const double spatialPeak = peakOf(curve("springSpatial"));
