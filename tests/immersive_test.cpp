@@ -69,6 +69,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
             const double actionX=layout->mapToScene(layout->boundingRect().center()).x();
             if(actionX<0||actionX>=width)return false;
             auto player=visibleItem(w->contentItem(),"immersivePlayer");
+            // The offscreen window can report its new size a frame before its
+            // anchored Loader receives the matching height.
+            if(player&&qAbs(player->height()-height)>1)return false;
             if(player&&player->property("displayedLayout")=="lyrics"&&width>=1024){
               auto pane=visibleItem(w->contentItem(),"lyricsView");
               return pane&&qAbs(pane->width()-760)<1&&
@@ -731,6 +734,27 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         title->property("maximumLineCount").toInt()==2,
         "title wraps at words and elides after two lines");
   shot("coverflow-480");
+  resizeTo(480,620);
+  auto shortArt=visibleItem(w->contentItem(),"immersiveArtwork");
+  auto shortFlow=visibleItem(w->contentItem(),"coverflowView");
+  auto shortQueue=visibleItem(w->contentItem(),"immersiveQueueButton");
+  check(shortArt&&shortArt->width()>=160&&!shortFlow&&shortQueue&&shortQueue->isEnabled(),
+        qPrintable(QString("short window yields coverflow: window %1, player %2, art %3, flow %4, budget %5, reserve %6, title %7x%8, row %9/%10, queue %11")
+          .arg(w->height()).arg(player->height(),0,'f',1)
+          .arg(shortArt?shortArt->width():-1,0,'f',1)
+          .arg(shortFlow?"visible":"hidden")
+          .arg(player->property("coverflowCoverBudget").toDouble(),0,'f',1)
+          .arg(shortFlow?shortFlow->parentItem()->property("reserved").toDouble():-1,0,'f',1)
+          .arg(title?title->property("lineCount").toInt():-1)
+          .arg(title?title->property("lineHeight").toDouble():-1,0,'f',1)
+          .arg(visibleItem(w->contentItem(),"immersiveSeekRow")?visibleItem(w->contentItem(),"immersiveSeekRow")->height():-1,0,'f',1)
+          .arg(visibleItem(w->contentItem(),"immersiveSeekRow")?visibleItem(w->contentItem(),"immersiveSeekRow")->implicitHeight():-1,0,'f',1)
+          .arg(shortQueue?QString("at %1,%2 enabled %3")
+                .arg(shortQueue->mapToScene({0,0}).x(),0,'f',1)
+                .arg(shortQueue->mapToScene({0,0}).y(),0,'f',1)
+                .arg(shortQueue->isEnabled()):"missing")));
+  shot("coverflow-yield-480");
+  resizeTo(480,780);
   for(const auto &pair:{qMakePair("immersiveArtistButton","immersiveArtistFocusRing"),
                         qMakePair("immersiveAlbumButton","immersiveAlbumFocusRing")}){
     auto button=visibleItem(w->contentItem(),pair.first);
@@ -780,6 +804,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         "compact immersive player opens at the requested size");
   player=visibleItem(w->contentItem(),"immersivePlayer");shot("compact");
   const auto art=visibleItem(w->contentItem(),"immersiveArtwork");const auto seek=visibleItem(w->contentItem(),"immersiveSeek");
+  check(art&&art->width()>=160&&!visibleItem(w->contentItem(),"coverflowView"),
+        "short split layout keeps a useful cover by yielding coverflow");
   check(art&&seek&&art->mapToScene({0,art->height()}).y()<seek->mapToScene({0,0}).y(),
         qPrintable(QString("compact artwork stays above transport (%1 against %2)")
                    .arg(art?art->mapToScene(QPointF(0,art->height())).y():-1,0,'f',0)

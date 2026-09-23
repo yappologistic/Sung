@@ -26,7 +26,6 @@ Item {
     property real detailsOpacity: coverHidden ? 0 : 1
     readonly property var artistTarget: app.relatedCollection(app.current,"artist")
     readonly property var albumTarget: app.relatedCollection(app.current,"album")
-    readonly property real coverflowReserve: coverflowVisible ? upNext.reserved+16 : 0
     // How wide the column holding the cover and its details is. Material has
     // nothing to say about a now-playing cover, so this is a share of the
     // window: most of it when the cover is the screen, about a third when it
@@ -59,7 +58,17 @@ Item {
     signal collectionRequested(var item)
     signal coverflowRequested(bool enabled)
     property bool coverflow: false
-    readonly property bool coverflowVisible: coverflow && app.queue.count>0
+    // There is no Material token for a now-playing cover. Below 160dp it
+    // reads as a queue thumbnail, so the optional coverflow yields its row.
+    // Work from the uncollapsed row budget to avoid a visible/height loop.
+    // IconButton.kt:242-249 gives each link a 48dp target. The other
+    // components report their natural heights; count four shell gaps before
+    // reserving the optional coverflow, without reading the cover it shrinks.
+    readonly property real coverflowCoverBudget: (Window.window?Window.window.height:height)-2*(width<600?16:24)
+        -topControls.implicitHeight-transport.implicitHeight-seekRow.implicitHeight
+        -upNext.reserved-4*shell.spacing-title.implicitHeight-2*48
+    readonly property bool coverflowVisible: coverflow && app.queue.count>0 &&
+        (displayedLayout==="lyrics" || displayedLayout==="singalong" || coverflowCoverBudget>=160)
     function hasKeyboardFocus(item) {
         for(let p=item;p && p!==player;p=p.parent)
             if(p.visualFocus===true || p.handlesTextInput===true)return true;
