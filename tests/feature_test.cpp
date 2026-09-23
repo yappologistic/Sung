@@ -353,6 +353,13 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
     c.check(c.themeColor("primary") != QColor("#ffb596"),
             "Expressive visibly changes the default accent");
     c.shot("01-ui-variant");
+    c.click("variantContent");
+    c.check(b->colorVariant() == "content", "clicking Faithful selects MCU Content");
+    // MCU dynamic_color.ts:447-457 moves a source tone in T50-59 to T60
+    // for a dark container, then keeps the primary ten tones farther away.
+    c.check(qAbs(m3::toneOf(c.themeColor("primaryContainer")) - 60) < 1,
+            "Faithful resolves the warm default source out of the ambiguous tone band");
+    c.shot("01-ui-faithful");
     c.closeDialog(colorSettings);
     b->setColorVariant("tonalSpot");
     b->setColorContrast(0);
@@ -5188,6 +5195,46 @@ void runMaterialSchemeTests(Backend *b, QQuickWindow *w) {
     c.check(c.evaluate("Theme.primary").value<QColor>().isValid(),
             QString("the window takes the %1 scheme").arg(variant));
     c.shot(QString("01-scheme-") + variant);
+    if (QString::fromLatin1(variant) == "content") {
+      c.check(qAbs(m3::toneOf(c.themeColor("primaryContainer")) - m3::toneOf(source)) < 5,
+              "Content takes its primary container tone from the source");
+      // Temporary cards make the two Content roles visible in the capture;
+      // the empty library screen does not otherwise paint either container.
+      QQmlComponent cardSource(qmlEngine(w), QUrl("qrc:/qml/MCard.qml"));
+      QScopedPointer<QObject> primaryCard(cardSource.create(qmlContext(w)));
+      QScopedPointer<QObject> tertiaryCard(cardSource.create(qmlContext(w)));
+      auto primaryItem = qobject_cast<QQuickItem *>(primaryCard.data());
+      auto tertiaryItem = qobject_cast<QQuickItem *>(tertiaryCard.data());
+      c.check(primaryItem && tertiaryItem, "Content role cards can be rendered for inspection");
+      if (primaryItem && tertiaryItem) {
+        for (auto item : {primaryItem, tertiaryItem}) {
+          item->setParentItem(w->contentItem());
+          item->setWidth(210); item->setHeight(116); item->setY(270); item->setZ(90);
+        }
+        primaryItem->setX(900); tertiaryItem->setX(1130);
+        primaryItem->setProperty("color", c.themeColor("primaryContainer"));
+        tertiaryItem->setProperty("color", c.themeColor("tertiaryContainer"));
+        c.shot("01-content-roles-dark");
+        b->setTheme("light");
+        QTest::qWait(350);
+        primaryItem->setProperty("color", c.themeColor("primaryContainer"));
+        tertiaryItem->setProperty("color", c.themeColor("tertiaryContainer"));
+        c.shot("01-content-roles-light");
+        b->setTheme("dark");
+        QTest::qWait(350);
+        primaryItem->setParentItem(nullptr); tertiaryItem->setParentItem(nullptr);
+      }
+      b->setMotion(true);
+      b->setAccentColor("#c0392b");
+      QTest::qWait(40);
+      c.check(c.evaluate("Theme.seedSteps.length").toInt() == 3 &&
+                  c.evaluate("Theme.schemeSteps.length").toInt() == 3,
+              "Content animates with three cached schemes and interpolated roles");
+      QTest::qWait(300);
+      b->setMotion(false);
+      b->setAccentColor("#3f6ad8");
+      QTest::qWait(100);
+    }
   }
   b->setColorVariant("tonalSpot");
   for (double level : {0.0, 1.0}) {

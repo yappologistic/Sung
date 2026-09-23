@@ -1,5 +1,8 @@
 #include "m3color.h"
+#include <QMutex>
+#include <QMutexLocker>
 #include <QtGlobal>
+#include <array>
 #include <cmath>
 #include <utility>
 
@@ -203,6 +206,87 @@ double rotatedHue(double hue, const QList<double> &breaks, const QList<double> &
 }
 const QList<double> kVibrantBreaks{0, 41, 61, 101, 131, 181, 251, 301, 360};
 const QList<double> kExpressiveBreaks{0, 21, 51, 121, 151, 191, 271, 321, 360};
+
+double rawTemperature(const QColor &color) {
+  const double r = linearized(color.redF()), g = linearized(color.greenF()),
+               b = linearized(color.blueF());
+  const double x = 0.41233895 * r + 0.35762064 * g + 0.18051042 * b;
+  const double y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  const double z = 0.01932141 * r + 0.11916382 * g + 0.95034478 * b;
+  const double a = 500.0 * (labF(x / 95.047) - labF(y / 100.0));
+  const double bb = 200.0 * (labF(y / 100.0) - labF(z / 108.883));
+  const double hue = sanitizeDegrees(std::atan2(bb, a) * 180.0 / kPi);
+  const double chroma = std::hypot(a, bb);
+  // MCU temperature_cache.ts:272-282 uses Lab hue and chroma to measure
+  // relative warmth. The constant offset cancels during analogue selection.
+  return -0.5 + 0.02 * std::pow(chroma, 1.07) *
+                    std::cos(sanitizeDegrees(hue - 50.0) * kPi / 180.0);
+}
+
+double desiredChromaTone(const TonalPalette &palette, double initial, bool decreasing) {
+  // MCU color_spec_2021.ts:40-72 and :429-449 move Content's secondary
+  // container toward the tone where its palette can hold more chroma.
+  double answer = initial;
+  auto closest = measure(palette.tone(answer));
+  if (closest.chroma >= palette.chroma) return answer;
+  double peak = closest.chroma;
+  while (closest.chroma < palette.chroma) {
+    answer += decreasing ? -1 : 1;
+    if (answer < 0 || answer > 100) break;
+    const auto possible = measure(palette.tone(answer));
+    if (peak > possible.chroma || std::abs(possible.chroma - palette.chroma) < 0.4) break;
+    if (std::abs(possible.chroma - palette.chroma) < std::abs(closest.chroma - palette.chroma))
+      closest = possible;
+    peak = std::max(peak, possible.chroma);
+  }
+  return qBound(0.0, answer, 100.0);
+}
+
+bool isDisliked(const Hct &color) {
+  // MCU dislike_analyzer.ts:41-62 rounds the achieved HCT hue, chroma and
+  // tone before deciding whether a dark yellow-green needs tone 70.
+  return std::round(color.hue) >= 90 && std::round(color.hue) <= 111 &&
+         std::round(color.chroma) > 16 && std::round(color.tone) < 65;
+}
+
+TonalPalette contentTertiary(const QColor &source, const Hct &sourceHct) {
+  static QMutex mutex;
+  static QHash<QRgb, TonalPalette> cache;
+  {
+    QMutexLocker lock(&mutex);
+    if (auto found = cache.constFind(source.rgb()); found != cache.cend()) return *found;
+  }
+  // MCU dynamic_scheme.ts:663-670 chooses analogous(3, 6)[2].
+  // temperature_cache.ts:67-145 divides the full wheel by cumulative
+  // absolute temperature change. The third analogue is the first clockwise
+  // sixth, not a fixed 60 degree hue rotation.
+  std::array<double, 360> temperatures{};
+  const int start = int(std::round(sourceHct.hue)) % 360;
+  for (int hue = 0; hue < 360; ++hue)
+    temperatures[hue] = rawTemperature(solve(hue, sourceHct.chroma, sourceHct.tone));
+  double total = 0;
+  for (int step = 1; step <= 360; ++step)
+    total += std::abs(temperatures[(start + step) % 360] -
+                      temperatures[(start + step - 1) % 360]);
+  double traveled = 0;
+  int analogue = start;
+  for (int step = 1; step <= 360; ++step) {
+    const int hue = (start + step) % 360;
+    traveled += std::abs(temperatures[hue] - temperatures[(start + step - 1) % 360]);
+    if (traveled >= total / 6.0) { analogue = hue; break; }
+  }
+  auto candidate = measure(solve(analogue, sourceHct.chroma, sourceHct.tone));
+  // MCU dislike_analyzer.ts:41-62 lightens non-neutral dark yellow-greens.
+  if (isDisliked(candidate))
+    candidate = measure(solve(candidate.hue, candidate.chroma, 70));
+  const TonalPalette palette{candidate.hue, candidate.chroma};
+  {
+    QMutexLocker lock(&mutex);
+    if (cache.size() >= 64) cache.clear();
+    cache.insert(source.rgb(), palette);
+  }
+  return palette;
+}
 } // namespace
 
 Variant variantFor(const QString &name) {
@@ -237,13 +321,11 @@ Palettes palettesFor(const QColor &source, Variant variant) {
             TonalPalette{sanitizeDegrees(hue + 15.0), 8.0},
             TonalPalette{sanitizeDegrees(hue + 15.0), 12.0}};
   case Variant::Content:
-    // Material picks Content's tertiary by walking the colour wheel for an
-    // analogous hue and correcting it if it lands somewhere disliked. Without
-    // that machinery this takes the same step round the wheel the default
-    // scheme takes, at the source's own chroma.
+    // MCU dynamic_scheme.ts:602-635, 663-670, 700-733: Content retains the
+    // source's chroma and takes its tertiary from a temperature analogue.
     return {TonalPalette{hue, chroma},
             TonalPalette{hue, std::max(chroma - 32.0, chroma * 0.5)},
-            TonalPalette{sanitizeDegrees(hue + 60.0), chroma},
+            contentTertiary(source, hct),
             TonalPalette{hue, chroma / 8.0},
             TonalPalette{hue, chroma / 8.0 + 4.0}};
   case Variant::TonalSpot:
@@ -452,15 +534,32 @@ QVariantMap scheme(const QColor &source, bool dark, Variant variant, double cont
     roles.insert(name + "Container", palette.tone(pair.container));
     roles.insert("on" + capital,
                  palette.tone(toneFor(dark ? 20 : 100, !dark, {pair.accent}, curve(kOnAccent))));
-    roles.insert("on" + capital + "Container",
-                 palette.tone(toneFor(variant == Variant::Content ? (pair.container < 60 ? 90 : 10)
-                                                                 : (dark ? 90 : 30),
-                                      pair.container < 60, {pair.container}, curve(kOnContainer))));
+    // MCU color_spec_2021.ts:367-382, 452-467, 529-545: only Content's
+    // accent containers begin at foregroundTone(container, 4.5). Error keeps
+    // its ordinary 90 dark / 30 light initial tone (lines 587-599).
+    const bool fidelityInk = variant == Variant::Content && name != "error";
+    // .tone(s) in MCU is the container's initial tone, before its delta pair
+    // and contrast adjustment; the curve then checks the resolved container.
+    const double initialInk = fidelityInk ? mcuForegroundTone(containerInitial, 4.5)
+                                           : (dark ? 90 : 30);
+    const double desired = curve(kOnContainer);
+    const double resolvedInk = toneContrast(pair.container, initialInk) >= desired
+                                   ? initialInk : mcuForegroundTone(pair.container, desired);
+    roles.insert("on" + capital + "Container", palette.tone(resolvedInk));
   };
-  // MCU color_spec_2021.ts:312-599 keeps each accent and container apart.
-  family("primary", p.primary, dark ? 30 : 90);
-  family("secondary", p.secondary, dark ? 30 : 90);
-  family("tertiary", p.tertiary, dark ? 30 : 90);
+  // MCU color_spec_2021.ts:312-599. Content starts primaryContainer at the
+  // source tone; its other containers search for chroma near their base tone.
+  const double sourceTone = toneOf(source);
+  family("primary", p.primary, variant == Variant::Content ? sourceTone : (dark ? 30 : 90));
+  family("secondary", p.secondary,
+         variant == Variant::Content ? desiredChromaTone(p.secondary, dark ? 30 : 90, !dark)
+                                     : (dark ? 30 : 90));
+  // MCU color_spec_2021.ts:508-526 tests the achievable HCT colour at the
+  // source tone, then fixes the disliked one before applying contrast.
+  const double tertiaryStart = variant == Variant::Content
+      ? (isDisliked(measure(p.tertiary.tone(sourceTone))) ? 70 : sourceTone)
+      : (dark ? 30 : 90);
+  family("tertiary", p.tertiary, tertiaryStart);
   family("error", p.error, dark ? 30 : 90);
   put("surfaceTint", roles.value("primary").value<QColor>());
 

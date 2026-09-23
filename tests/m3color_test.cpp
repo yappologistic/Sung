@@ -327,6 +327,83 @@ private slots:
     }
   }
 
+  // MCU Content uses the source tone for primaryContainer and a temperature
+  // analogue for tertiary, as in dynamic_scheme.ts:663-670.
+  void contentKeepsTheSourcesOwnTone() {
+    const QColor source("#3f6ad8");
+    const auto content = m3::scheme(source, false, m3::Variant::Content, 0);
+    const auto primaryContainer = content.value("primaryContainer").value<QColor>();
+    QVERIFY2(qAbs(m3::toneOf(primaryContainer) - m3::toneOf(source)) < 5,
+             "Content starts primaryContainer at the source tone");
+    const auto sourceHct = m3::measure(source);
+    const auto tertiary = m3::palettesFor(source, m3::Variant::Content).tertiary;
+    QVERIFY2(hueGap(tertiary.hue, sourceHct.hue + 60) > 5,
+             "Content's temperature analogue differs from a fixed 60 degree turn");
+    // MCU color_spec_2021.ts:429-449 searches down from light T90 when a
+    // secondary palette cannot reach its requested chroma there.
+    const auto secondaryPalette = m3::palettesFor(source, m3::Variant::Content).secondary;
+    const auto secondaryBase = secondaryPalette.tone(90);
+    const auto secondaryContainer = content.value("secondaryContainer").value<QColor>();
+    QVERIFY2(m3::toneOf(secondaryContainer) < 90 &&
+                 m3::measure(secondaryContainer).chroma > m3::measure(secondaryBase).chroma + 5,
+             "Content moves the light secondary container toward its palette chroma");
+  }
+
+  // MCU dynamic_color.ts:392-479 moves the nearer container out of T50-59,
+  // then keeps the accent at least ten tones farther from the surface.
+  void contentPairsLeaveTheAwkwardZone() {
+    const QColor source("#b75f38");
+    QVERIFY(m3::toneOf(source) >= 50 && m3::toneOf(source) < 60);
+    const auto dark = m3::scheme(source, true, m3::Variant::Content);
+    const auto light = m3::scheme(source, false, m3::Variant::Content);
+    const auto tone = [](const QVariantMap &roles, const char *name) {
+      return m3::toneOf(roles.value(name).value<QColor>());
+    };
+    QVERIFY2(qAbs(tone(dark, "primaryContainer") - 60) < 1,
+             "dark Content takes its source-toned container up to T60");
+    QVERIFY2(qAbs(tone(light, "primaryContainer") - 49) < 1,
+             "light Content takes its source-toned container down to T49");
+    QVERIFY(tone(dark, "primary") - tone(dark, "primaryContainer") >= 9.5);
+    QVERIFY(tone(light, "primaryContainer") - tone(light, "primary") >= 9.5);
+  }
+
+  // MCU color_spec_2021.ts:367-382, 452-467, 529-545 starts Content's
+  // container ink at foregroundTone(container, 4.5) before its role curve.
+  void contentContainerInksStartAtFourPointFive() {
+    const auto roles = m3::scheme(QColor("#b75f38"), true, m3::Variant::Content);
+    for (const char *family : {"Primary", "Secondary", "Tertiary"}) {
+      const QString container = QString(family).toLower() + "Container";
+      const QString ink = "on" + QString(family) + "Container";
+      const auto front = roles.value(ink).value<QColor>();
+      const auto back = roles.value(container).value<QColor>();
+      const double ratio = contrast(front, back);
+      QVERIFY2(ratio >= 4.35,
+               qPrintable(QString("%1 on %2 is %3:1, below MCU's 4.5:1 floor")
+                              .arg(ink, container).arg(ratio, 0, 'f', 2)));
+    }
+    for (const char *family : {"Primary", "Tertiary"}) {
+      const auto ink = roles.value("on" + QString(family) + "Container").value<QColor>();
+      const auto container = roles.value(QString(family).toLower() + "Container").value<QColor>();
+      QVERIFY2(m3::toneOf(ink) < m3::toneOf(container),
+               "a source-T50 Content container keeps MCU's darker foreground choice");
+    }
+    const double secondaryRatio = contrast(roles.value("onSecondaryContainer").value<QColor>(),
+                                           roles.value("secondaryContainer").value<QColor>());
+    QVERIFY2(secondaryRatio < 5.3,
+             "the secondary Content ink begins near 4.5:1 rather than the fixed T90 ink");
+  }
+
+  // MCU color_spec_2021.ts:587-599 does not give error a Content branch.
+  void contentDoesNotChangeErrorContainerInk() {
+    const QColor source("#b75f38");
+    const auto content = m3::scheme(source, false, m3::Variant::Content);
+    const auto spot = m3::scheme(source, false, m3::Variant::TonalSpot);
+    QCOMPARE(content.value("errorContainer").value<QColor>(),
+             spot.value("errorContainer").value<QColor>());
+    QCOMPARE(content.value("onErrorContainer").value<QColor>(),
+             spot.value("onErrorContainer").value<QColor>());
+  }
+
   // MCU dynamic_color.ts:392-479 makes Fixed nearer in light and FixedDim
   // nearer in dark. Both move together when either reaches T50-59.
   void fixedPairsUseTheirActualNearerRole() {
@@ -343,6 +420,19 @@ private slots:
     const auto lightDim = m3::toneOf(lightQuarter.value("primaryFixedDim").value<QColor>());
     QVERIFY2(qAbs(lightFixed-49) < 1 && lightDim <= 39.5,
              "light Fixed and FixedDim leave the awkward zone together");
+  }
+
+  // MCU color_spec_2021.ts:508-526 measures the HCT colour actually made at
+  // the source tone before DislikeAnalyzer applies its rounded thresholds.
+  void contentDislikeUsesAchievedChroma() {
+    const QColor source("#8a685d");
+    const auto tertiary = m3::palettesFor(source, m3::Variant::Content).tertiary;
+    const auto achieved = m3::measure(tertiary.tone(m3::toneOf(source)));
+    QVERIFY(tertiary.chroma > 16 && std::round(achieved.chroma) <= 16);
+    const auto roles = m3::scheme(source, true, m3::Variant::Content);
+    const double containerTone = m3::toneOf(roles.value("tertiaryContainer").value<QColor>());
+    QVERIFY2(qAbs(containerTone - m3::toneOf(source)) < 1,
+             "a non-disliked achieved chroma keeps the source container tone");
   }
 
   // Raising the level moves text and boundaries further from their surface.
