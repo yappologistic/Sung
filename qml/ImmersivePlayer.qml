@@ -34,7 +34,13 @@ Item {
     // the largest square that fits the room the column has left after the
     // title, artist and album, which the layout works out rather than a
     // constant guessing at it.
-    readonly property real coverColumnWidth: Math.max(80,width*(displayedLayout==="artwork"?0.55:0.34))
+    // The metadata column needs room for ordinary words even when the split
+    // view is narrow. The floor is a layout allowance, not an artwork size.
+    readonly property real coverColumnWidth: Math.max(200,width*(displayedLayout==="artwork"?0.55:0.34))
+    // Material has no now-playing text measure token. At tall desktop widths
+    // 520px keeps the shared edge close to the height-limited square cover;
+    // the column itself sets the floor when the window is narrow.
+    readonly property real detailsMeasure: Math.min(520,coverColumn.width)
     // At the immersive 40px lyric size, 760px holds roughly 35 characters.
     // The measure is centred only where the window content also fits gutters.
     readonly property real lyricMeasure: 760
@@ -148,22 +154,22 @@ Item {
                     opacity: presentation.fade*player.detailsOpacity
                     transform: Translate { x: presentation.offset }
                     Layout.fillWidth: true
-                    Layout.maximumWidth: player.width<600 ? coverColumn.width : immersiveArt.width
+                    Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
                     font.pixelSize: player.width<900?22:30
                     font.weight: Font.DemiBold
 
-                    // The 480px coverflow capture left a 70px title measure.
-                    // Use the cover column and elide on one line if needed, so
-                    // a word is never split mid-letter.
-                    wrapMode: player.width<600 ? Text.NoWrap : Text.Wrap
-                    elide: player.width<600 ? Text.ElideRight : Text.ElideNone
-                    maximumLineCount: player.width<600 ? 1 : 2
+                    // Qt Text.WordWrap keeps whole words; ElideRight marks the
+                    // last line when the two-line limit omits the rest.
+                    wrapMode: Text.WordWrap
+                    elide: Text.ElideRight
+                    maximumLineCount: 2
+                    clip: true
                 }
                 AbstractButton {
                     objectName: "immersiveArtistButton"
                     Layout.fillWidth: true
-                    Layout.maximumWidth: immersiveArt.width
+                    Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
                     implicitHeight: 48
                     leftPadding: 0; rightPadding: 8
@@ -179,7 +185,7 @@ Item {
                 AbstractButton {
                     objectName: "immersiveAlbumButton"
                     Layout.fillWidth: true
-                    Layout.maximumWidth: immersiveArt.width
+                    Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
                     implicitHeight: 40
                     leftPadding: 0; rightPadding: 8

@@ -721,8 +721,14 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   auto title=visibleItem(w->contentItem(),"immersiveTitle");
   auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
   auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
-  check(title&&title->property("lineCount").toInt()==1&&!title->property("truncated").toBool(),
-        "480px coverflow title uses the column width and stays on one line");
+  check(title&&artistLink&&albumLink&&qAbs(title->mapToScene({0,0}).x()-artistLink->mapToScene({0,0}).x())<1&&
+        qAbs(title->mapToScene({0,0}).x()-albumLink->mapToScene({0,0}).x())<1&&
+        qAbs(title->width()-artistLink->width())<1&&qAbs(title->width()-albumLink->width())<1,
+        "title and collection links share one column measure and alignment");
+  check(title&&title->property("wrapMode").toInt()==QQmlExpression(qmlContext(title),title,"Text.WordWrap").evaluate().toInt()&&
+        title->property("elide").toInt()==QQmlExpression(qmlContext(title),title,"Text.ElideRight").evaluate().toInt()&&
+        title->property("maximumLineCount").toInt()==2,
+        "title wraps at words and elides after two lines");
   shot("coverflow-480");
   for(const auto &pair:{qMakePair("immersiveArtistButton","immersiveArtistFocusRing"),
                         qMakePair("immersiveAlbumButton","immersiveAlbumFocusRing")}){
