@@ -742,6 +742,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   }
   if(artistLink)artistLink->forceActiveFocus(Qt::TabFocusReason);
   QTest::keyClick(w,Qt::Key_Tab);
+  check(artistLink&&albumLink&&artistLink->height()>=48&&albumLink->height()>=48&&
+        albumLink->mapToScene({0,0}).y()-artistLink->mapToScene({0,0}).y()<=48.5,
+        "collection links keep 48dp targets in a tight stack");
   check(albumLink&&w->activeFocusItem()==albumLink,
         "Tab reaches the album after the artist in artwork details");
   shot("focus-ring-480");

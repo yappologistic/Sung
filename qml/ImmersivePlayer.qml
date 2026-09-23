@@ -134,7 +134,7 @@ Item {
                 id: coverColumn
                 visible:player.displayedLayout!=="lyrics" && player.displayedLayout!=="singalong"
                 Layout.preferredWidth: player.coverColumnWidth; Layout.minimumWidth: player.coverColumnWidth; Layout.maximumWidth: player.coverColumnWidth
-                Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: 12
+                Layout.fillHeight: true; Layout.minimumHeight: 0; spacing: 0
                 // The cover takes the room the details do not, as the largest
                 // square that fits it. A window with more height to give
                 // therefore reaches the cover instead of stopping at a cap.
@@ -183,11 +183,14 @@ Item {
                     Rectangle { objectName: "immersiveArtistFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
                 }
                 AbstractButton {
+                    // IconButton.kt:242-249 applies a 48dp minimum hit area.
+                    // Zero column spacing keeps both 48dp slots contiguous;
+                    // the text stays centred inside each larger target.
                     objectName: "immersiveAlbumButton"
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
-                    implicitHeight: 40
+                    implicitHeight: 48
                     leftPadding: 0; rightPadding: 8
                     visible: !!app.current.album
                     enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
