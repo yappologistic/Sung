@@ -705,9 +705,13 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
                          .arg(colour.name()).arg(expected.name())));
       }
       auto speed=w->findChild<QObject*>("immersiveSpeed");
-      check(speed&&speed->property("symbol").toString().isEmpty()&&
-            speed->property("text").toString().startsWith("Playback speed"),
-            "playback speed uses its explicit text without a history glyph");
+      // The glyph must be bundled at all three optical sizes, or the Symbols
+      // provider draws nothing where the icon should be.
+      check(speed&&speed->property("symbol").toString()=="speed"&&
+            speed->property("text").toString().startsWith("Playback speed")&&
+            QFile::exists(":/assets/icons/speed.svg")&&QFile::exists(":/assets/icons/speed_20.svg")&&
+            QFile::exists(":/assets/icons/speed_40.svg"),
+            "playback speed leads with the bundled Material speed glyph");
       shot("menu");
       QTest::keyClick(w,Qt::Key_Escape);
       check(waitFor([&]{return !menuOpen();}),"layout menu closes");
