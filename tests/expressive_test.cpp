@@ -313,6 +313,14 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   auto sheet = w->findChild<QObject *>("immersiveQueueSheet");
   c.check(sheet && sheet->property("visible").toBool(),
           "Show all opens the full queue, the carousel's non-scrolling alternative");
+  if (sheet) {
+    QQuickItem *heading = nullptr;
+    for (auto text : sheet->findChildren<QQuickItem *>())
+      if (text->property("text").toString() == "Queue") { heading = text; break; }
+    auto accessible = heading ? QAccessible::queryAccessibleInterface(heading) : nullptr;
+    c.check(accessible && accessible->role() == QAccessible::Heading,
+            "queue title is an accessibility heading");
+  }
   QTest::keyClick(w, Qt::Key_Escape);
   c.check(c.until([&] { return sheet && !sheet->property("visible").toBool(); }, 3000) &&
               w->property("immersive").toBool(),

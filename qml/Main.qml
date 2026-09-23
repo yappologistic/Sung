@@ -540,7 +540,7 @@ ApplicationWindow {
         else immersiveQueue.close();
     } }
             RowLayout {Layout.fillWidth:true
-                SungText {text:"Queue";font.pixelSize:Theme.headlineSmall;Layout.fillWidth:true}
+                SungText {text:"Queue";font.pixelSize:Theme.headlineSmall;heading:true;Layout.fillWidth:true}
                 MButton {objectName:"closeImmersiveQueue";symbol:"close";tip:"Close queue";onClicked:immersiveQueue.close()}
             }
             Loader {id:immersiveQueueLoader;Layout.fillWidth:true;Layout.fillHeight:true;active:immersiveQueue.visible;sourceComponent:queuePanel}
