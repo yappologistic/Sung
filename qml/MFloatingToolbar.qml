@@ -24,7 +24,8 @@ Rectangle {
     // A floating toolbar rests above the content it acts on.
     MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
 
-    implicitWidth: row.implicitWidth + 24
+    // FloatingToolbarTokens: 8dp at each end and 4dp between the items.
+    implicitWidth: row.implicitWidth + 16
     implicitHeight: 64
     radius: Theme.shapeFull(implicitHeight)
     color: vibrant ? Theme.primaryContainer : Theme.container
@@ -34,6 +35,6 @@ Rectangle {
         id: row
         objectName: "floatingToolbarRow"
         anchors.centerIn: parent
-        spacing: 8
+        spacing: 4
     }
 }
