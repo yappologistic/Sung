@@ -14,6 +14,11 @@ QtObject {
     // Tonal Spot roles retain the original palette, while contrast and variant
     // alternatives take the published curves (color_spec_2021.ts:130-739).
     readonly property color defaultSeed: "#b75f38"
+    readonly property bool desktopPalette: followDesktop && !useSource
+    // The KDE anchors describe Noctalia's standard look. MCU
+    // color_spec_2021.ts:130-739 supplies the alternate variant and contrast
+    // tones for every role, including anchors the desktop file supplied.
+    readonly property bool desktopStandard: desktopPalette && app.colorVariant === "tonalSpot" && app.colorContrast === 0
     function standardDefaultRoles(generated) {
         // These are the existing standard palette, kept pixel-for-pixel for
         // the no-source Tonal Spot state. Contrast and variant alternatives
@@ -31,8 +36,8 @@ QtObject {
     // invokable's internal C++ reads do not create binding dependencies.
     readonly property var roles: {
         const variant=app.colorVariant, contrast=app.colorContrast
-        const map=app.colorScheme(useSource?sourceColor:defaultSeed,dark)
-        return !useSource && variant==="tonalSpot" && contrast===0
+        const map=app.colorScheme(desktopPalette?desktopTheme.colors.primary:(useSource?sourceColor:defaultSeed),dark)
+        return !useSource && !desktopPalette && variant==="tonalSpot" && contrast===0
                ? standardDefaultRoles(map) : map
     }
     function role(name,fallback) {const c=roles[name];return c===undefined?fallback:c;}
@@ -353,31 +358,31 @@ QtObject {
     readonly property real disabledContentOpacity: 0.38
     readonly property bool followDesktop: app.theme === "system" && desktopTheme.available
     readonly property bool dark: followDesktop ? desktopTheme.dark : app.theme === "dark" || (app.theme === "system" && Application.styleHints.colorScheme === Qt.Dark)
-    readonly property color background: followDesktop ? desktopTheme.colors.background : role("background", dark ? "#181211" : "#fff8f6")
+    readonly property color background: desktopStandard ? desktopTheme.colors.background : role("background", dark ? "#181211" : "#fff8f6")
     // Material's surface is the plainest one there is, the tone a page starts
     // from. The ladder of containers is measured against it, and the app had
     // been using the first step of that ladder under this name while the role
     // itself went unread.
-    readonly property color surface: followDesktop ? desktopTheme.colors.background : role("surface", dark ? "#181211" : "#fff8f6")
-    readonly property color surfaceLow: followDesktop ? desktopTheme.colors.surface : role("surfaceContainerLow", dark ? "#201a18" : "#fff1ec")
-    readonly property color container: followDesktop ? desktopTheme.colors.container : role("surfaceContainer", dark ? "#2b2320" : "#f6e5de")
-    readonly property color high: followDesktop ? desktopTheme.colors.high : role("surfaceContainerHigh", dark ? "#382c28" : "#efddd5")
+    readonly property color surface: desktopStandard ? desktopTheme.colors.background : role("surface", dark ? "#181211" : "#fff8f6")
+    readonly property color surfaceLow: desktopStandard ? desktopTheme.colors.surface : role("surfaceContainerLow", dark ? "#201a18" : "#fff1ec")
+    readonly property color container: desktopStandard ? desktopTheme.colors.container : role("surfaceContainer", dark ? "#2b2320" : "#f6e5de")
+    readonly property color high: desktopStandard ? desktopTheme.colors.high : role("surfaceContainerHigh", dark ? "#382c28" : "#efddd5")
     readonly property color highest: role("surfaceContainerHighest", dark ? "#433733" : "#e9d8d0")
-    readonly property color text: followDesktop ? desktopTheme.colors.text : role("onSurface", dark ? "#f5ded5" : "#281912")
-    readonly property color muted: followDesktop ? desktopTheme.colors.muted : role("onSurfaceVariant", dark ? "#d5bfb5" : "#705c53")
+    readonly property color text: desktopStandard ? desktopTheme.colors.text : role("onSurface", dark ? "#f5ded5" : "#281912")
+    readonly property color muted: desktopStandard ? desktopTheme.colors.muted : role("onSurfaceVariant", dark ? "#d5bfb5" : "#705c53")
     // Material has two outline roles and they do different jobs. The outline is
     // a boundary that has to hold on its own: a text field, a switch track, a
     // connected button group. The variant is decorative separation: a divider,
     // or the edge of a container that is already legible without one. The
     // scheme computes both, at neutral variant tone 60/50 and 30/80.
-    readonly property color outline: followDesktop ? desktopTheme.colors.outline
+    readonly property color outline: desktopStandard ? desktopTheme.colors.outline
                                    : role("outline", blend(outlineVariant, muted, 0.5))
-    readonly property color outlineVariant: followDesktop ? desktopTheme.colors.outline
+    readonly property color outlineVariant: desktopStandard ? desktopTheme.colors.outlineVariant
                                           : role("outlineVariant", dark ? "#57443b" : "#dcc5b9")
-    readonly property color primary: useSource ? role("primary",sourceColor) : followDesktop ? desktopTheme.colors.primary : role("primary",dark ? "#ffb596" : "#964829")
-    readonly property color primaryText: useSource ? role("onPrimary",luminance(primary)>0.179?"#000000":"#ffffff") : followDesktop ? desktopTheme.colors.primaryText : role("onPrimary",dark ? "#572008" : "#ffffff")
-    readonly property color primaryContainer: useSource ? role("primaryContainer",blend(container,primary,0.16)) : followDesktop ? desktopTheme.colors.primaryContainer : role("primaryContainer",dark ? "#75351b" : "#ffdbcb")
-    readonly property color containerText: useSource ? role("onPrimaryContainer",readable(primary,[primaryContainer])) : followDesktop ? desktopTheme.colors.containerText : role("onPrimaryContainer",dark ? "#ffdbcb" : "#743419")
+    readonly property color primary: desktopStandard ? desktopTheme.colors.primary : role("primary",dark ? "#ffb596" : "#964829")
+    readonly property color primaryText: desktopStandard ? desktopTheme.colors.primaryText : role("onPrimary",dark ? "#572008" : "#ffffff")
+    readonly property color primaryContainer: desktopStandard ? desktopTheme.colors.primaryContainer : role("primaryContainer",dark ? "#75351b" : "#ffdbcb")
+    readonly property color containerText: desktopStandard ? desktopTheme.colors.containerText : role("onPrimaryContainer",dark ? "#ffdbcb" : "#743419")
     readonly property color secondaryContainer: role("secondaryContainer", dark ? "#54432a" : "#f5e0bb")
     // Material's third accent. A vibrant surface takes it where the usual
     // container would disappear into what it is sitting over.
@@ -386,7 +391,7 @@ QtObject {
     readonly property color tertiaryContainer: role("tertiaryContainer", dark ? "#3b5236" : "#d4eacb")
     readonly property color tertiaryContainerText: role("onTertiaryContainer", dark ? "#d4eacb" : "#233a1f")
     readonly property color secondaryContainerText: role("onSecondaryContainer", dark ? "#f5e0bb" : "#221a04")
-    readonly property color secondary: followDesktop ? desktopTheme.colors.secondary : role("secondary", dark ? "#d8c4a0" : "#6c5b3b")
+    readonly property color secondary: desktopStandard ? desktopTheme.colors.secondary : role("secondary", dark ? "#d8c4a0" : "#6c5b3b")
     // The ink that goes on the secondary role itself, which is what a tonal
     // toggle takes once it is on.
     readonly property color secondaryText: role("onSecondary", dark ? "#3b2f15" : "#ffffff")

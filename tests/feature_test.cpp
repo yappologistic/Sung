@@ -480,6 +480,91 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
           "the built-in palette returns untouched");
   c.shot("06-released");
 
+  // Noctalia's KDE file has only eleven anchors. Material's missing roles
+  // must come from its green source rather than Sung's warm default palette.
+  const QString desktopPath = qEnvironmentVariable("XDG_DATA_HOME") + "/color-schemes/noctalia.colors";
+  QDir().mkpath(QFileInfo(desktopPath).absolutePath());
+  QFile desktopFile(desktopPath);
+  c.check(desktopFile.open(QIODevice::WriteOnly | QIODevice::Truncate), "write an isolated desktop palette");
+  if (desktopFile.isOpen()) {
+    desktopFile.write("[Colors:View]\nBackgroundNormal=30,35,28\nForegroundNormal=235,239,227\n"
+                      "ForegroundInactive=174,184,161\nDecorationHover=32,40,25\n"
+                      "DecorationFocus=207,225,171\nForegroundLink=183,208,133\n"
+                      "[Colors:Complementary]\nBackgroundNormal=27,31,24\n"
+                      "[Colors:Window]\nBackgroundNormal=38,43,34\nBackgroundAlternate=57,67,48\n"
+                      "[Colors:Button]\nBackgroundNormal=52,62,44\nForegroundActive=183,208,133\n");
+    desktopFile.close();
+    c.check(c.until([&] { return c.evaluate("desktopTheme.available").toBool(); }),
+            "the desktop palette watcher loads the completed file");
+    b->setTheme("system");
+    QTest::qWait(350);
+    c.check(c.themeColor("outline") != c.themeColor("outlineVariant"),
+            "desktop outline and outlineVariant stay distinct");
+    c.check(c.themeColor("highest") != QColor("#433733") &&
+                c.themeColor("secondaryContainer") != QColor("#54432a"),
+            "desktop surface and secondary containers do not fall back to Sung's warm palette");
+    const auto desktopHue = m3::measure(c.themeColor("primary")).hue;
+    const auto highestHue = m3::measure(c.themeColor("highest")).hue;
+    const double hueDifference = std::min(std::abs(desktopHue-highestHue), 360-std::abs(desktopHue-highestHue));
+    c.check(hueDifference < 25, QString("the desktop surface ladder follows its source (%1 degrees)")
+                                   .arg(hueDifference,0,'f',1));
+    floors("desktop dark");
+    c.shot("07-desktop-palette");
+    const auto standardDesktopPrimary = c.themeColor("primary");
+    const auto standardDesktopHighest = c.themeColor("highest");
+    b->setColorContrast(1);
+    QTest::qWait(350);
+    c.check(c.themeColor("primary") != standardDesktopPrimary &&
+                c.themeColor("highest") != standardDesktopHighest,
+            "high contrast moves the desktop's supplied accent and surface roles");
+    floors("desktop high contrast");
+    c.shot("07-desktop-high-contrast");
+    b->setColorContrast(0);
+    b->setColorVariant("expressive");
+    QTest::qWait(350);
+    c.check(c.themeColor("primary") != standardDesktopPrimary,
+            "scheme variants also reach the desktop's supplied accent");
+    c.shot("07-desktop-expressive");
+    b->setColorVariant("tonalSpot");
+    QTest::qWait(350);
+    b->setArtworkAccent(true);
+    c.evaluate("Theme.artworkSeed=Qt.rgba(0.78,0.31,0.19,1)");
+    QTest::qWait(350);
+    c.check(c.themeColor("background") != c.evaluate("desktopTheme.colors.background").value<QColor>(),
+            "artwork accent takes the whole surface ladder in system mode");
+    floors("desktop with artwork");
+    c.shot("08-desktop-with-artwork");
+    b->setArtworkAccent(false);
+    QFile lightDesktop(desktopPath);
+    c.check(lightDesktop.open(QIODevice::WriteOnly | QIODevice::Truncate),
+            "replace the isolated desktop palette with a light one");
+    if (lightDesktop.isOpen()) {
+      lightDesktop.write("[Colors:View]\nBackgroundNormal=246,249,240\nForegroundNormal=36,45,27\n"
+                         "ForegroundInactive=89,103,77\nDecorationHover=255,255,255\n"
+                         "DecorationFocus=52,84,32\nForegroundLink=66,100,43\n"
+                         "[Colors:Complementary]\nBackgroundNormal=250,251,246\n"
+                         "[Colors:Window]\nBackgroundNormal=238,244,230\nBackgroundAlternate=220,235,202\n"
+                         "[Colors:Button]\nBackgroundNormal=226,236,210\nForegroundActive=61,100,42\n");
+      lightDesktop.close();
+      c.check(c.until([&] { return !c.evaluate("desktopTheme.dark").toBool(); }),
+              "the desktop watcher accepts the light palette");
+      QTest::qWait(350);
+      c.check(c.themeColor("outline") != c.themeColor("outlineVariant"),
+              "light desktop outlines keep separate strengths");
+      floors("desktop light");
+      c.shot("09-desktop-light");
+      const auto lightPrimary = c.themeColor("primary");
+      b->setColorContrast(1);
+      QTest::qWait(350);
+      c.check(c.themeColor("primary") != lightPrimary,
+              "high contrast also moves the light desktop accent");
+      floors("desktop light high contrast");
+      c.shot("09-desktop-light-high-contrast");
+      b->setColorContrast(0);
+    }
+  }
+  b->setTheme("dark");
+
   b->stop();
   b->clearQueue();
   c.finish();

@@ -1,4 +1,5 @@
 #include "desktoptheme.h"
+#include "m3color.h"
 #include <QColor>
 #include <QDir>
 #include <QFileInfo>
@@ -51,13 +52,18 @@ void DesktopTheme::reload() {
     }
     next[it.key()] = QColor(channels[0],channels[1],channels[2]);
   }
-  auto bg=next["background"].value<QColor>();
-  auto fg=next["text"].value<QColor>();
-  // The generated KDE template omits outline; derive a low-emphasis border.
-  next["outline"] = QColor::fromRgbF(bg.redF()*.7+fg.redF()*.3,
-      bg.greenF()*.7+fg.greenF()*.3,bg.blueF()*.7+fg.blueF()*.3);
-  if (next == m_colors) return;
+  const auto bg=next["background"].value<QColor>();
   m_dark = bg.lightnessF() < .5;
+  // Noctalia's KDE export names eleven anchors, not the complete Material
+  // set. MCU color_spec_2021.ts:130-739 derives the missing surface, inverse,
+  // accent and outline roles from the desktop primary. Distinct outline roles
+  // keep a control boundary stronger than a decorative divider.
+  const auto derived = m3::scheme(next["primary"].value<QColor>(), m_dark);
+  for (auto it = derived.cbegin(); it != derived.cend(); ++it)
+    if (!next.contains(it.key())) next.insert(it.key(), it.value());
+  next["outline"] = derived.value("outline");
+  next["outlineVariant"] = derived.value("outlineVariant");
+  if (next == m_colors) return;
   m_colors = next;
   emit changed();
 }
