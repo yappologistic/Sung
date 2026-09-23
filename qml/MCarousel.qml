@@ -3,11 +3,8 @@ import QtQuick.Controls
 
 // Material 3 carousel, in its multi-browse layout.
 //
-// What makes a carousel a carousel rather than a row that scrolls: items change
-// size as they move through it, so the one at the edge is visibly squashed and
-// tells you there is more to come; the visuals travel at a different speed from
-// their containers, which is the parallax; and items snap into place instead of
-// stopping wherever the flick ran out.
+// Items are laid out at full size and masked at the edge, as Carousel.kt:70-75
+// describes. The artwork still travels at a different speed from its cell.
 //
 // Material's own research found that a squashed preview item is what people
 // read as "there is more here", and that they expect around ten items in a
@@ -18,9 +15,6 @@ ListView {
 
     property real cellWidth: 180
     property var openHandler: null
-    // How far a cell at the edge is allowed to shrink. Material keeps a
-    // readable sliver rather than tapering to nothing.
-    readonly property real squashed: 0.38
 
     orientation: ListView.Horizontal
     // Carousel.kt:822-826 defaults its content padding to zero. The first
@@ -50,23 +44,26 @@ ListView {
         readonly property real outside: Math.max(0, Math.max(-offset, offset + width - carousel.width))
         readonly property real squeeze: Math.max(0, Math.min(1, outside / width))
         readonly property bool leading: offset < 0
-
-        ArtCard {
-            objectName: "carouselCard"
-            width: carousel.cellWidth
-            anchors.horizontalCenter: parent.horizontalCenter
-            anchors.top: parent.top
-            track: cell.modelData
-            openHandler: carousel.openHandler
-            // A carousel item rounds at the extra large step, which is a step
-            // past what the same card takes in a grid.
-            corner: Theme.shapeExtraLarge
-            // Items change size as they move through the carousel, growing back
-            // as they come fully into view.
-            scale: 1 - cell.squeeze*carousel.squashed
-            transformOrigin: cell.leading ? Item.Right : Item.Left
-            // The visual lags its container, which is the parallax.
-            parallax: cell.squeeze * (cell.leading ? 1 : -1)
+        // Carousel.kt:70-75 and :535-542 keep the item's contents at full
+        // size and mask its bounds. :816-820 gives a 40-56dp small item; 48dp
+        // is the midpoint and keeps the edge preview readable.
+        readonly property real maskWidth: Math.max(48, width - squeeze*(width-48))
+        Item {
+            objectName: "carouselMask"
+            x: cell.leading ? cell.width-width : 0
+            width: cell.maskWidth; height: cell.height
+            clip: true
+            ArtCard {
+                objectName: "carouselCard"
+                width: carousel.cellWidth
+                x: cell.leading ? parent.width-width : 0
+                anchors.top: parent.top
+                track: cell.modelData
+                openHandler: carousel.openHandler
+                // The full-size item retains its extra large cover corner.
+                corner: Theme.shapeExtraLarge
+                parallax: cell.squeeze * (cell.leading ? 1 : -1)
+            }
         }
     }
 }

@@ -2580,28 +2580,27 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
             "which snap items into place rather than resting part-way");
     auto first = anyItem(carousel, "carouselCell_0");
     c.check(first, "the carousel has cells");
-    if (first) c.check(qAbs(first->mapToItem(carousel,QPointF()).x()) < 0.5,"the first cover starts at the shelf heading edge");
     if (first) {
+      c.check(qAbs(first->mapToItem(carousel,QPointF()).x()) < 0.5,"the first cover starts at the shelf heading edge");
       auto card = shownItem(first, "carouselCard");
       c.check(card && qAbs(card->scale() - 1) < 0.02,
               "a cell fully in view is at full size");
-      // Scrolling it towards the edge has to shrink it: that squashed preview
-      // is what Material found people read as "there is more here".
+      // The clipped bounds narrow while text and controls retain full scale.
       carousel->setProperty("contentX", carousel->property("contentX").toReal() +
                                             carousel->property("cellWidth").toReal() * 0.7);
       QTest::qWait(300);
-      c.check(card && card->scale() < 0.95,
-              QString("and shrinks as it leaves the viewport (%1)")
-                  .arg(card ? card->scale() : 0, 0, 'f', 2));
+      auto mask = anyItem(first, "carouselMask");
+      c.check(card && mask && qAbs(card->scale() - 1) < 0.02 && mask->width() < card->width() && mask->property("clip").toBool(),
+              "an edge card is masked without shrinking its text or controls");
       c.check(card && qAbs(card->property("parallax").toReal()) > 0.05,
               "with its visual travelling at a different speed from its container");
+      c.shot("03-carousel-edge");
       carousel->setProperty("contentX", 0);
       QTest::qWait(300);
-      c.check(card && qAbs(card->scale() - 1) < 0.02, "and grows back on return");
+      c.check(mask && qAbs(mask->width() - card->width()) < 0.5, "the full card returns without resizing its contents");
     }
     c.shot("03-carousel");
   }
-
   for (const auto &pin : carouselPins) b->togglePin(pin.toMap());
 
   // --- Pull to refresh ---
