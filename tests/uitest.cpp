@@ -1774,6 +1774,31 @@ void runLibraryPolishTests(Backend *b,QQuickWindow *w) {
   evaluate("Theme.artworkSeed=Qt.rgba(0,0,0,0)");QTest::qWait(300);check(!evaluate("Theme.useArtwork").toBool(),"monochrome cover falls back to theme");
   b->setArtworkAccent(false);QTest::qWait(200);check(sampler&&sampler->property("source").toUrl().isEmpty(),"disabled accent releases sample");
   w->setProperty("side","");w->resize(800,600);b->library("local-albums");shot("narrow-albums");
+  b->togglePin(QVariantMap{{"kind","album"},{"id","home_restore_fixture"},{"title","Home fixture"}});
+  b->home();check(until([&]{return !b->busy();}),"Home loads for its empty state");
+  QTest::qWait(250);
+  auto editHome=findItem(w->contentItem(),"editHomeButton");
+  check(editHome&&editHome->isVisible(),"Customize Home is reachable");
+  if(editHome)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+      editHome->mapToScene(QPointF(editHome->width()/2,editHome->height()/2)).toPoint());
+  QTest::qWait(350);
+  const int sections=b->homeSections(true).size();check(sections>0,"Home has sections to hide");
+  for(int i=0;i<sections;++i){
+    auto toggle=findItem(w->contentItem(),"homeVisible_"+QString::number(i));
+    check(toggle&&toggle->isVisible(),"Home section switch is visible");
+    if(toggle)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+        toggle->mapToScene(QPointF(toggle->width()/2,toggle->height()/2)).toPoint());
+    QTest::qWait(90);
+  }
+  check(b->homeSections().isEmpty(),"all Home sections hide through Customize Home");
+  auto homeEditor=w->findChild<QObject*>("homeEditor");if(homeEditor)QMetaObject::invokeMethod(homeEditor,"close");
+  QTest::qWait(250);
+  auto restore=findItem(w->contentItem(),"restoreHomeSections");
+  check(restore&&restore->isVisible(),"Restore sections appears in empty Home");
+  if(restore)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+      restore->mapToScene(QPointF(restore->width()/2,restore->height()/2)).toPoint());
+  QTest::qWait(180);check(!b->homeSections().isEmpty(),"Restore sections takes its real pointer click");
+  b->togglePin(QVariantMap{{"kind","album"},{"id","home_restore_fixture"},{"title","Home fixture"}});
   check(b->playing()&&b->error().isEmpty(),"new views preserve playback");b->stop();b->deletePlaylist(id);
   fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
