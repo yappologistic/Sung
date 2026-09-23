@@ -1820,8 +1820,12 @@ ApplicationWindow {
     }
     MMenu {
         id: actions; objectName: "trackActions"
-        width: 230; padding: 8
-        background: Rectangle { color: Theme.high; radius: Theme.shapeLargeIncreased; border.color: Theme.outlineVariant }
+        // The menu's own group surface, as every other menu has it. Its longest
+        // label, "Remove from server playlist", is 213px of BodyLarge and needs
+        // 273 with the item's padding and leading slot, so this menu takes
+        // DropdownMenuItemDefaultMaxWidth, 280dp (Menu.kt:2390), and no label
+        // is cut short.
+        width: 280
         MMenuItem { text: "Open"; visible: !(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.open(window.menuItem) }
         MMenuItem { objectName: "playKeepQueueAction"; symbol: "play"; text: "Play now, keep queue"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.playKeepingQueue(window.menuItem) }
         MMenuItem { symbol: "next"; text: "Play next"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.enqueue(window.menuItem,true) }

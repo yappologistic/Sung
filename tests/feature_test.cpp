@@ -3086,6 +3086,46 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     auto waiting = shownItem(w->contentItem(), "queueWaitingCount");
     c.check(waiting && waiting->property("text").toString() == "3 songs waiting",
             "the queue footer agrees with the badge while playing");
+    // The queue row's own actions button opens the track menu a person sees.
+    // MMenu is one group surface (StandardMenuTokens.ContainerColor), so an
+    // item container on that colour cannot show as a box of its own, and at
+    // DropdownMenuItemDefaultMaxWidth no label needs cutting short.
+    QQuickItem *rowActions = nullptr;
+    if (queueRow)
+      for (auto item : queueRow->findChildren<QQuickItem *>())
+        if (item->isVisible() && item->property("symbol").toString() == "more") {
+          rowActions = item;
+          break;
+        }
+    auto trackMenu = w->findChild<QObject *>("trackActions");
+    c.check(rowActions && trackMenu, "the queue row offers its track actions");
+    if (rowActions && trackMenu) {
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier,
+                        rowActions->mapToScene(rowActions->boundingRect().center()).toPoint());
+      c.check(c.until([&] { return trackMenu->property("opened").toBool(); }),
+              "the queue row's track menu opens");
+      const auto surface = c.evaluate("Theme.surfaceLow").value<QColor>();
+      auto background = trackMenu->property("background").value<QQuickItem *>();
+      c.check(background && background->property("color").value<QColor>() == surface,
+              "the track menu sits on the menu group surface");
+      int boxed = 0, cut = 0, shown = 0;
+      for (auto container : trackMenu->findChildren<QQuickItem *>("menuItemContainer"))
+        if (container->isVisible() && container->property("color").value<QColor>() != surface)
+          ++boxed;
+      for (auto label : trackMenu->findChildren<QQuickItem *>("menuItemLabel"))
+        if (label->isVisible()) {
+          ++shown;
+          if (label->property("truncated").toBool())
+            ++cut;
+        }
+      c.check(shown > 10 && boxed == 0,
+              QString("no track menu item draws a box of its own (%1 of %2)").arg(boxed).arg(shown));
+      c.check(cut == 0, QString("every track menu label fits whole (%1 cut)").arg(cut));
+      c.shot("03b-queue-track-menu");
+      QTest::keyClick(w, Qt::Key_Escape);
+      c.check(c.until([&] { return !trackMenu->property("visible").toBool(); }),
+              "the track menu closes");
+    }
     w->setProperty("side", "");
     // Material's large badge is 16dp tall and grows only as wide as it must.
     c.check(queueBadge->height() == 16 && queueBadge->width() >= 16,
