@@ -19,9 +19,8 @@ TextField {
     background: Rectangle {
         radius: height / 2; color: Theme.high
         border.width: field.activeFocus ? 2 : 0; border.color: Theme.focusRing
-        // Material raises the search bar three levels, so it holds its own
-        // against whatever scrolls beneath it rather than sitting in the page.
-        MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
+        // SearchBarDefaults.ShadowElevation in SearchBar.kt:2000 is Level0,
+        // overriding SearchBarTokens.ContainerElevation's generated Level3.
     }
     // The leading icon says what the bar is for, so Material draws it in the
     // surface ink; the trailing one is an action on it and stays in the variant.

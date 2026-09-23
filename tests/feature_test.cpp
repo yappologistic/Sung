@@ -2854,14 +2854,22 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     c.check(bar->parentItem()->parentItem()->property("color").value<QColor>() ==
                 c.themeColor("high"),
             "the bar itself sits on surfaceContainerHigh");
-  // Material raises the search bar three levels so it holds against whatever
-  // scrolls under it. It had the colour and the shape and no shadow at all.
+  // SearchBarDefaults.ShadowElevation in SearchBar.kt overrides the generated
+  // SearchBarTokens.ContainerElevation with Level0.
   if (auto surface = bar && bar->parentItem() ? bar->parentItem()->parentItem() : nullptr) {
     auto shade = anyItem(surface, "searchBarShade");
-    c.check(shade, "the search bar casts a shadow");
-    c.check(shade && shade->property("level").toInt() == 3,
-            QString("three levels off the page (%1)")
-                .arg(shade ? shade->property("level").toInt() : -1));
+    c.check(!shade, "the search bar has no shadow item at Level0");
+  }
+  {
+    QQmlComponent searchSource(qmlEngine(w), QUrl("qrc:/qml/MSearchField.qml"));
+    QScopedPointer<QObject> made(searchSource.create(qmlContext(w)));
+    auto field = qobject_cast<QQuickItem *>(made.data());
+    c.check(field, "a search field can be inspected on its own");
+    if (field) {
+      auto shape = field->property("background").value<QQuickItem *>();
+      c.check(shape && !anyItem(shape, "elevation"),
+              "SearchBarDefaults.ShadowElevation also leaves MSearchField flat");
+    }
   }
 
   // Compact windows get the whole screen instead of a menu under the bar.

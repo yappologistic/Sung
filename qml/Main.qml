@@ -1326,10 +1326,8 @@ ApplicationWindow {
         color: Theme.high; radius: Theme.shapeExtraLarge
         border.width: searchField.activeFocus?2:0; border.color: Theme.focusRing
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-        // Material raises the search bar three levels, so it holds
-        // its own against whatever scrolls beneath it rather than
-        // sitting in the page with it.
-        MElevation { objectName: "searchBarShade"; anchors.fill: parent; radius: parent.radius; level: 3 }
+        // SearchBarDefaults.ShadowElevation in SearchBar.kt:2000 is Level0,
+        // overriding SearchBarTokens.ContainerElevation's generated Level3.
         RowLayout {
             anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 8; spacing: 12
             // The leading icon says what the bar is for, so it is
