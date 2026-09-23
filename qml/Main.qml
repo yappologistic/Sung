@@ -1218,7 +1218,12 @@ ApplicationWindow {
                                         id: shelf
                                         Layout.fillWidth: true; Layout.preferredHeight: cellWidth+68
                                         Behavior on cellWidth {enabled:app.motion && visible;NumberAnimation {duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
-                                        cellWidth: Math.max(app.viewCompactDensity?112:142,Math.min(app.viewCompactDensity?148:window.feedCardWidth,(width-40)/(app.viewCompactDensity?4.35:3.35)))
+                                        // A cover taller than the shelf list could never be
+                                        // scrolled wholly into view, and a short window
+                                        // (480x620) left keyboard focus on a clipped card.
+                                        // It stays within the list's height, down to the
+                                        // compact density's 112.
+                                        cellWidth: Math.min(Math.max(112,shelves.height-8),Math.max(app.viewCompactDensity?112:142,Math.min(app.viewCompactDensity?148:window.feedCardWidth,(width-40)/(app.viewCompactDensity?4.35:3.35))))
                                         model: modelData.items
                                         openHandler: window.openCollection
                                     }
