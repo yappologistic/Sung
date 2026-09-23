@@ -747,7 +747,12 @@ ApplicationWindow {
                         // transform keeps that off the layout's own geometry.
                         property real shift: 0
                         transform: Translate { x: contentColumn.shift }
-                        anchors.fill: parent; anchors.margins: localGroups.visible?Math.max(12,window.paneMargin-8):window.paneMargin; spacing: app.page==="server"?8:localGroups.visible?12:16
+                        // One margin and one rhythm for every tab. The album and
+                        // artist grids used to tighten both, which moved the
+                        // title and the tabs each time one of them came up. A
+                        // grid's first cover starts at its cell's edge, so at
+                        // the shared margin it lines up with the title.
+                        anchors.fill: parent; anchors.margins: window.paneMargin; spacing: app.page==="server"?8:16
                         ArtistHero {
                             objectName: "artistHero"
                             Layout.fillWidth: true
