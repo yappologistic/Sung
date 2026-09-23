@@ -4639,6 +4639,48 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return b->results()->count() == 3; }), "the library is listed");
   QTest::qWait(500);
 
+  // FloatingActionButtonMenu.kt:203-215 springs the visible item count on
+  // SlowEffects; MenuTokens.FocusIndicatorColor gives the rings Secondary.
+  auto menu = shownItem(w->contentItem(), "libraryFab");
+  c.check(menu, "the library has a FAB menu to focus");
+  if (menu) {
+    auto fab = anyItem(menu, "fab");
+    c.check(fab, "the library FAB is reachable by keyboard");
+    if (fab) {
+      fab->forceActiveFocus(Qt::TabFocusReason);
+      QTest::qWait(100);
+      auto ring = anyItem(fab, "fabFocusRing");
+      c.check(ring && ring->isVisible(), "Tab focus draws the FAB's outside ring");
+      c.click("fab");
+      c.check(c.until([&] { return shownItem(w->contentItem(), "fabMenuItem_0") != nullptr; }, 3000),
+              "the FAB menu reveals its actions");
+      c.check(c.until([&] { return menu->property("staggerCount").toDouble() >=
+                                      menu->property("count").toInt() - 0.01; }, 3000),
+              "the SlowEffects spring reveals the whole menu");
+      // FloatingActionButtonMenu.kt:207-215 snaps the count within one step
+      // so the final item does not wait for the spring's asymptotic tail.
+      const int actionCount = menu->property("count").toInt();
+      menu->setProperty("staggerCount", actionCount - 0.5);
+      QTest::qWait(30);
+      c.check(actionCount > 0 && menu->property("visibleCount").toInt() == actionCount &&
+                  shownItem(w->contentItem(), "fabMenuItem_0"),
+              "the final FAB action is visible within one step of the target");
+      menu->setProperty("staggerCount", actionCount);
+      QTest::keyClick(w, Qt::Key_Tab);
+      QTest::qWait(120);
+      QQuickItem *focused = nullptr;
+      for (int i = 0; i < menu->property("count").toInt(); ++i)
+        if (auto item = shownItem(w->contentItem(), "fabMenuItem_" + QString::number(i));
+            item && item->hasActiveFocus()) focused = item;
+      auto itemRing = focused ? anyItem(focused, "fabMenuItemFocusRing") : nullptr;
+      c.check(focused && itemRing && itemRing->isVisible(),
+              "Tab focus draws the active FAB menu item's outside ring");
+      c.shotNow("06b-fab-menu-focus");
+      QTest::keyClick(w, Qt::Key_Escape);
+      c.until([&] { return !menu->property("open").toBool(); }, 3000);
+    }
+  }
+
   // NavigationBar.kt:201 and Tab.kt:102 apply one LabelTextFont in either
   // selection state; their token files have no active-font variant.
   auto selectedNavLabel = anyItem(w->contentItem(), "navBarLabel_library");

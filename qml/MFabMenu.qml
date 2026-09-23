@@ -20,6 +20,17 @@ Item {
     property string label: ""
     property bool open: false
     readonly property int count: actions.length
+    // FloatingActionButtonMenu.kt:203-215 animates the visible item count
+    // with SlowEffects; each whole step reveals the next action.
+    property real staggerCount: open ? count : 0
+    // FloatingActionButtonMenu.kt:207-215 sets visibilityThreshold to 1 so
+    // the final action appears once the count is within one step of its goal.
+    readonly property int visibleCount: staggerCount >= count - 1
+                                        ? count : Math.max(0, Math.floor(staggerCount + 0.001))
+    Behavior on staggerCount {
+        enabled: app.motion
+        NumberAnimation { duration: Theme.springSlowEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSlowEffects }
+    }
     // Material's small FAB, which is the size it gives a secondary action:
     // 40dp at the medium corner, still carrying a 24dp glyph. Adding to the
     // library is not the screen's primary action, and at 56dp the FAB outweighed
@@ -86,22 +97,6 @@ Item {
             objectName: "fabMenuItems"
             // FabMenuBaselineTokens.ListItemBetweenSpace.
             spacing: 4
-            // Items arrive from the FAB, nearest first. The column owns their
-            // y, so the arrival is its own add transition: an item that
-            // animates its own y fights the column, and every item lands on
-            // the first. The menu fades in as a whole above, so an item's
-            // opacity is left alone and cannot be stranded part way.
-            add: Transition {
-                enabled: app.motion
-                SequentialAnimation {
-                    PauseAnimation { duration: Math.min(3, ViewTransition.index) * 40 }
-                    NumberAnimation {
-                        property: "y"; from: ViewTransition.destination.y + (root.downward ? -16 : 16)
-                        duration: Theme.springFastSpatialMs
-                        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial
-                    }
-                }
-            }
             Repeater {
                 model: root.open ? root.actions : []
                 delegate: AbstractButton {
@@ -109,6 +104,16 @@ Item {
                     required property var modelData
                     required property int index
                     objectName: "fabMenuItem_" + index
+                    readonly property bool revealed: root.downward
+                                                     ? index < root.visibleCount
+                                                     : index >= root.count - root.visibleCount
+                    visible: revealed
+                    // FloatingActionButtonMenu.kt:337-341 uses FastSpatial for
+                    // each item's width and FastEffects for its opacity.
+                    width: revealed ? implicitWidth : 0
+                    opacity: revealed ? 1 : 0
+                    Behavior on width { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+                    Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
                     // The column places every item at its own leading edge, so
                     // the row that is not the widest is aligned by hand,
                     // towards the edge the menu opened from.
@@ -136,6 +141,15 @@ Item {
                             opacity: entry.down || entry.visualFocus ? Theme.pressedOpacity : entry.hovered ? Theme.hoverOpacity : 0
                             Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                         }
+                    }
+                    // MenuTokens.FocusIndicatorColor is Secondary. Match
+                    // MButton's ring outside this item's full shape.
+                    Rectangle {
+                        objectName: "fabMenuItemFocusRing"
+                        anchors.fill: entry.background; anchors.margins: -3
+                        radius: Theme.shapeInside(Theme.shapeFull(Math.min(width, height)), -3)
+                        color: "transparent"; border.width: 2; border.color: Theme.focusRing
+                        visible: entry.visualFocus
                     }
                     contentItem: Row {
                         spacing: 8
@@ -182,6 +196,15 @@ Item {
                 opacity: fab.down || fab.visualFocus ? Theme.pressedOpacity : fab.hovered ? Theme.hoverOpacity : 0
                 Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             }
+        }
+        // The FAB uses Theme.focusRing, the Secondary ring used for menu focus
+        // (MenuTokens.FocusIndicatorColor), outside its current shape.
+        Rectangle {
+            objectName: "fabFocusRing"
+            anchors.fill: fab.background; anchors.margins: -3
+            radius: Theme.shapeInside(fab.background.radius, -3)
+            color: "transparent"; border.width: 2; border.color: Theme.focusRing
+            visible: fab.visualFocus
         }
         // A control stretches its content item to fill it, so the glyph needs a
         // wrapper to keep the 24dp Material asks for inside a 56dp FAB.
