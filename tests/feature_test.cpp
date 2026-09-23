@@ -962,6 +962,9 @@ void runSingAlongTests(Backend *b, QQuickWindow *w) {
             QString("the sung line sits in the reading band (%1 of %2)")
                 .arg(centre, 0, 'f', 0).arg(w->height()));
   }
+  w->setProperty("toastPending",false);
+  c.check(c.until([&]{return !shownItem(w->contentItem(),"toastBar");}),
+          "lyric import notice clears before sing-along captures");
   c.shot("01-singalong-first-line");
 
   // The fill is a real measurement, not decoration: it tracks playback.

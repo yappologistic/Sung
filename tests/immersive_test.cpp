@@ -271,6 +271,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   lrc.write("[00:00]The light arrives\n[00:10]Across the still water\n[00:20]A quiet moment\n[00:30]We move with the tide\n[01:00]The evening settles\n");lrc.close();
   b->importLyrics(QUrl::fromLocalFile(lrc.fileName()),song.value("id").toString());
   check(waitFor([&]{return b->lyricLines().size()==5&&player->property("displayedLayout")=="lyrics";}),"available lyrics restore saved layout");
+  w->setProperty("toastPending",false);
+  check(waitFor([&]{return !visibleItem(w->contentItem(),"toastBar");}),
+        "lyric import notice clears before lyric captures");
   b->seek(11000);QTest::qWait(450);shot("lyrics");
   lyricContrast(3.0,"dark immersive");
   b->setTheme("light");QTest::qWait(250);shot("lyrics-light");lyricContrast(3.0,"light immersive");
@@ -682,6 +685,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
                          .arg(bar->mapToScene(QPointF(0,0)).y(),0,'f',0)));
       else check(false,"the notification and the transport are both on screen");
     } else check(false,"a notification appears to place");
+    w->setProperty("toastPending",false);
+    check(waitFor([&]{return !visibleItem(w->contentItem(),"toastBar");}),
+          "placement notice clears before size captures");
     // MenuDefaults.groupStandardContainerColor reads
     // StandardMenuTokens.ContainerColor, surfaceContainerLow.
     click("immersiveLayoutButton");
