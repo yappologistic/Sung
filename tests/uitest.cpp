@@ -1484,6 +1484,22 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
   b->deletePlaylist(emptyId);
   QMetaObject::invokeMethod(w,"chooseLibrary",Q_ARG(QVariant,QVariant("playlists")));
   b->setViewMode("grid");QTest::qWait(300);
+  auto gridCreate=findItem(w->contentItem(),"emptyPlaylistGridAction");
+  check(gridCreate&&gridCreate->isVisible(),"empty playlist grid offers a direct create action");
+  if(gridCreate){
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+                      gridCreate->mapToScene(gridCreate->boundingRect().center()).toPoint());
+    QTest::qWait(250);
+    auto createDialog=w->findChild<QObject*>("playlistDialog");
+    check(createDialog&&createDialog->property("visible").toBool(),"grid action opens playlist creation");
+    auto playlistName=findItem(w->contentItem(),"playlistName");
+    if(playlistName){playlistName->forceActiveFocus();for(const QChar letter:QStringLiteral("Grid fixture"))QTest::keyClick(w,letter.toLatin1());QTest::keyClick(w,Qt::Key_Return);}
+    QTest::qWait(300);
+    auto createdCard=findItem(w->contentItem(),"openCollectionCard");
+    check(!b->playlists().isEmpty()&&createdCard&&createdCard->isVisible(),
+          "grid action creates a visible playlist");
+    if(!b->playlists().isEmpty())b->deletePlaylist(b->playlists().first().toMap().value("id").toString());
+  }
   w->resize(1180,800);b->setTheme("dark");b->setMotion(true);QTest::qWait(250);
   QAccessible::setActive(true);
   auto smart=w->findChild<QObject*>("smartPlaylistDialog");check(smart,"smart playlist dialog exists");

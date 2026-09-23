@@ -1213,7 +1213,14 @@ ApplicationWindow {
                                     openHandler:window.openCollection
                                     MButton {anchors.left:parent.left;anchors.top:parent.top;anchors.margins:8;symbol:"more";tonal:true;tip:"Playlist actions";onClicked:{window.editPlaylistId=modelData.id;playlistName.text=modelData.title;playlistActions.popup(this,width-playlistActions.width,height+4);}}
                                 }
-                                SungText {anchors.centerIn:parent;visible:playlistGrid.count===0;text:"Create your first playlist";color:Theme.muted}
+                                Column {
+                                    anchors.centerIn:parent;spacing:Theme.spaceLarge;visible:playlistGrid.count===0
+                                    Icon {anchors.horizontalCenter:parent.horizontalCenter;name:"library";size:36;ink:Theme.muted}
+                                    SungText {anchors.horizontalCenter:parent.horizontalCenter;text:"No playlists yet";color:Theme.muted;font.pixelSize:Theme.bodyLarge}
+                                    // ButtonSmallTokens.ContainerHeight:24 supplies the 40dp
+                                    // filled shape through MButton, as in the list empty state.
+                                    MButton {objectName:"emptyPlaylistGridAction";anchors.horizontalCenter:parent.horizontalCenter;text:"New playlist";symbol:"plus";filled:true;onClicked:{window.playlistAction="create";playlistName.clear();playlistDialog.open();}}
+                                }
                             }
                             ListView {
                                 id: localPlaylists; anchors.fill: parent; clip: true; spacing: 8
