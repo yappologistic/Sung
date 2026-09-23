@@ -106,17 +106,26 @@ Item {
                 spacing: 12
                 Layout.fillWidth: true
                 Layout.minimumWidth: 0
+                // Three quarters collapsed, the row is a quarter-opaque sliver
+                // no one can use. Hiding it there takes Play and Shuffle out of
+                // the Tab order and the accessibility tree.
+                visible: hero.collapse<0.75
                 opacity: 1-hero.collapse
                 Layout.maximumHeight: implicitHeight*(1-hero.collapse)
                 clip: true
+                // Once the band starts to collapse these are clipped. Tab skips
+                // them then rather than landing on a half-hidden button; the
+                // Play and Shuffle beside the track list stay reachable.
                 MButton {
                     objectName: "artistHeroPlay"
+                    focusPolicy: hero.collapse>0 ? Qt.NoFocus : Qt.StrongFocus
                     text: "Play"; symbol: "play"; filled: true
                     enabled: app.collection.count>0
                     onClicked: app.playCollection(0)
                 }
                 MButton {
                     objectName: "artistHeroShuffle"
+                    focusPolicy: hero.collapse>0 ? Qt.NoFocus : Qt.StrongFocus
                     text: "Shuffle"; symbol: "shuffle"; elevated: true
                     enabled: app.collection.count>1
                     onClicked: {app.shuffle=true;app.playCollection(Math.floor(Math.random()*app.collection.count));}
