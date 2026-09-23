@@ -5389,10 +5389,12 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
         c.check(qAbs(item->property("topLeftRadius").toDouble() - 12) < 0.5,
                 QString("with the run's end at the medium step (%1)")
                     .arg(item->property("topLeftRadius").toDouble(), 0, 'f', 0));
-      // MenuDefaults.kt:788-814 reads StandardMenuTokens.ItemSelected*
-      // (tertiary pair) and ItemContainerColor (surfaceContainerLow).
+      // MenuTokens.ListItemSelected* mark the chosen item with the secondary
+      // pair; unchecked items keep StandardMenuTokens.ItemContainerColor
+      // (surfaceContainerLow). Tertiary is the hue-rotated accent and, over a
+      // warm cover, a green nothing else in the window uses.
       if (list) {
-        const auto chosen = c.themeColor("tertiaryContainer");
+        const auto chosen = c.themeColor("secondaryContainer");
         QList<QQuickItem *> containers;
         collectItems(list, "menuItemContainer", containers);
         QQuickItem *first = nullptr, *last = nullptr;
@@ -5436,18 +5438,21 @@ void runMaterialEmphasisTests(Backend *b, QQuickWindow *w) {
         collectItems(list, "menuItemLabel", labels);
         int selectedInk = 0, plainInk = 0;
         for (auto label : labels)
-          if (label->property("color").value<QColor>() == c.themeColor("tertiaryContainerText"))
+          if (label->property("color").value<QColor>() == c.themeColor("secondaryContainerText"))
             ++selectedInk;
           else if (label->property("color").value<QColor>() == c.themeColor("text"))
             ++plainInk;
         c.check(selectedInk == 1 && plainInk == labels.size()-1 && labels.size() > 1,
-                "selected and unchecked labels use the StandardMenuTokens ink roles");
-        c.check(chosen != c.themeColor("secondaryContainer"),
-                "in the tertiary container, which is not what marks a chosen row");
+                "selected and unchecked labels use the menu's ink roles");
+        int tertiary = 0;
+        for (auto container : containers)
+          if (container->property("color").value<QColor>() == c.themeColor("tertiaryContainer"))
+            ++tertiary;
+        c.check(tertiary == 0, "and no item wears the tertiary accent");
       }
       if (auto leading = list ? anyItem(list, "menuItemLeading") : nullptr)
         c.check(leading->property("ink").value<QColor>() == c.themeColor("muted") ||
-                    leading->property("ink").value<QColor>() == c.themeColor("tertiaryContainerText"),
+                    leading->property("ink").value<QColor>() == c.themeColor("secondaryContainerText"),
                 "a menu item's leading icon is the variant ink until the item is chosen");
       c.shotNow("05-expressive-menu");
       QMetaObject::invokeMethod(menu, "close");

@@ -16,9 +16,12 @@ MenuItem {
     // shape one group; the menu marks the first and last items.
     property bool firstInRun: false
     property bool lastInRun: false
-    // MenuDefaults.defaultMenuSelectableItemColors reads
-    // StandardMenuTokens.ItemSelectedContainerColor and ItemSelectedLabelTextColor:
-    // a checked item takes tertiaryContainer and onTertiaryContainer.
+    // MenuTokens.ListItemSelectedContainerColor and ListItemSelectedLabelTextColor
+    // mark a checked item with secondaryContainer and onSecondaryContainer.
+    // StandardMenuTokens.ItemSelected* ask for the tertiary pair, but tertiary
+    // is the source hue turned around the wheel: over a warm cover it lands on
+    // a green no other surface in the window uses. The secondary pair is the
+    // one every other selection in Sung wears.
     // The unselected item uses ItemContainerColor (surfaceContainerLow) and
     // ItemLabelTextColor (onSurface); its leading icon uses onSurfaceVariant.
     //
@@ -26,7 +29,7 @@ MenuItem {
     // (StandardMenuTokens.ItemDisabledLabelTextColor and its opacity).
     readonly property color disabledInk: Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, Theme.disabledContentOpacity)
     readonly property color ink: !control.enabled ? disabledInk
-                               : control.checked ? Theme.tertiaryContainerText
+                               : control.checked ? Theme.secondaryContainerText
                                : Theme.text
     // The leading icon is the variant ink until the item is chosen, when it
     // takes the ink of the container it has been given.
@@ -115,9 +118,9 @@ MenuItem {
             topRightRadius: topLeftRadius
             bottomLeftRadius: control.checked || control.lastInRun ? Theme.shapeMedium : Theme.shapeExtraSmall
             bottomRightRadius: bottomLeftRadius
-            // StandardMenuTokens.ItemSelectedContainerColor is tertiaryContainer;
+            // MenuTokens.ListItemSelectedContainerColor is secondaryContainer;
             // ItemContainerColor keeps the unchecked item on surfaceContainerLow.
-            color: control.checked ? Theme.tertiaryContainer : Theme.surfaceLow
+            color: control.checked ? Theme.secondaryContainer : Theme.surfaceLow
             Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
         Rectangle {
