@@ -32,6 +32,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <algorithm>
 #include <functional>
+#include <tuple>
 
 namespace {
 QQuickItem *shownItem(QQuickItem *root, const QString &name) {
@@ -2035,6 +2036,20 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
   auto headerMotion = w->findChild<QObject *>("mainHeaderExtentMotion");
   c.check(headerMotion && headerMotion->property("duration").toInt() == paneMs,
           "the live page header resizes on DefaultSpatial");
+  for (const auto &entry : {
+           std::tuple<const char *, const char *, const char *, const char *>{
+               "coverDetailsFadeBehavior", "coverDetailsFadeMotion", "springFastEffectsMs", "springFastEffects"},
+           {"collectionTitleSizeBehavior", "collectionTitleSizeMotion", "springSpatialMs", "springSpatial"},
+           {"sideRevealBehavior", "sideRevealMotion", "springSpatialMs", "springSpatial"}}) {
+    auto behavior = qmlContext(w)->objectForName(std::get<0>(entry));
+    auto animation = motionObject(behavior, "animation");
+    c.check(animation && animation->objectName() == std::get<1>(entry) &&
+                animation->property("duration").toInt() ==
+                    c.evaluate(QString("Theme.") + std::get<2>(entry)).toInt() &&
+                QQmlProperty(animation, "easing.bezierCurve").read().toList() ==
+                    curve(std::get<3>(entry)),
+            QString("%1 reads its duration and curve from one spring").arg(std::get<1>(entry)));
+  }
   for (const char *name : {"localGroupsWidthMotion", "playlistGridWidthMotion"}) {
     const QString behavior = QString::fromLatin1(name) == "localGroupsWidthMotion"
                                  ? "localGroupsWidthBehavior" : "playlistGridWidthBehavior";
@@ -2049,6 +2064,12 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
                 .arg(paneMs));
   }
   auto immersiveQueue = qmlContext(w)->objectForName("immersiveQueue");
+  auto sheetEnter = motionAt(motionObject(immersiveQueue, "enter"), {0});
+  c.check(sheetEnter && sheetEnter->property("duration").toInt() ==
+                            c.evaluate("Theme.springFastSpatialMs").toInt() &&
+              QQmlProperty(sheetEnter, "easing.bezierCurve").read().toList() ==
+                  curve("springFastSpatial"),
+          "the queue sheet enters with the FastSpatial position spring");
   auto sheetExit = motionObject(immersiveQueue, "exit");
   auto sheetExitAnimation = motionAt(sheetExit, {0});
   const QVariant sheetExitDuration = sheetExitAnimation ? sheetExitAnimation->property("duration") : QVariant();
@@ -2230,6 +2251,8 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
   // --- Typography: emphasis on the font's own axes ---
   c.check(c.evaluate("Theme.emphasizedWidth").toInt() > c.evaluate("Theme.regularWidth").toInt(),
           "emphasis widens the variable font rather than only thickening it");
+  b->home();
+  c.check(c.until([&] { return !b->busy(); }), "Home opens for its headline");
   auto title = shownItem(w->contentItem(), "collectionHeaderTitle");
   c.check(title && title->property("emphasized").toBool(),
           "the page headline uses the emphasized style");

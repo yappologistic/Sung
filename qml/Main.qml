@@ -276,7 +276,9 @@ ApplicationWindow {
     Connections {target:app;function onSettingsChanged(){if(!app.motion)window.cancelAlbumFlight();}}
     property bool coverFlying: false
     property real coverDetailsOpacity: coverFlying?0:1
-    Behavior on coverDetailsOpacity { NumberAnimation { duration: app.motion?120:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    // MotionScheme.kt:223-228 gives FastEffects a critically damped spring;
+    // cover detail opacity cannot pass through the wrong value.
+    Behavior on coverDetailsOpacity { id:coverDetailsFadeBehavior; NumberAnimation { objectName:"coverDetailsFadeMotion"; duration: app.motion?Theme.springFastEffectsMs:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
     property point flightGlobal: Qt.point(0,0)
     function cancelCoverFlight() {coverFlightAnimation.stop();flightSettle.stop();coverFlying=false;flyingCover.url="";}
     function prepareCoverFlight(source) {
@@ -525,7 +527,8 @@ ApplicationWindow {
         padding:24;leftPadding:24;rightPadding:24;topPadding:24;bottomPadding:24;closePolicy:Popup.CloseOnEscape|Popup.CloseOnPressOutside
         background:Rectangle {color:Theme.container;radius:Theme.shapeExtraLarge}
         Overlay.modal:Rectangle {color:Theme.scrimColor()}
-        enter:Transition {NumberAnimation {property:"position";to:1;duration:app.motion?350:0;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.curve}}
+        // PaneMotion.kt:155-177 uses a spatial spring for entering bounds.
+        enter:Transition {NumberAnimation {property:"position";to:1;duration:app.motion?Theme.springFastSpatialMs:0;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}
         // FastSpatial closes the position of this screen sheet.
         exit:Transition {NumberAnimation {objectName:"mainSheetExitMotion";property:"position";to:0;duration:Theme.springFastSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}
         onOpened:{if(immersiveQueueLoader.item)immersiveQueueLoader.item.revealCurrent();}
@@ -808,7 +811,8 @@ ApplicationWindow {
                                     Layout.minimumWidth: 0; Layout.maximumWidth: 720
                                     Layout.preferredHeight: visible ? 56 : 0
                                 }
-                            SungText {heading: true; visible: !pageSearchHost.visible && !(app.page==="server" && !app.collectionItem.id); text: app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                            SungText {heading: true; visible: !pageSearchHost.visible && !(app.page==="server" && !app.collectionItem.id); text: app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; // PaneMotion.kt:155-177 uses DefaultSpatial for changing bounds.
+                                Behavior on font.pixelSize { id:collectionTitleSizeBehavior; NumberAnimation { objectName:"collectionTitleSizeMotion"; duration: app.motion?Theme.springSpatialMs:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                                 SungText { objectName: "albumArtist"; visible: !!app.albumInfo.artist;opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true; text: app.albumInfo.artist || ""; font.pixelSize: Theme.bodyLarge; color: Theme.muted; maximumLineCount: 2; wrapMode: Text.Wrap }
                                 SungText { objectName: "albumSummary"; visible: !!app.albumInfo.summary || app.page==="local";opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true
                                     text: {
@@ -1232,7 +1236,9 @@ ApplicationWindow {
                         opacity: window.searchViewOpen ? 1 : 0
                         Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                     }
-                    Behavior on revealWidth { enabled: !gripMouse.pressed; NumberAnimation { duration: app.motion?350:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+                    // PaneMotion.kt:155-177 moves pane bounds on 0.8/380,
+                    // exposed by Theme as DefaultSpatial.
+                    Behavior on revealWidth { id:sideRevealBehavior; enabled: !gripMouse.pressed; NumberAnimation { objectName:"sideRevealMotion"; duration: app.motion?Theme.springSpatialMs:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
                     AmbientBackdrop {
                         objectName: "nowBackdrop"; anchors.fill: parent
                         url: window.side==="now" ? (app.current.art || "") : ""
