@@ -14,6 +14,7 @@ TextField {
     property string variant: "outlined"
     readonly property bool filled: variant === "filled"
     property string label: ""
+    readonly property bool labelInAccessibleTree: label.length > 0 && echoMode !== TextInput.Normal
     // What a floating label is painted over where it cuts the outline: the
     // surface the field sits on. Every labelled outlined field is in a dialog,
     // which is surfaceContainerHigh; the container role showed as a darker
@@ -49,7 +50,20 @@ TextField {
     // Material reserves the supporting line so a field does not jump when an
     // error arrives.
     bottomInset: supportLine.visible ? -supportLine.height-4 : 0
-    Accessible.name: label || placeholderText
+    // Qt 6.11 hides Accessible.name for a password edit, while keeping its
+    // passwordEdit state. QQuickAccessibleAttached's labelledBy relation
+    // (qquickaccessibleattached_p.h:61, 90-95, 146-163) gives assistive
+    // technology the visible label without changing that password state.
+    // The setter rejects null, so only labelled fields set the relation.
+    Accessible.name: field.label.length ? field.label : field.placeholderText
+    function linkVisibleLabel() {
+        if (field.labelInAccessibleTree && !Accessible.labelledBy)
+            Accessible.labelledBy = fieldLabel
+    }
+    // A caller can assign label after this component completes; defer the
+    // relation until both the text and its visual label are ready.
+    onLabelInAccessibleTreeChanged: Qt.callLater(linkVisibleLabel)
+    Component.onCompleted: Qt.callLater(linkVisibleLabel)
     Accessible.description: errored ? errorText : supporting
     background: Rectangle {
         objectName: "fieldContainer"
@@ -79,7 +93,11 @@ TextField {
         font.pixelSize: field.floatingLabel ? Theme.labelMedium : Theme.bodyLarge
         color: field.dimmed ? field.onSurface(Theme.disabledContentOpacity)
              : field.errored ? Theme.error : field.activeFocus ? Theme.primary : Theme.muted
-        Accessible.ignored: true
+        // A password label must remain in Qt's accessible tree so its
+        // labelledBy relation can resolve to named static text. Ordinary
+        // field labels stay out of traversal (qquickaccessibleattached_p.h:146-163).
+        Accessible.name: field.label
+        Accessible.ignored: !field.labelInAccessibleTree
         Rectangle { objectName: "fieldLabelMask"; anchors.fill: parent; anchors.leftMargin: -4; anchors.rightMargin: -4; color: field.labelSurface; visible: field.floatingLabel && !field.filled; z: -1 }
         Behavior on y { NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         Behavior on font.pixelSize { NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }

@@ -30,6 +30,14 @@ QString accessibleName(QQuickItem *item) {
     const auto name = interface->text(QAccessible::Name).trimmed();
     if (!name.isEmpty())
       return name;
+    // Qt 6.11 hides the direct name of a password edit. labelledBy exposes
+    // the field's label as a Label relation when queried from the field;
+    // Labelled is the reverse relation on the label. Read the same direction
+    // as an assistive client starting at the control (QAccessibleQuickItem::relations).
+    for (const auto &[related, relation] : interface->relations(QAccessible::Label)) {
+      if (relation == QAccessible::Label && related)
+        return related->text(QAccessible::Name).trimmed();
+    }
   }
   return item->property("accessibleName").toString().trimmed();
 }

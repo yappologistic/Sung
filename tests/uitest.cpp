@@ -1200,6 +1200,38 @@ void runQolTests(Backend *b,QQuickWindow *w) {
   if(tracks){tracks->forceActiveFocus();}
   QTest::keyClick(w,Qt::Key_Question);QTest::qWait(300);check(help&&help->property("visible").toBool(),"question mark opens help outside text fields");
   QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  QAccessible::setActive(true);
+  QMetaObject::invokeMethod(w,"openServerConnection");QTest::qWait(350);
+  auto password=findItem(w->contentItem(),"serverPassword");
+  auto passwordAccessible=password?QAccessible::queryAccessibleInterface(password):nullptr;
+  const bool attachedPasswordEdit=password&&QQmlProperty::read(password,"Accessible.passwordEdit",qmlContext(password)).toBool();
+  QString passwordLabel;
+  bool reverseLabelled=false;
+  if(passwordAccessible)
+    for(const auto &[related,relation]:passwordAccessible->relations(QAccessible::Label))
+      if(relation==QAccessible::Label&&related){
+        passwordLabel=related->text(QAccessible::Name).trimmed();
+        for(const auto &[back,reverse]:related->relations(QAccessible::Labelled))
+          reverseLabelled=reverseLabelled||(reverse==QAccessible::Labelled&&back&&back->object()==password);
+        break;
+      }
+  check(password&&password->width()>100&&password->height()>=56&&passwordAccessible&&
+            attachedPasswordEdit&&passwordAccessible->state().passwordEdit&&
+            passwordAccessible->role()==QAccessible::EditableText&&
+            passwordAccessible->text(QAccessible::Name).isEmpty()&&passwordLabel=="Password"&&reverseLabelled,
+        "the password field keeps its password role and is labelled by Password");
+  auto ordinaryField=findItem(w->contentItem(),"serverAddress");
+  auto ordinaryAccessible=ordinaryField?QAccessible::queryAccessibleInterface(ordinaryField):nullptr;
+  check(ordinaryAccessible&&ordinaryAccessible->text(QAccessible::Name)=="Server address"&&
+            ordinaryAccessible->relations(QAccessible::Label).isEmpty(),
+        "an ordinary named field has no redundant label relation");
+  if(password){
+    password->setProperty("text","fixture-only");
+    check(passwordAccessible&&passwordAccessible->text(QAccessible::Value)==password->property("displayText").toString()&&
+              passwordAccessible->text(QAccessible::Value)!="fixture-only",
+          "the named password field still masks its accessible value");
+  }
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
   auto sessions=w->findChild<QObject*>("sessionsDialog");
   if(sessions)QMetaObject::invokeMethod(sessions,"open");
   QTest::qWait(650);
