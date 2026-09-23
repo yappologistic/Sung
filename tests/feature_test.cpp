@@ -655,11 +655,11 @@ void runArtistHeroTests(Backend *b, QQuickWindow *w) {
   const QStringList ferry{"Harbour lights", "Night ferry", "Coming ashore"};
   for (int i = 0; i < still.size(); ++i)
     if (!encodeTrack(c, QString("%1/music/Still Water/%2.flac").arg(c.directory).arg(i + 1),
-                     still[i], "Still Water", "Rill", i + 1))
+                     still[i], "Still Water", "Marble Coast", i + 1))
       return c.finish();
   for (int i = 0; i < ferry.size(); ++i)
     if (!encodeTrack(c, QString("%1/music/Night Ferry/%2.flac").arg(c.directory).arg(i + 1),
-                     ferry[i], "Night Ferry", "Rill", i + 1))
+                     ferry[i], "Night Ferry", "Marble Coast", i + 1))
       return c.finish();
   b->importMusicFolder(QUrl::fromLocalFile(c.directory + "/music"));
   c.check(c.until([&] { return !b->importingLocal(); }, 40000), "import the artist fixture");
@@ -699,7 +699,7 @@ void runArtistHeroTests(Backend *b, QQuickWindow *w) {
   c.check(summary && summary->property("text").toString() == "2 albums · 6 songs · 15 min",
           "the summary reads back what it counted");
   auto name = shownItem(w->contentItem(), "artistHeroName");
-  c.check(name && name->property("text").toString() == "Rill", "the hero names the artist");
+  c.check(name && name->property("text").toString() == "Marble Coast", "the hero names the artist");
   // PaneMotion.kt:150-177 gives size changes DefaultSpatial. Check the live
   // Behaviors so the old 120ms cubic and the font's effects duration fail.
   const int spatialMs = c.evaluate("Theme.springSpatialMs").toInt();
@@ -731,6 +731,33 @@ void runArtistHeroTests(Backend *b, QQuickWindow *w) {
   const double expanded = hero->height();
   const double titleExpanded = name->property("font").value<QFont>().pixelSize();
   c.shot("02-artist-hero");
+  // The expanded pane at 840dp puts list and detail side by side
+  // (PaneScaffoldDirective.kt:58-70). The hero's trailing action must remain
+  // inside that narrower detail without entering the wrapped name.
+  for (const QString &theme : {QString("dark"), QString("light")}) {
+    b->setTheme(theme);
+    for (const int width : {480, 600, 840, 1024, 1440}) {
+      w->resize(width, width == 480 ? 620 : 800);
+      QTest::qWait(450);
+      auto refresh = shownItem(hero, "artistHeroRefresh");
+      auto actions = shownItem(hero, "artistHeroActions");
+      const QRectF band = hero->mapRectToScene(hero->boundingRect());
+      const QRectF refreshRect = refresh ? refresh->mapRectToScene(refresh->boundingRect()) : QRectF{};
+      const QRectF nameRect = name->mapRectToScene(name->boundingRect());
+      const QRectF actionsRect = actions ? actions->mapRectToScene(actions->boundingRect()) : QRectF{};
+      c.check(refresh && refreshRect.isValid() &&
+                  refreshRect.left() >= band.left() - 1 && refreshRect.right() <= band.right() + 1 &&
+                  !refreshRect.intersects(nameRect) && actions &&
+                  actionsRect.bottom() <= band.bottom() + 1 && !actionsRect.intersects(nameRect),
+              QString("%1 %2px artist actions fit beside the name and inside the hero")
+                  .arg(theme).arg(width));
+      if (width == 840 || width == 1440)
+        c.shot(QString("02-artist-hero-%1-%2").arg(width).arg(theme));
+    }
+  }
+  b->setTheme("dark");
+  w->resize(1400, 900);
+  QTest::qWait(500);
 
   // --- It collapses on scroll and comes back ---
   auto tracks = shownItem(w->contentItem(), "tracksView");

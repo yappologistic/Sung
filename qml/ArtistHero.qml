@@ -12,9 +12,13 @@ Item {
 
     // 0 while the list is at rest, 1 once it has been scrolled past the band.
     property real collapse: 0
-    readonly property real expandedHeight: Math.min(216,window.height*0.26)
+    readonly property real baseExpandedHeight: Math.min(216,window.height*0.26)
+    // Qt Quick Layouts measures the wrapped title and Flow from their
+    // implicit heights. Keep one existing layout gap at each end when the
+    // two-pane directive narrows the detail, without enlarging wide heroes.
+    readonly property real expandedHeight: Math.max(baseExpandedHeight, details.implicitHeight+2*details.spacing)
     readonly property real collapsedHeight: 72
-    readonly property real portrait: (expandedHeight-96)*(1-collapse)+48*collapse
+    readonly property real portrait: (baseExpandedHeight-96)*(1-collapse)+48*collapse
 
     implicitHeight: expandedHeight*(1-collapse)+collapsedHeight*collapse
     // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
@@ -59,7 +63,9 @@ Item {
         }
 
         ColumnLayout {
+            id: details
             Layout.fillWidth: true
+            Layout.minimumWidth: 0
             Layout.alignment: Qt.AlignVCenter
             spacing: 8
             SungText {
@@ -68,6 +74,7 @@ Item {
                 // It travels between two roles as the band collapses.
                 scaled: true
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 text: app.title
                 // Display small while the band is open, title large once it has
                 // collapsed into an ordinary header row.
@@ -82,6 +89,7 @@ Item {
             SungText {
                 objectName: "artistHeroSummary"
                 Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 visible: !!app.artistInfo.summary
                 opacity: 1-hero.collapse
                 Layout.maximumHeight: implicitHeight*(1-hero.collapse)
@@ -91,9 +99,13 @@ Item {
                 font.pixelSize: Theme.bodyMedium
                 elide: Text.ElideRight
             }
-            RowLayout {
+            // Qt Quick Flow wraps the same actions when the expanded 840dp
+            // pane directive leaves less width beside the portrait and Refresh.
+            Flow {
                 objectName: "artistHeroActions"
                 spacing: 12
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
                 opacity: 1-hero.collapse
                 Layout.maximumHeight: implicitHeight*(1-hero.collapse)
                 clip: true
