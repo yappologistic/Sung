@@ -139,12 +139,21 @@ Item {
             property bool current: index===app.lyricIndex
             property bool completedHidden: !app.keepCompletedLyrics && (modelData.end>0 ? app.position+app.lyricOffset>=modelData.end : app.lyricIndex>index)
             readonly property bool hovered: lineHover.hovered
-            opacity: completedHidden ? 0 : 1
+            // A line crossing the clipped viewport should vanish before a
+            // glyph is cut. One measured lyric line height is the fade band,
+            // so the distance follows the reader's text size in both panes.
+            readonly property real edgeTop: y-liveLyrics.contentY
+            readonly property real edgeBand: Math.max(1,lyricLabel.lineHeight)
+            readonly property real edgeOpacity: current ? 1 : Math.max(0,Math.min(1,
+                Math.min(edgeTop,liveLyrics.height-edgeTop-height)/edgeBand))
+            opacity: completedHidden ? 0 : edgeOpacity
             enabled: !completedHidden
             activeFocusOnTab: false
             Accessible.role: Accessible.ListItem
             Accessible.ignored: completedHidden
-            Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+            // Edge opacity follows scrolling directly. Completed-line fades
+            // still use DefaultEffects when the line is within the viewport.
+            Behavior on opacity { enabled: app.motion && lyricLine.edgeOpacity>=1; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Accessible.name: modelData.text || "Instrumental"
             ToolTip.visible: hovered || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index)
             ToolTip.delay: 700

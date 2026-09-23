@@ -19,6 +19,7 @@
 #include <QPointer>
 #include <QStringList>
 #include <QTest>
+#include <QWheelEvent>
 #include <qpa/qwindowsysteminterface.h>
 #include <functional>
 #include <atomic>
@@ -129,6 +130,27 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           .arg(context).arg(ratio,0,'f',2).arg(floor,0,'f',1).arg(ink.name(),backdrop.name())));
     check(active->property("color").value<QColor>()!=ink && active->scale()>rest->scale(),
           qPrintable(context+" keeps current line distinct by colour and scale"));
+  };
+  auto lyricEdgeFade=[&](const QString &context){
+    auto list=visibleItem(w->contentItem(),"liveLyrics");
+    QList<QQuickItem*> lines;collectItems(list,"lyricLine",lines);
+    const auto viewport=list?list->mapRectToScene(list->boundingRect()):QRectF();
+    bool crossed=false,transparent=true,currentOpaque=true;
+    for(auto line:lines){
+      if(!line->isVisible())continue;
+      QList<QQuickItem*> labels;collectItems(line,"lyricLabel",labels);
+      if(labels.isEmpty())continue;
+      const auto ink=labels.first()->mapRectToScene(labels.first()->boundingRect());
+      if(line->property("current").toBool()&&ink.center().y()>viewport.top()&&ink.center().y()<viewport.bottom())
+        currentOpaque&=line->opacity()>0.99;
+      if(line->property("current").toBool())continue;
+      const bool topCut=ink.top()<viewport.top()&&ink.bottom()>viewport.top()+2;
+      const bool bottomCut=ink.top()<viewport.bottom()-2&&ink.bottom()>viewport.bottom();
+      if(topCut||bottomCut){crossed=true;transparent&=line->opacity()<0.1;}
+    }
+    check(list&&crossed&&transparent&&currentOpaque,
+          qPrintable(QString("%1 fades edge lyrics (crossed %2, transparent %3, current %4)")
+            .arg(context).arg(crossed).arg(transparent).arg(currentOpaque)));
   };
   auto singAlongContrast=[&](const QString &context){
     auto rest=visibleItem(w->contentItem(),"singAlongLine");
@@ -253,9 +275,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   lyricContrast(3.0,"dark immersive");
   b->setTheme("light");QTest::qWait(250);shot("lyrics-light");lyricContrast(3.0,"light immersive");
   b->setTheme("dark");QTest::qWait(250);
-  // At 1440 the lyric measure is bounded; at 1024 it stays on the same
+  // At 1024, 1440 and 2560 the lyric measure stays bounded on the same
   // centre line. Split mode is checked separately below.
-  for(int width:{1440,1024}){
+  for(int width:{1024,1440,2560}){
     resizeTo(width,900);
     auto pane=visibleItem(w->contentItem(),"lyricsView");
     check(pane&&pane->width()>=759.5&&pane->width()<=760.5&&qAbs(pane->mapToScene({pane->width()/2,0}).x()-width/2.0)<2,
@@ -271,7 +293,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           }),
           qPrintable(QString("%1px current lyric stays at the vertical reading centre").arg(width)));
     shot(QString("lyrics-%1").arg(width));
+    lyricEdgeFade(QString("%1px dark immersive").arg(width));
     b->setTheme("light");shot(QString("lyrics-%1-light").arg(width));
+    lyricEdgeFade(QString("%1px light immersive").arg(width));
     b->setTheme("dark");
   }
   // The wide measure cannot force the other immersive rows past the window
@@ -930,6 +954,27 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     QTest::keyClick(w,Qt::Key_End);
     check(waitFor([&]{return sideLyrics->property("keyboardIndex").toInt()==b->lyricLines().size()-1;}),
           "End navigates the side-panel lyric list");
+    auto edgeCrosses=[&]{
+      QList<QQuickItem*> labels;collectItems(sideLyrics,"lyricLabel",labels);
+      const auto viewport=sideLyrics->mapRectToScene(sideLyrics->boundingRect());
+      for(auto label:labels){
+        const auto ink=label->mapRectToScene(label->boundingRect());
+        if((ink.top()<viewport.top()&&ink.bottom()>viewport.top()+2)||
+           (ink.top()<viewport.bottom()-2&&ink.bottom()>viewport.bottom()))return true;
+      }
+      return false;
+    };
+    const auto wheelPoint=sideLyrics->mapToScene({8,sideLyrics->height()/2});
+    QTest::mouseMove(w,wheelPoint.toPoint());
+    for(int step=0;step<5&&!edgeCrosses();++step){
+      QWheelEvent wheel(wheelPoint,w->mapToGlobal(wheelPoint),QPoint(),QPoint(0,120),
+                        Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+      QCoreApplication::sendEvent(w,&wheel);
+      QTest::qWait(100);
+    }
+    check(edgeCrosses(),"wheel scrolling brings a side lyric to the viewport edge");
+    lyricEdgeFade("light side pane");
+    shot("side-lyrics-edge-light");
   }
   b->setTheme("dark");QTest::qWait(180);shot("side-lyrics-dark");
   lyricContrast(4.5,"dark side pane");
