@@ -108,7 +108,9 @@ Slider {
                     PathPolyline { path: {if(s.volumeMode)return [];const mid=s.trackHeight/2;let points=[];for(let x=0;x<=wave.width+3;x+=3)points.push(Qt.point(x,mid+wave.amplitude*Math.sin(x*Math.PI/14)));return points;} }
                 }
                 // A render-thread transform moves static geometry; no per-frame JS painting.
-                XAnimator { target: wave; from: 0; to: -28; duration: 1400; loops: Animation.Infinite; running: !s.volumeMode && app.playing && app.motion && s.visible && played.width>0 && s.Window.window && s.Window.window.visible && s.Window.window.visibility!==Window.Minimized }
+                // WavyProgressIndicator.kt:106-107 advances one wavelength
+                // each second. This path's sin(x*pi/14) repeats every 28px.
+                XAnimator { objectName: "seekWaveMotion"; target: wave; from: 0; to: -28; duration: 1000; loops: Animation.Infinite; running: !s.volumeMode && app.playing && app.motion && s.visible && played.width>0 && s.Window.window && s.Window.window.visible && s.Window.window.visibility!==Window.Minimized }
             }
         }
         // Material marks where the track ends, so a position short of the end

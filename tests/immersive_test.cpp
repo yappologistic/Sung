@@ -346,6 +346,9 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
             "reduced motion centres the previous cover immediately");
     }
   }
+  auto waveMotion=w->findChild<QObject*>("seekWaveMotion");
+  check(waveMotion&&waveMotion->property("duration").toInt()==1000,
+        "the 28px seek wave advances one wavelength per second");
   resizeTo(1180,800);
   b->setMotion(true);
   b->setTheme("light");shot("light");b->setMotion(false);
