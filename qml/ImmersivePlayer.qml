@@ -82,11 +82,12 @@ Item {
     Connections { target: app; function onSettingsChanged(){if(!app.motion){layoutChange.stop();player.displayedLayout=player.effectiveLayout;body.opacity=1;}} }
     SequentialAnimation {
         id: layoutChange
-        NumberAnimation {target:body;property:"opacity";to:0;duration:Theme.exitDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}
+        // FastEffects carries both halves of the layout fade without bounce.
+        NumberAnimation {objectName:"immersiveFadeOutMotion";target:body;property:"opacity";to:0;duration:Theme.springFastEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastEffects}
         ScriptAction {script:player.displayedLayout=player.effectiveLayout}
-        NumberAnimation {target:body;property:"opacity";to:1;duration:Theme.enterDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}
+        NumberAnimation {objectName:"immersiveFadeInMotion";target:body;property:"opacity";to:1;duration:Theme.springFastEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastEffects}
     }
-    Behavior on detailsOpacity { NumberAnimation { duration: Theme.exitDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+    Behavior on detailsOpacity { NumberAnimation { objectName: "immersiveDetailFadeMotion"; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
     NumberAnimation on opacity { from: 0; to: 1; duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve }
     AmbientBackdrop { anchors.fill: parent; url: app.current.art || "" }
     ColumnLayout {
@@ -175,9 +176,9 @@ Item {
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
             content: [
             MButton { symbol: "shuffle"; toggle: true; selected: app.shuffle; tip: app.shuffle?"Shuffle on":"Shuffle off"; onClicked: app.shuffle=!app.shuffle },
-            MButton { symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() },
+            MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() },
             MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; implicitWidth: 80; implicitHeight: 56; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; onClicked: app.toggle() },
-            MButton { symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() },
+            MButton { objectName: "immersiveNextButton"; symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() },
             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; onClicked: app.repeat=(app.repeat+1)%3 }
             ]
         }

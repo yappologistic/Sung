@@ -34,7 +34,16 @@ ColumnLayout {
         highlightRangeMode: ListView.StrictlyEnforceRange
         preferredHighlightBegin: (width-flow.cell)/2
         preferredHighlightEnd: (width+flow.cell)/2
-        highlightMoveDuration: app.motion ? 320 : 0
+        // Qt's custom highlight carries a playback change across the strict
+        // centre range. DefaultSpatial moves it with its matching curve and
+        // duration; the cell width lets ListView track the cover's full bounds.
+        highlightFollowsCurrentItem: false
+        highlight: Item {
+            width: flow.cell; height: covers.height
+            x: covers.currentItem ? covers.currentItem.x : 0
+            Behavior on x { enabled: app.motion && !covers.recentering; NumberAnimation { objectName: "coverflowHighlightMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
+        }
+        property bool recentering: false
         Accessible.role: Accessible.List
         Accessible.name: "Up next"
         // A playback change re-centers the carousel. Because centering always
@@ -42,11 +51,10 @@ ColumnLayout {
         function center(animate) {
             if(app.currentIndex<0 || app.currentIndex>=count)return;
             if(animate){currentIndex=app.currentIndex;return;}
-            const previous=highlightMoveDuration;
-            highlightMoveDuration=0;
+            recentering=true;
             currentIndex=app.currentIndex;
             positionViewAtIndex(app.currentIndex,ListView.Center);
-            highlightMoveDuration=previous;
+            recentering=false;
         }
         Connections { target: app; function onTrackChanged(){covers.center(true);} }
         Component.onCompleted: center(false)

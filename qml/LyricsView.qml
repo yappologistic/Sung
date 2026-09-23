@@ -36,7 +36,14 @@ Item {
     ListView {
         id: lyricResults; objectName: "lyricSearchResults"; anchors.fill: parent; anchors.topMargin: searchControls.height+8; clip: true
         visible: lyricPane.searchOpen && lyricSearch.text.length>0; model: lyricPane.matches; reuseItems: true; spacing: 8
-        currentIndex: -1; highlightMoveDuration: app.motion?Theme.fast:0
+        currentIndex: -1
+        // Qt ListView's duration-only move cannot use Material's curve. Its
+        // documented custom-highlight path lets FastSpatial move selection.
+        highlightFollowsCurrentItem: false
+        highlight: Item {
+            y: lyricResults.currentItem ? lyricResults.currentItem.y : 0
+            Behavior on y { enabled: app.motion; NumberAnimation { objectName: "lyricSearchHighlightMotion"; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+        }
         ScrollBar.vertical: MScrollBar {}
         delegate: AbstractButton {
             required property var modelData; required property int index; objectName: "lyricSearchResult_"+index
@@ -73,8 +80,13 @@ Item {
         currentIndex: app.lyricIndex
         preferredHighlightBegin: height*0.35; preferredHighlightEnd: height*0.55
         highlightRangeMode: lyricPane.following ? ListView.ApplyRange : ListView.NoHighlightRange
-        highlightMoveDuration: app.motion ? 350 : 0
-        highlight: Item {}
+        // Qt ListView's custom highlight moves with DefaultSpatial, which
+        // preserves the centred lyric scroll without a duration-only curve.
+        highlightFollowsCurrentItem: false
+        highlight: Item {
+            y: liveLyrics.currentItem ? liveLyrics.currentItem.y : 0
+            Behavior on y { enabled: app.motion; NumberAnimation { objectName: "lyricHighlightMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
+        }
         boundsBehavior: Flickable.StopAtBounds
         ScrollBar.vertical: MScrollBar {}
         onMovementStarted: { lyricPane.following=false; resumeFollow.restart(); }

@@ -8,6 +8,7 @@
 #include <QImage>
 #include <QPainter>
 #include <QQmlContext>
+#include <QQmlExpression>
 #include <QQmlProperty>
 #include <QQuickItem>
 #include <QQuickWindow>
@@ -45,6 +46,13 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     QTest::qWait(350);
   };
   auto shot=[&](const QString &name){QTest::qWait(250);check(w->grabWindow().save(dir+'/'+name+".png"),qPrintable(name));};
+  auto resizeTo=[&](int width,int height){
+    w->showNormal();
+    w->setMinimumSize({0,0});w->setMaximumSize({16777215,16777215});
+    w->resize(width,height);QTest::qWait(180);
+    check(w->width()==width&&w->height()==height,
+          qPrintable(QString("window measures %1x%2").arg(width).arg(height)));
+  };
   QWindowSystemInterface::handleFocusWindowChanged(w);
   w->setMinimumSize({1180,800});w->setMaximumSize({1180,800});w->resize(1180,800);QTest::qWait(700);QWindowSystemInterface::handleFocusWindowChanged(w);b->setTheme("dark");b->setMotion(true);b->setVolume(0);
   b->setAutoplay(false);b->setPrepareNext(false);b->setWatchMusicFolders(false);b->setOnlineArtwork(false);b->setLyricsFallback(false);
@@ -53,7 +61,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   for(int i=0;i<8;++i)paint.drawEllipse(QPoint(320,320),30+i*32,30+i*32);
   paint.end();cover.save(dir+"/music/cover.png");
   QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","180","-metadata","album=Still Water","-metadata","artist=Example Artist",dir+"/music/01.flac"});
-  check(encode.waitForFinished(10000)&&encode.exitCode()==0,"generate silent local audio");
+  check(encode.waitForFinished(30000)&&encode.exitCode()==0,"generate silent local audio");
   QFile::copy(dir+"/music/01.flac",dir+"/music/02.flac");QFile::copy(dir+"/music/01.flac",dir+"/music/03.flac");
   b->importMusicFolder(QUrl::fromLocalFile(dir+"/music"));check(waitFor([&]{return !b->importingLocal();}),"import local fixture");
   b->library("files");b->enqueueItems(b->results()->rows);b->playAt(0);
@@ -169,7 +177,17 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(b->position()>=10500&&b->position()<=11500,"seek shortcut applies ten seconds");
   shot("shortcut-feedback");QTest::qWait(1300);check(hud&&!hud->isVisible(),"HUD dismisses after inactivity");
   click("immersiveLyricSearchButton");const auto before=b->position();QTest::keyClick(w,Qt::Key_Left);
-  check(b->position()==before,"text editing does not seek playback");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  check(b->position()==before,"text editing does not seek playback");
+  for(auto key:{Qt::Key_L,Qt::Key_I,Qt::Key_G,Qt::Key_H,Qt::Key_T})QTest::keyClick(w,key);
+  QTest::qWait(180);
+  {
+    auto results=visibleItem(w->contentItem(),"lyricSearchResults");
+    check(results&&results->property("count").toInt()==1&&
+          results->property("currentIndex").toInt()==0&&
+          !results->property("highlightFollowsCurrentItem").toBool(),
+          "search results use a custom spatial highlight for the selected match");
+  }
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
   // --- The immersive view's own proportions ---
   // The complaint about this screen was never a missing feature: it was that
   // the pieces do not line up and the artwork does not use the room it has.
@@ -258,6 +276,78 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     }
     shot("proportions");
   }
+  // Qt ListView only exposes a duration for its built-in highlight move. The
+  // custom highlights and opacity transitions must carry each Material
+  // spring's duration and curve together.
+  {
+    const auto springs=b->motionSprings(b->motionScheme()!="standard");
+    auto springCheck=[&](const char *name,const char *spring){
+      auto animation=w->findChild<QObject*>(name);
+      const auto pair=springs.value(spring).toMap();
+      check(animation&&animation->property("duration").toInt()==pair.value("ms").toInt()&&
+            QQmlProperty::read(animation,"easing.bezierCurve",qmlContext(animation)).toList()==pair.value("curve").toList(),
+            qPrintable(QString("%1 uses the %2 duration and curve").arg(name,spring)));
+    };
+    springCheck("lyricHighlightMotion","defaultSpatial");
+    springCheck("singAlongHighlightMotion","defaultSpatial");
+    springCheck("immersiveFadeOutMotion","fastEffects");
+    springCheck("immersiveFadeInMotion","fastEffects");
+    springCheck("immersiveDetailFadeMotion","fastEffects");
+  }
+  b->setMotion(false);
+  resizeTo(480,620);
+  click("immersiveLayoutButton");click("immersiveCoverflowToggle");
+  auto covers=visibleItem(w->contentItem(),"coverflowView");
+  auto highlight=covers?covers->property("highlightItem").value<QQuickItem*>():nullptr;
+  auto currentCover=covers?covers->property("currentItem").value<QQuickItem*>():nullptr;
+  check(covers&&highlight&&currentCover&&!covers->property("highlightFollowsCurrentItem").toBool()&&
+        qAbs(highlight->width()-currentCover->width())<1,
+        "coverflow follows a cell-sized custom highlight");
+  if(covers){
+    b->setMotion(true);
+    const auto spatial=b->motionSprings(b->motionScheme()!="standard").value("defaultSpatial").toMap();
+    const int spatialMs=spatial.value("ms").toInt();
+    auto slide=w->findChild<QObject*>("coverflowHighlightMotion");
+    check(slide&&slide->property("duration").toInt()==spatialMs&&
+          QQmlProperty::read(slide,"easing.bezierCurve",qmlContext(slide)).toList()==spatial.value("curve").toList(),
+          "coverflow highlight uses DefaultSpatial duration and curve");
+    const double startX=covers->property("contentX").toDouble();
+    auto next=visibleItem(w->contentItem(),"immersiveNextButton");
+    check(next,"immersive next button is reachable");
+    if(next){
+      const auto point=next->mapToScene(next->boundingRect().center()).toPoint();
+      QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
+      check(waitFor([&]{return b->currentIndex()==1;}),"clicking Next changes the playing cover");
+      QTest::qWait(spatialMs/3);
+      const double middleX=covers->property("contentX").toDouble();
+      QTest::qWait(spatialMs+100);
+      const double endX=covers->property("contentX").toDouble();
+      check(qAbs(endX-startX)>20&&middleX>qMin(startX,endX)+2&&middleX<qMax(startX,endX)-2,
+            qPrintable(QString("coverflow slides through contentX %1 -> %2 -> %3")
+              .arg(startX,0,'f',1).arg(middleX,0,'f',1).arg(endX,0,'f',1)));
+      auto target=visibleItem(w->contentItem(),"coverflowItem_1");
+      check(target&&qAbs(target->mapToScene({target->width()/2,0}).x()-
+            covers->mapToScene({covers->width()/2,0}).x())<2,
+            "the next cover settles at the carousel centre");
+      shot("coverflow-slide-settled");
+    }
+    b->setMotion(false);
+    auto previous=visibleItem(w->contentItem(),"immersivePreviousButton");
+    check(previous,"immersive previous button is reachable");
+    if(previous){
+      const auto point=previous->mapToScene(previous->boundingRect().center()).toPoint();
+      QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
+      check(waitFor([&]{return b->currentIndex()==0&&b->lyricLines().size()==5;}),
+            "clicking Previous restores the lyric fixture");
+      QTest::qWait(20);
+      auto first=visibleItem(w->contentItem(),"coverflowItem_0");
+      check(first&&qAbs(first->mapToScene({first->width()/2,0}).x()-
+            covers->mapToScene({covers->width()/2,0}).x())<2,
+            "reduced motion centres the previous cover immediately");
+    }
+  }
+  resizeTo(1180,800);
+  b->setMotion(true);
   b->setTheme("light");shot("light");b->setMotion(false);
   choose("artwork");check(player->property("displayedLayout")=="artwork","reduced motion applies layout immediately");
   choose("split");b->setTheme("dark");

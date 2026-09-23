@@ -84,8 +84,13 @@ Item {
         preferredHighlightBegin: height*0.38
         preferredHighlightEnd: height*0.46
         highlightRangeMode: ListView.ApplyRange
-        highlightMoveDuration: app.motion?420:0
-        highlight: Item {}
+        // Qt ListView's custom-highlight path allows DefaultSpatial to move
+        // the reading position with its published duration and curve.
+        highlightFollowsCurrentItem: false
+        highlight: Item {
+            y: lines.currentItem ? lines.currentItem.y : 0
+            Behavior on y { enabled: app.motion; NumberAnimation { objectName: "singAlongHighlightMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
+        }
 
         function centre() {
             Qt.callLater(function(){ if(lines.visible && root.activeIndex>=0) lines.positionViewAtIndex(root.activeIndex,ListView.Center); });
