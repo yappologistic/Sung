@@ -1188,10 +1188,12 @@ ApplicationWindow {
                                     objectName: "collectionEmptyState"; anchors.centerIn: parent; width: Math.min(parent.width,320); spacing: 16
                                     visible: app.collection.count===0 && !app.busy && !window.serverDisconnected
                                     Icon { anchors.horizontalCenter: parent.horizontalCenter; name: app.error?"refresh":app.collection.query || app.page==="search"?"search":"library"; size: 36; ink: Theme.muted }
-                                    SungText { width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"No local music yet":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "No songs yet" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: Theme.bodyLarge }
+                                    // Empty playlist guidance names the exact song-menu action;
+                                    // the only button below takes the reader to songs.
+                                    SungText { objectName:app.page==="local"?"emptyPlaylistHint":"collectionEmptyMessage"; width: parent.width; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; text: app.collection.query ? "No matching songs" : app.error ? "Couldn’t load music" : app.page==="library" ? (window.libraryTab==="files"?"No local music yet":window.libraryTab==="history"?"Nothing played yet":window.libraryTab.startsWith("mix-")?"No matching songs yet":"No liked songs yet") : app.page==="local" ? "Choose Add to playlist in any song’s menu" : app.page==="search" && !app.query ? "Search music" : "No results"; color: Theme.muted; font.pixelSize: Theme.bodyLarge }
                                     MButton {
                                         objectName: "emptyStateAction"; anchors.horizontalCenter: parent.horizontalCenter; tonal: true
-                                        text: app.collection.query?"Clear filters":app.error && app.canRetry?"Retry":window.libraryTab==="files" && app.page==="library"?"Add music":"Search music"
+                                        text: app.collection.query?"Clear filters":app.error && app.canRetry?"Retry":window.libraryTab==="files" && app.page==="library"?"Add music":app.page==="local"?"Find songs":"Search music"
                                         onClicked: {if(app.collection.query)app.collection.query="";else if(app.error && app.canRetry)app.retry();else if(window.libraryTab==="files" && app.page==="library")window.openFileDialog("audio");else window.focusSearch();}
                                     }
                                 }

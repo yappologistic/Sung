@@ -1433,6 +1433,58 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
   shot("01b-kept-songs-offline");
   if(settings){settings->setProperty("searchQuery","no-such-setting");}QTest::qWait(100);auto empty=findItem(w->contentItem(),"settingsNoResults");check(empty&&empty->isVisible(),"settings no matches state");
   if(settings){QMetaObject::invokeMethod(settings,"close");}QTest::qWait(250);
+  // A fresh profile has no library. Reach each empty tab through the same
+  // navigation action as a person, and photograph both window extremes.
+  b->setMotion(false);
+  for(const int width:{480,1440})for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
+    w->resize(width,width==480?620:900);b->setTheme(theme);QTest::qWait(300);
+    for(const QString &tab:{QStringLiteral("files"),QStringLiteral("local-albums"),
+                            QStringLiteral("local-artists"),QStringLiteral("favorites"),
+                            QStringLiteral("history")}){
+      QMetaObject::invokeMethod(w,"chooseLibrary",Q_ARG(QVariant,QVariant(tab)));
+      QTest::qWait(300);
+      check(w->property("libraryTab").toString()==tab,"empty Library tab settles before capture");
+      check(w->grabWindow().save(dir+QString("/empty-%1-%2-%3.png").arg(tab).arg(width).arg(theme)),
+            "capture empty Library tab");
+    }
+    QMetaObject::invokeMethod(w,"chooseLibrary",Q_ARG(QVariant,QVariant("playlists")));
+    b->setViewMode("list");QTest::qWait(300);
+    check(w->property("libraryTab").toString()=="playlists","empty playlists settle before capture");
+    check(w->grabWindow().save(dir+QString("/empty-playlists-list-%1-%2.png").arg(width).arg(theme)),
+          "capture empty playlist list");
+    b->setViewMode("grid");QTest::qWait(300);
+    check(w->grabWindow().save(dir+QString("/empty-playlists-grid-%1-%2.png").arg(width).arg(theme)),
+          "capture empty playlist grid");
+  }
+  w->resize(1180,800);b->setTheme("dark");QTest::qWait(300);
+  const auto emptyId=b->createPlaylist("Empty fixture");
+  QTest::qWait(180);
+  auto card=findItem(w->contentItem(),"openCollectionCard");
+  check(card&&card->isVisible(),"new empty playlist appears in the grid");
+  if(card)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,card->mapToScene(card->boundingRect().center()).toPoint());
+  QTest::qWait(350);
+  auto detail=findItem(w->contentItem(),"collectionEmptyState");
+  auto addHint=findItem(w->contentItem(),"emptyPlaylistHint");
+  auto searchMusic=findItem(w->contentItem(),"emptyStateAction");
+  check(detail&&detail->isVisible()&&addHint&&addHint->isVisible()&&
+        addHint->property("text").toString()=="Choose Add to playlist in any song’s menu"&&
+        searchMusic&&searchMusic->property("text").toString()=="Find songs",
+        "empty playlist explains Add to playlist and leads to songs");
+  for(const int width:{480,1440})for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
+    w->resize(width,width==480?620:900);b->setTheme(theme);QTest::qWait(300);
+    check(w->grabWindow().save(dir+QString("/empty-playlist-detail-%1-%2.png").arg(width).arg(theme)),
+          "capture empty playlist detail");
+  }
+  if(searchMusic)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+                                  searchMusic->mapToScene(searchMusic->boundingRect().center()).toPoint());
+  QTest::qWait(200);
+  check(findItem(w->contentItem(),"searchField")&&
+        findItem(w->contentItem(),"searchField")->hasActiveFocus(),
+        "empty playlist action focuses music search");
+  b->deletePlaylist(emptyId);
+  QMetaObject::invokeMethod(w,"chooseLibrary",Q_ARG(QVariant,QVariant("playlists")));
+  b->setViewMode("grid");QTest::qWait(300);
+  w->resize(1180,800);b->setTheme("dark");b->setMotion(true);QTest::qWait(250);
   QAccessible::setActive(true);
   auto smart=w->findChild<QObject*>("smartPlaylistDialog");check(smart,"smart playlist dialog exists");
   if(smart){QMetaObject::invokeMethod(smart,"edit",Q_ARG(QVariant,QString()));}QTest::qWait(300);
