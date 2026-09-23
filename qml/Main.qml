@@ -813,7 +813,31 @@ ApplicationWindow {
                     objectName: "detailPane"
                     Accessible.role: Accessible.Pane
                     Accessible.name: window.title || "Content"
-                    readonly property real headerCollapse: tracks.visible ? Math.max(0,Math.min(1,(tracks.contentY-tracks.originY)/160)) : 0
+                    // The header collapses over the list's first 160px of scroll.
+                    // AppBar.kt:3427-3462 drives a collapsing app bar by scroll
+                    // steps, so a list correcting its own position never moves
+                    // it. Following contentY, a short list's end went wrong: the
+                    // header shrank, the list grew past its content, clamped its
+                    // scroll back, the header regrew and the last row ended cut
+                    // off. A clamp at the end keeps the collapse instead and
+                    // shortens the distance to match, so scrolling back up stays
+                    // continuous; the top restores the full distance.
+                    property real collapseDistance: 160
+                    property real headerCollapse: 0
+                    function followScroll() {
+                        const y=tracks.contentY-tracks.originY;
+                        if(!tracks.visible || y<=0){collapseDistance=160;headerCollapse=0;return;}
+                        const next=Math.min(1,y/collapseDistance);
+                        const atEnd=y>=tracks.contentHeight+tracks.bottomMargin-tracks.height-0.5;
+                        if(next<headerCollapse && atEnd){collapseDistance=y/headerCollapse;return;}
+                        headerCollapse=next;
+                    }
+                    Connections {
+                        target: tracks
+                        function onContentYChanged() { content.followScroll() }
+                        function onOriginYChanged() { content.followScroll() }
+                        function onVisibleChanged() { content.followScroll() }
+                    }
                     readonly property bool compactHeader: headerCollapse>0.7
                     // A compact playlist keeps its cover at the existing
                     // small header size so Play and a track remain in view.

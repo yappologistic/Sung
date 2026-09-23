@@ -18,6 +18,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <QFile>
 #include <QQuickItem>
+#include <QPointer>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QJSValue>
@@ -1733,6 +1734,42 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
   if(list){list->setProperty("contentY",0);if(auto selection=qobject_cast<RowSelection*>(list->property("selection").value<QObject*>())){selection->select(0,0);selection->select(1,Qt::ControlModifier);selection->select(2,Qt::ControlModifier);}QTest::qWait(250);row=findItem(w->contentItem(),"trackRow_0");auto destination=findItem(w->contentItem(),"trackRow_3");if(row&&destination){auto a=row->mapToScene(QPointF(140,36)).toPoint(),z=destination->mapToScene(QPointF(140,destination->height()/4)).toPoint();QTest::mousePress(w,Qt::LeftButton,Qt::NoModifier,a);QTest::mouseMove(w,a+QPoint(0,30),40);QTest::mouseMove(w,z,40);QTest::qWait(200);auto preview=findItem(w->contentItem(),"trackDragPreview");check(preview&&preview->isVisible(),"artwork stack appears during drag");check(list->property("dropIndex").toInt()>=0,"destination opens insertion gap");shot("05-drag-preview");QTest::keyClick(w,Qt::Key_Escape);QTest::mouseRelease(w,Qt::LeftButton,Qt::NoModifier,z);QTest::qWait(250);check(b->results()->rows==songs,"cancel drag preserves order");check(list->property("dropIndex").toInt()==-1,"cancel closes drop gap");}}
   b->setMotion(false);if(list){if(auto selection=qobject_cast<RowSelection*>(list->property("selection").value<QObject*>()))selection->clear();list->setProperty("contentY",220);}QTest::qWait(50);
   bool offscreenTip=false;for(auto tip:w->findChildren<QObject*>("fullTitleTip"))if(tip->property("visible").toBool())offscreenTip=true;check(!offscreenTip,"scrolling hides offscreen title tooltips");shot("06-reduced-motion");w->resize(900,650);QTest::qWait(300);shot("07-narrow-layout");
+  // At a short list's end the header shrank, the list grew past its
+  // content and clamped its scroll back, the header regrew and the row a
+  // reveal had just shown ended cut off.
+  {
+    b->setMotion(true);b->collection()->setQuery("");
+    const auto before=w->size();w->resize(600,800);
+    const auto shortId=b->createPlaylist("Short evening");b->addItemsToPlaylist(shortId,songs.mid(0,4));b->openPlaylist(shortId);QTest::qWait(600);
+    auto tracks=findItem(w->contentItem(),"tracksView");auto pane=findItem(w->contentItem(),"detailPane");
+    check(tracks&&pane&&until([&]{return tracks->property("contentHeight").toReal()>tracks->height();}),"a short playlist runs just past its viewport");
+    if(tracks&&pane){
+      QPointer<QQuickItem> action,lastRow;
+      for(int tab=0;tab<120&&!action;++tab){
+        QTest::keyClick(w,Qt::Key_Tab);auto focused=w->activeFocusItem();
+        for(auto item=focused;item&&item!=tracks;item=item->parentItem())
+          if(item->property("selectionIndex").isValid()){if(item!=focused&&item->property("selectionIndex").toInt()==3){action=focused;lastRow=item;}break;}
+      }
+      check(action,"Tab reaches the last row's actions");
+      // Longer than the spatial spring, so nothing is still moving.
+      QTest::qWait(1000);
+      const auto rect=lastRow?lastRow->mapRectToScene(lastRow->boundingRect()):QRectF();
+      const auto view=tracks->mapRectToScene(tracks->boundingRect());
+      check(lastRow&&rect.top()>=view.top()-1&&rect.bottom()<=view.bottom()+1,
+            qPrintable(QString("the whole last row stays in view once the header settles (%1-%2 in %3-%4)").arg(rect.top()).arg(rect.bottom()).arg(view.top()).arg(view.bottom())));
+      check(tracks->property("atYEnd").toBool()&&pane->property("headerCollapse").toReal()>0,"the list rests at its end with the header partly collapsed");
+      shot("02b-short-playlist-focus");
+      // Back up from there by touchpad pixels, the header follows a little
+      // at a time instead of jumping to where the position alone would put it.
+      const double extent=pane->property("headerExtent").toDouble();
+      const auto p=tracks->mapToScene(QPointF(tracks->width()/2,tracks->height()/2));
+      QWheelEvent e(p,w->mapToGlobal(p.toPoint()),QPoint(0,2),QPoint(0,15),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);
+      QCoreApplication::sendEvent(w,&e);QTest::qWait(900);
+      const double moved=qAbs(pane->property("headerExtent").toDouble()-extent);
+      check(!tracks->property("atYEnd").toBool()&&moved>0&&moved<8,qPrintable(QString("two pixels back up move the header %1px").arg(moved)));
+    }
+    b->deletePlaylist(shortId);w->resize(before);QTest::qWait(300);
+  }
   b->stop();b->clearQueue();b->deletePlaylist(id);qunsetenv("SUNG_BUFFER_FIXTURE");fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
 
