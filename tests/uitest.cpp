@@ -1085,9 +1085,15 @@ MMenu { Repeater { model: 30; MMenuItem { required property int index; objectNam
   b->clearQueue();QTest::qWait(6300);
   toast=findItem(w->contentItem(),"toastBar");
   check(toast&&toast->isVisible()&&w->property("toastHasUndo").toBool(),"Undo stays available beyond the old six-second timeout");shot("16-persistent-undo");
-  b->browseServer();check(until([&]{return !b->busy();}),"disconnected server state settles");QTest::qWait(180);
+  b->browseServer();check(until([&]{return !b->busy();}),"disconnected server state settles");
+  // A missing account now has an empty state. A refused connection is a real
+  // error and must displace the status snackbar when it reaches the page.
+  b->server()->connectServer("http://127.0.0.1:1","audit","audit",false);
+  check(until([&]{return !b->server()->connecting() && !b->error().isEmpty();}),"failed connection reports an error");
   auto error=findItem(w->contentItem(),"errorBar");
-  check(error&&error->isVisible()&&toast&&!toast->isVisible(),"error and status snackbars never overlap");
+  check(until([&]{return error&&error->isVisible()&&toast&&toast->opacity()==0;}),
+        "error replaces the status snackbar without a visible overlap");
+  check(until([&]{return toast&&!toast->isVisible();}),"status snackbar finishes leaving under an error");
   // Material has a pair of roles for an error and nothing in the app wore
   // them: this bar was filling itself with an ink role and writing on it in a
   // container one, which read as legible and said nothing about being wrong.
