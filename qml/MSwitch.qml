@@ -18,9 +18,14 @@ Switch {
         implicitWidth: 52; implicitHeight: 32
         x: control.width-control.rightPadding-width; y: (control.height-height)/2
         radius: Theme.shapeLarge
-        color: control.dimmed ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContainerOpacity)
+        // SwitchTokens.Disabled*: a disabled track keeps the role it had,
+        // onSurface when on and surfaceContainerHighest when off, at 12%, and
+        // the off track's edge drops to onSurface at 12% with it.
+        color: control.dimmed ? (control.checked ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledSurfaceOpacity)
+                                                 : Qt.rgba(Theme.highest.r,Theme.highest.g,Theme.highest.b,Theme.disabledSurfaceOpacity))
              : control.checked ? Theme.primary : Theme.highest
-        border.width: control.checked ? 0 : 2; border.color: Theme.outline
+        border.width: control.checked ? 0 : 2
+        border.color: control.dimmed ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledSurfaceOpacity) : Theme.outline
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         Rectangle {
             anchors.fill: parent; anchors.margins: -4; radius: Theme.shapeLargeIncreased
@@ -42,8 +47,11 @@ Switch {
             width: control.down ? 28 : control.checked ? 24 : 16; height: width; radius: width/2
             // Material's off switch is drawn in the outline role, not in the
             // variant ink: the handle and the track edge are the boundary of a
-            // control, and they read as one piece because of it.
-            color: control.checked ? Theme.primaryText : Theme.outline
+            // control, and they read as one piece because of it. Disabled, the
+            // on handle turns to the plain surface and the off one to
+            // onSurface at 38% (SwitchTokens.Disabled*HandleColor).
+            color: control.dimmed ? (control.checked ? Theme.surface : Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContentOpacity))
+                 : control.checked ? Theme.primaryText : Theme.outline
             // The thumb travelling across the track is movement, and
             // Material gives the switch the fast spatial spring for it, so it
             // carries a little of the overshoot a spatial spring has.
