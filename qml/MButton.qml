@@ -133,8 +133,10 @@ AbstractButton {
         // shorter side rather than half the height: a narrow button is still a
         // stadium, not an over-rounded lozenge. Pressing morphs it towards a
         // squarer step, which is the shape morph the specification asks for on
-        // interaction states.
-        radius: control.down ? (control.toggle ? control.sizedPressed : control.sizedSquare)
+        // interaction states. Every button presses to the size's pressed step
+        // (ButtonSmallTokens.PressedContainerShape is the small corner); the
+        // square step is for a toggle that is on.
+        radius: control.down ? control.sizedPressed
                              : control.toggle && control.selected ? control.sizedSquare
                              : Theme.shapeFull(Math.min(width, height))
         color: control.dimmed
