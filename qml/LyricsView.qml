@@ -81,6 +81,42 @@ Item {
         onVisibleChanged: {if(visible)centerCurrent();}
         onHeightChanged: centerCurrent()
         currentIndex: app.lyricIndex
+        property int keyboardIndex: -1
+        // Qt ListView is a focus scope; one Tab stop owns keyboard selection.
+        // ListView.positionViewAtIndex(..., Center) keeps the chosen lyric in
+        // the reading band without guessing contentY for variable text heights.
+        activeFocusOnTab: true
+        // The playback index owns currentIndex. Keyboard choice is separate,
+        // so ListView's own arrow handling must not rewrite that binding.
+        keyNavigationEnabled: false
+        Accessible.role: Accessible.List
+        Accessible.name: {
+            const index=keyboardIndex>=0?keyboardIndex:currentIndex;
+            const line=index>=0?app.lyricLines[index]:null;
+            return "Lyrics"+(line ? ", "+(line.text || "Instrumental")+", "+(index+1)+" of "+count : "");
+        }
+        onActiveFocusChanged: if(activeFocus)keyboardIndex=currentIndex>=0?currentIndex:0
+        function focusLine(index) {
+            if(count<1)return;
+            keyboardIndex=Math.max(0,Math.min(count-1,index));
+            following=false;resumeFollow.restart();
+            positionViewAtIndex(keyboardIndex,ListView.Center);
+        }
+        function seekKeyboardLine() {
+            const line=keyboardIndex>=0?app.lyricLines[keyboardIndex]:null;
+            if(!line || line.start<0)return;
+            app.seekLyric(line.start);
+            following=true;resumeFollow.stop();
+        }
+        // Qt Keys has no Home or End-specific signal. Accept these here so
+        // ListView does not also move its playback-bound currentIndex.
+        Keys.onPressed: event=>{
+            if(event.key===Qt.Key_Up){focusLine(keyboardIndex-1);event.accepted=true;}
+            else if(event.key===Qt.Key_Down){focusLine(keyboardIndex+1);event.accepted=true;}
+            else if(event.key===Qt.Key_Home){focusLine(0);event.accepted=true;}
+            else if(event.key===Qt.Key_End){focusLine(count-1);event.accepted=true;}
+            else if(event.key===Qt.Key_Return || event.key===Qt.Key_Enter || event.key===Qt.Key_Space){seekKeyboardLine();event.accepted=true;}
+        }
         preferredHighlightBegin: height*0.35; preferredHighlightEnd: height*0.55
         highlightRangeMode: lyricPane.following ? ListView.ApplyRange : ListView.NoHighlightRange
         // Qt ListView's custom highlight moves with DefaultSpatial, which
@@ -95,26 +131,30 @@ Item {
         // keeps the persistent cue used elsewhere in the library.
         ScrollBar.vertical: MScrollBar { opacity: lyricPane.expanded && !hovered && !pressed ? 0 : 1 }
         onMovementStarted: { lyricPane.following=false; resumeFollow.restart(); }
-        delegate: AbstractButton {
+        delegate: Item {
             id: lyricLine; objectName: "lyricLine"
             required property var modelData
             required property int index
             width: liveLyrics.width; implicitHeight: lyricLabel.implicitHeight+20
             property bool current: index===app.lyricIndex
             property bool completedHidden: !app.keepCompletedLyrics && (modelData.end>0 ? app.position+app.lyricOffset>=modelData.end : app.lyricIndex>index)
+            readonly property bool hovered: lineHover.hovered
             opacity: completedHidden ? 0 : 1
             enabled: !completedHidden
+            activeFocusOnTab: false
+            Accessible.role: Accessible.ListItem
             Accessible.ignored: completedHidden
             Behavior on opacity { enabled: app.motion; NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
-            hoverEnabled: true; focusPolicy: Qt.StrongFocus
             Accessible.name: modelData.text || "Instrumental"
-            ToolTip.visible: hovered || visualFocus
+            ToolTip.visible: hovered || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index)
             ToolTip.delay: 700
             ToolTip.text: app.formatTime(Math.max(0,modelData.start-app.lyricOffset))
-            onClicked: { app.seekLyric(modelData.start);lyricPane.following=true;resumeFollow.stop(); }
-            background: Rectangle { radius: Theme.shapeMedium; color: lyricLine.hovered ? Theme.high : "transparent"; border.width: lyricLine.visualFocus?2:0; border.color: Theme.focusRing }
-            contentItem: SungText {
+            HoverHandler { id: lineHover }
+            TapHandler { onTapped: {app.seekLyric(lyricLine.modelData.start);lyricPane.following=true;resumeFollow.stop();} }
+            Rectangle { anchors.fill: parent; radius: Theme.shapeMedium; color: lyricLine.hovered ? Theme.high : "transparent"; border.width: liveLyrics.activeFocus && liveLyrics.keyboardIndex===index ? 2 : 0; border.color: Theme.focusRing }
+            SungText {
                 id: lyricLabel; objectName: "lyricLabel"
+                anchors.fill: parent
                 text: lyricLine.modelData.text || "…"
                 leftPadding: 8; rightPadding: 8; topPadding: 10; bottomPadding: 10
                 // Reserve the active size so emphasis never reflows adjacent lines.
@@ -124,7 +164,7 @@ Item {
                 // Material onSurfaceVariant carries lower-emphasis reading
                 // text. WCAG 1.4.3 requires 4.5:1 here at body size; the
                 // immersive size requires 3:1. The active line keeps primary.
-                color: lyricLine.current || lyricLine.visualFocus ? Theme.primary : Theme.muted
+                color: lyricLine.current || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index) ? Theme.primary : Theme.muted
                 scale: lyricLine.current ? 1 : 0.86
                 transformOrigin: Item.Left
                 // DefaultSpatial changes the size of the focused lyric line.

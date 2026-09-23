@@ -260,11 +260,15 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     auto pane=visibleItem(w->contentItem(),"lyricsView");
     check(pane&&pane->width()>=759.5&&pane->width()<=760.5&&qAbs(pane->mapToScene({pane->width()/2,0}).x()-width/2.0)<2,
           qPrintable(QString("%1px lyric-only column is bounded and centred").arg(width)));
-    QList<QQuickItem*> lines;collectItems(w->contentItem(),"lyricLine",lines);
-    QQuickItem *current=nullptr;
-    for(auto line:lines)if(line->isVisible()&&line->property("current").toBool())current=line;
-    check(pane&&current&&qAbs(current->mapToScene({0,current->height()/2}).y()-
-          pane->mapToScene({0,pane->height()/2}).y())<30,
+    // The ListView can finish its centre move after the window's geometry
+    // settles. Poll the actual reading position, retaining the 30px bound.
+    check(waitFor([&]{
+            QList<QQuickItem*> lines;collectItems(w->contentItem(),"lyricLine",lines);
+            for(auto line:lines)if(line->isVisible()&&line->property("current").toBool())
+              return pane&&qAbs(line->mapToScene({0,line->height()/2}).y()-
+                                pane->mapToScene({0,pane->height()/2}).y())<30;
+            return false;
+          }),
           qPrintable(QString("%1px current lyric stays at the vertical reading centre").arg(width)));
     shot(QString("lyrics-%1").arg(width));
     b->setTheme("light");shot(QString("lyrics-%1-light").arg(width));
@@ -326,6 +330,52 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           qPrintable(QString("resting lyric remains hoverable at %1,%2").arg(point.x()).arg(point.y())));
     QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
     check(waitFor([&]{return b->position()>=19500&&b->position()<=20500;}),"clicking a resting lyric seeks its timestamp");
+  }
+  auto liveList=visibleItem(w->contentItem(),"liveLyrics");
+  QList<QQuickItem*> keyboardLines;collectItems(liveList,"lyricLine",keyboardLines);
+  bool linesOutsideTab=true;
+  for(auto line:keyboardLines)linesOutsideTab&=!line->activeFocusOnTab();
+  check(liveList&&liveList->activeFocusOnTab()&&linesOutsideTab,
+        "reading lyrics use one Tab stop rather than one per line");
+  if(liveList){
+    liveList->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(w,Qt::Key_Home);
+    check(liveList->property("keyboardIndex").toInt()==0,"Home chooses the first lyric");
+    QTest::keyClick(w,Qt::Key_Down);
+    check(liveList->property("keyboardIndex").toInt()==1,"Down moves one keyboard lyric");
+    QTest::keyClick(w,Qt::Key_End);
+    const int last=b->lyricLines().size()-1;
+    check(liveList->property("keyboardIndex").toInt()==last,"End chooses the last lyric");
+    QTest::keyClick(w,Qt::Key_Up);
+    check(liveList->property("keyboardIndex").toInt()==last-1,"Up moves one keyboard lyric");
+    QTest::keyClick(w,Qt::Key_End);
+    QQuickItem *lastLine=nullptr;
+    QList<QQuickItem*> visibleLines;collectItems(liveList,"lyricLine",visibleLines);
+    for(auto line:visibleLines)if(line->property("index").toInt()==last)lastLine=line;
+    const auto viewport=liveList->mapRectToScene(liveList->boundingRect());
+    const auto lineRect=lastLine?lastLine->mapRectToScene(lastLine->boundingRect()):QRectF();
+    check(lastLine&&lineRect.top()>=viewport.top()-1&&lineRect.bottom()<=viewport.bottom()+1,
+          "keyboard lyric stays fully in the viewport");
+    auto accessible=QAccessible::queryAccessibleInterface(liveList);
+    check(accessible&&accessible->text(QAccessible::Name).contains(QString("%1 of %2").arg(last+1).arg(last+1))&&
+          accessible->text(QAccessible::Name).contains("The evening settles"),
+          "focused lyric announces its text and position");
+    QTest::keyClick(w,Qt::Key_Return);
+    check(waitFor([&]{return b->position()>=59500&&b->position()<=61000;}),
+          "Enter seeks the keyboard lyric");
+    QTest::keyClick(w,Qt::Key_Home);
+    check(liveList->hasActiveFocus()&&liveList->property("keyboardIndex").toInt()==0,
+          "lyric list keeps keyboard focus after seeking");
+    QTest::keyClick(w,Qt::Key_Space);
+    check(waitFor([&]{return b->position()<1500;}),
+          qPrintable(QString("Space seeks the first keyboard lyric (position %1, selection %2, focus %3)")
+            .arg(b->position()).arg(liveList->property("keyboardIndex").toInt())
+            .arg(w->activeFocusItem()?w->activeFocusItem()->objectName():QString("none"))));
+    QTest::keyClick(w,Qt::Key_Tab);
+    auto focus=w->activeFocusItem();
+    check(focus&&focus!=liveList&&!liveList->isAncestorOf(focus),
+          qPrintable(QString("Tab leaves the lyric list after one stop (focus %1)")
+            .arg(focus?focus->objectName():QString("none"))));
   }
   b->seek(11000);QTest::qWait(100);
   choose("artwork");check(player->property("displayedLayout")=="artwork","artwork layout applies");shot("artwork");
@@ -874,6 +924,13 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         "side lyric panel opens at wide width");
   b->setTheme("light");QTest::qWait(180);shot("side-lyrics-light");
   lyricContrast(4.5,"light side pane");
+  auto sideLyrics=visibleItem(w->contentItem(),"liveLyrics");
+  if(sideLyrics){
+    sideLyrics->forceActiveFocus(Qt::TabFocusReason);
+    QTest::keyClick(w,Qt::Key_End);
+    check(waitFor([&]{return sideLyrics->property("keyboardIndex").toInt()==b->lyricLines().size()-1;}),
+          "End navigates the side-panel lyric list");
+  }
   b->setTheme("dark");QTest::qWait(180);shot("side-lyrics-dark");
   lyricContrast(4.5,"dark side pane");
   QMetaObject::invokeMethod(w,"activateSide",Q_ARG(QString,QString("lyrics")));
