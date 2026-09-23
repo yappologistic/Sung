@@ -30,7 +30,9 @@ MDialog {
                 clip:true;boundsBehavior:Flickable.StopAtBounds
                 readonly property real extent:Math.min(width,height)*viewer.zoom
                 contentWidth:Math.max(width,extent);contentHeight:Math.max(height,extent)
-                Artwork {objectName:"inspectedArtwork";x:(canvas.contentWidth-width)/2;y:(canvas.contentHeight-height)/2;width:canvas.extent;height:width
+                // The Flickable can be wider than its square cover. Centre the
+                // extent, which is the cover's actual unzoomed size.
+                Artwork {objectName:"inspectedArtwork";x:(canvas.contentWidth-canvas.extent)/2;y:(canvas.contentHeight-canvas.extent)/2;width:canvas.extent;height:width
                     url:viewer.visible?viewer.source:"";fit:true;radius:0;highResolution:true
                 }
                 WheelHandler {onWheel:event=>{viewer.zoomTo(viewer.zoom*Math.pow(1.0015,event.angleDelta.y));event.accepted=true;}}
