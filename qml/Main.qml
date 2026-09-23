@@ -484,8 +484,8 @@ ApplicationWindow {
     Shortcut { sequence: "Space"; enabled: !window.searchFocused && !window.modalOpen && (!window.activeFocusItem || window.activeFocusItem===content || window.activeFocusItem===immersiveLoader.item); onActivated: app.toggle() }
     Shortcut { sequence: "Ctrl+Right"; enabled: !window.modalOpen; onActivated: app.next() }
     Shortcut { sequence: "Ctrl+Left"; enabled: !window.modalOpen; onActivated: app.previous() }
-    Shortcut { sequence: "Right"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: window.playbackSeek(10000) }
-    Shortcut { sequence: "Left"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && window.activeFocusItem.libraryNavigation===true); onActivated: window.playbackSeek(-10000) }
+    Shortcut { sequence: "Right"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && (window.activeFocusItem.libraryNavigation===true || window.activeFocusItem.coverflowNavigation===true)); onActivated: window.playbackSeek(10000) }
+    Shortcut { sequence: "Left"; enabled: !window.searchFocused && !collectionSearch.activeFocus && !window.modalOpen && !window.sliderFocused && !(window.activeFocusItem && (window.activeFocusItem.libraryNavigation===true || window.activeFocusItem.coverflowNavigation===true)); onActivated: window.playbackSeek(-10000) }
     Shortcut { sequence: "Ctrl+L"; enabled: !window.modalOpen; onActivated: window.showQueue() }
     Shortcut { sequence: "Ctrl+Up"; enabled: !window.modalOpen && !window.searchFocused; onActivated: window.playbackVolume(1) }
     Shortcut { sequence: "Ctrl+Down"; enabled: !window.modalOpen && !window.searchFocused; onActivated: window.playbackVolume(-1) }

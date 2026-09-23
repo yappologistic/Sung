@@ -215,6 +215,60 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
     c.check(qAbs(centered->property("emphasis").toReal() - 1.0) < 0.05, "centered item reaches full emphasis");
   }
   c.shot("03-coverflow");
+  w->setMinimumSize({0, 0});
+  w->setMaximumSize({16777215, 16777215});
+  for (const auto &theme : {"dark", "light"}) {
+    b->setTheme(theme);
+    for (const int width : {480, 600, 840, 1024, 1440, 2560}) {
+      w->resize(width, width == 480 ? 620 : 800);
+      QTest::qWait(150);
+      c.shot(QString("03-coverflow-%1-%2").arg(width).arg(theme));
+    }
+  }
+  b->setTheme("dark");
+  w->setMinimumSize({1180, 800});
+  w->setMaximumSize({1180, 800});
+  w->resize(1180, 800);
+  QTest::qWait(200);
+
+  // The coverflow is one keyboard stop. Arrows preview without seeking or
+  // starting playback; Return activates the cover the keyboard selected.
+  bool reachedCoverflow = false;
+  for (int tab = 0; tab < 24 && !reachedCoverflow; ++tab) {
+    QTest::keyClick(w, Qt::Key_Tab);
+    auto focused = w->activeFocusItem();
+    for (auto item = focused; item; item = item->parentItem())
+      if (item == covers) { reachedCoverflow = true; break; }
+  }
+  c.check(reachedCoverflow, "Tab reaches the coverflow as one stop");
+  if (reachedCoverflow) {
+    const auto position = b->position();
+    const auto playingIndex = b->currentIndex();
+    QTest::keyClick(w, Qt::Key_Right);
+    c.check(covers->property("keyboardIndex").toInt() == playingIndex + 1,
+            "Right moves the focused cover");
+    c.check(b->currentIndex() == playingIndex && qAbs(b->position() - position) < 1500,
+            "coverflow Right neither plays nor seeks");
+    QTest::keyClick(w, Qt::Key_End);
+    c.check(covers->property("keyboardIndex").toInt() == b->queue()->count() - 1,
+            "End focuses the last cover");
+    QTest::keyClick(w, Qt::Key_Home);
+    c.check(covers->property("keyboardIndex").toInt() == 0, "Home focuses the first cover");
+    QTest::keyClick(w, Qt::Key_Right);
+    QTest::keyClick(w, Qt::Key_Return);
+    c.check(c.until([&] { return b->currentIndex() == 1; }),
+            "Return plays the keyboard focused cover");
+    auto accessible = QAccessible::queryAccessibleInterface(covers);
+    auto focusedCover = QAccessible::queryAccessibleInterface(w->activeFocusItem());
+    const auto focusedTitle = b->queue()->get(1).value("title").toString();
+    c.check(accessible && accessible->role() == QAccessible::List &&
+                accessible->text(QAccessible::Name).contains(focusedTitle) &&
+                accessible->text(QAccessible::Name).contains("2 of 4") &&
+                focusedCover && focusedCover->role() == QAccessible::ListItem &&
+                focusedCover->text(QAccessible::Name).contains(focusedTitle),
+            "the focused cover announces title and position in the list");
+    c.shot("03-coverflow-keyboard");
+  }
 
   const auto secondId = b->queue()->get(2).value("id");
   auto target = itemNamed(w->contentItem(), "coverflowItem_2");

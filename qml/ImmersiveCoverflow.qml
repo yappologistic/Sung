@@ -44,8 +44,19 @@ ColumnLayout {
             Behavior on x { enabled: app.motion && !covers.recentering; NumberAnimation { objectName: "coverflowHighlightMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
         }
         property bool recentering: false
+        property bool keyboardMove: false
+        property bool coverflowNavigation: true
+        property int keyboardIndex: -1
+        // Carousel.kt:251 keeps accessibility and scroll actions on the
+        // carousel. Qt Item.activeFocusOnTab puts only this view in the Tab
+        // chain; cached covers do not take focus.
+        activeFocusOnTab: true
         Accessible.role: Accessible.List
-        Accessible.name: "Up next"
+        Accessible.name: {
+            const index=keyboardIndex>=0?keyboardIndex:currentIndex;
+            const item=index>=0?app.queue.get(index):null;
+            return "Up next"+(item ? ", "+(item.title || "Track")+", "+(index+1)+" of "+count : "");
+        }
         // A playback change re-centers the carousel. Because centering always
         // lands on the playing track, it can never look like a user scroll.
         function center(animate) {
@@ -53,6 +64,7 @@ ColumnLayout {
             if(animate){currentIndex=app.currentIndex;return;}
             recentering=true;
             currentIndex=app.currentIndex;
+            keyboardIndex=app.currentIndex;
             positionViewAtIndex(app.currentIndex,ListView.Center);
             recentering=false;
         }
@@ -65,14 +77,39 @@ ColumnLayout {
             id: settle; objectName: "coverflowSettle"; interval: 200
             onTriggered: if(!covers.moving && !covers.dragging && covers.currentIndex>=0 && covers.currentIndex!==app.currentIndex)app.playAt(covers.currentIndex)
         }
-        onMovementEnded: settle.restart()
-        Keys.onReturnPressed: event=>{if(currentIndex>=0){app.playAt(currentIndex);event.accepted=true;}}
-        Keys.onEnterPressed: event=>{if(currentIndex>=0){app.playAt(currentIndex);event.accepted=true;}}
+        onDraggingChanged: if(dragging)keyboardMove=false
+        onMovementEnded: if(!keyboardMove){keyboardIndex=currentIndex;settle.restart();}
+        onActiveFocusChanged: if(activeFocus)keyboardIndex=currentIndex
+        function focusCover(index) {
+            if(count<1)return;
+            keyboardIndex=Math.max(0,Math.min(count-1,index));
+            keyboardMove=true;
+            settle.stop();
+            // Carousel.kt:218-234 moves the chosen item into its keyline.
+            // StrictlyEnforceRange keeps the existing current-item slide.
+            currentIndex=keyboardIndex;
+        }
+        Keys.onLeftPressed: event=>{focusCover(keyboardIndex-1);event.accepted=true;}
+        Keys.onRightPressed: event=>{focusCover(keyboardIndex+1);event.accepted=true;}
+        // Qt Keys has no dedicated Home or End signal. Handle their key codes
+        // in onPressed before ListView's own key handling.
+        Keys.onPressed: event=>{
+            if(event.key===Qt.Key_Home){focusCover(0);event.accepted=true;}
+            else if(event.key===Qt.Key_End){focusCover(count-1);event.accepted=true;}
+        }
+        Keys.onReturnPressed: event=>{if(keyboardIndex>=0){app.playAt(keyboardIndex);event.accepted=true;}}
+        Keys.onEnterPressed: event=>{if(keyboardIndex>=0){app.playAt(keyboardIndex);event.accepted=true;}}
+        Keys.onSpacePressed: event=>{if(keyboardIndex>=0){app.playAt(keyboardIndex);event.accepted=true;}}
         delegate: Item {
             id: cellItem
             required property var entry
             required property int index
             objectName: "coverflowItem_"+index
+            // ListView gives its current delegate active focus. Mark that
+            // focus owner so the window's seek shortcuts yield to this view.
+            readonly property bool coverflowNavigation: true
+            Accessible.role: Accessible.ListItem
+            Accessible.name: (entry.title || "Track")+", "+(index+1)+" of "+covers.count
             width: flow.cell; height: covers.height
             readonly property real distance: Math.abs((x+width/2)-(covers.contentX+covers.width/2))/flow.cell
             readonly property real emphasis: Math.max(0,1-Math.min(1,distance))
@@ -81,7 +118,7 @@ ColumnLayout {
             AbstractButton {
                 anchors.centerIn: parent
                 width: cellItem.coverSize; height: cellItem.coverSize
-                focusPolicy: Qt.StrongFocus
+                focusPolicy: Qt.NoFocus
                 hoverEnabled: true
                 Accessible.name: (cellItem.entry.title || "Track")+" · "+(cellItem.entry.artist || "")
                 onClicked: app.playAt(cellItem.index)
@@ -97,7 +134,7 @@ ColumnLayout {
                     anchors.fill: parent; anchors.margins: -4
                     radius: Math.max(10,cellItem.coverSize*0.12)+4
                     color: "transparent"
-                    border.width: parent.visualFocus ? 2 : cellItem.playing ? 2 : 0
+                    border.width: (covers.activeFocus && cellItem.index===covers.keyboardIndex) || cellItem.playing ? 2 : 0
                     border.color: Theme.focusRing
                 }
             }
