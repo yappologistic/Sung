@@ -2066,14 +2066,16 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     b->clearQueue();
     QTest::qWait(300);
     const double resting = reveal->property("background").value<QQuickItem *>()
-                               ->property("topRightRadius").toDouble();
+                               ->property("topLeftRadius").toDouble();
     c.click("splitButtonMenu");
     c.check(c.until([&] { return split->property("menuOpen").toBool(); }, 3000),
             "the menu half opens a menu");
+    // Compose checks the trailing half into a circle (SplitButton.kt,
+    // TrailingCheckedShape), so its inner corner rounds out to full.
     c.check(c.until([&] {
       return reveal->property("background").value<QQuickItem *>()
-                 ->property("topRightRadius").toDouble() < resting - 2;
-    }, 2000), "and morphs its shape while it is open, as Material asks");
+                 ->property("topLeftRadius").toDouble() > resting + 2;
+    }, 2000), "and rounds into a circle while it is open, as Material asks");
     c.shot("01-split-button-open");
     auto shuffle = shownItem(w->contentItem(), "collectionShuffle");
     c.check(shuffle, "the menu offers the related ways of starting the same songs");

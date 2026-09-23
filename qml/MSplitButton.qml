@@ -8,8 +8,9 @@ import QtQuick.Controls
 // while the outer corners stay full. Material calls these inner corners, and
 // they are the reason a split button reads as one control rather than two.
 //
-// Activating the menu spins its chevron and morphs the button towards a square,
-// which is the interaction-state shape morph the specification asks for.
+// Activating the menu spins its chevron and rounds the menu half into a full
+// circle, and pressing either half rounds the corners that face the other
+// (SplitButton.kt, TrailingCheckedShape and the pressed shapes).
 Item {
     id: control
     objectName: "splitButton"
@@ -33,8 +34,13 @@ Item {
     readonly property real chevronSize: 22
     readonly property real outer: Theme.shapeFull(unit)
     // The facing corners sit at the bottom of the scale, so the seam reads as
-    // one control divided rather than two controls placed side by side.
+    // one control divided rather than two controls placed side by side, and
+    // round to the medium step under the pointer
+    // (SplitButtonSmallTokens.InnerPressedCornerCornerSize).
     readonly property real inner: Theme.shapeExtraSmall
+    readonly property real innerPressed: Theme.shapeMedium
+    // SplitButtonDefaults.LeadingIconSize, the small button's 20dp.
+    readonly property real iconSize: 20
     implicitWidth: pair.implicitWidth
     implicitHeight: target
 
@@ -49,7 +55,7 @@ Item {
         id: action
         objectName: "splitButtonAction"
         height: control.unit
-        implicitWidth: label.implicitWidth + (control.symbol.length ? 32 : 0)
+        implicitWidth: label.implicitWidth + (control.symbol.length ? control.iconSize + 8 : 0)
                        + control.leadingSpace + control.trailingSpace
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
@@ -60,9 +66,11 @@ Item {
         background: Rectangle {
             color: control.filled ? Theme.primary : control.tonal ? Theme.high : "transparent"
             topLeftRadius: control.outer; bottomLeftRadius: control.outer
-            topRightRadius: control.inner; bottomRightRadius: control.inner
+            topRightRadius: action.down ? control.innerPressed : control.inner
+            bottomRightRadius: topRightRadius
             border.width: control.filled || control.tonal ? 0 : 1
             border.color: Theme.outlineVariant
+            Behavior on topRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             Rectangle {
                 anchors.fill: parent
                 topLeftRadius: parent.topLeftRadius; bottomLeftRadius: parent.bottomLeftRadius
@@ -83,17 +91,19 @@ Item {
                 // edge to make it look centred.
                 x: (parent.width-width)/2 + Theme.opticalShift(control.outer, control.inner)
                 Item {
-                    width: 24; height: 24
+                    width: control.iconSize; height: control.iconSize
                     anchors.verticalCenter: parent.verticalCenter
                     visible: control.symbol.length > 0
-                    Icon { anchors.centerIn: parent; name: control.symbol; ink: action.ink }
+                    Icon { anchors.centerIn: parent; name: control.symbol; size: control.iconSize; ink: action.ink }
                 }
+                // A small button's plain label large; Compose does not
+                // emphasize the split button's label.
                 SungText {
                     id: label
                     anchors.verticalCenter: parent.verticalCenter
                     text: control.text
                     font.pixelSize: Theme.labelLarge
-                    emphasized: true; labelRole: true
+                    labelRole: true
                     color: action.ink
                 }
             }
@@ -116,15 +126,14 @@ Item {
         background: Rectangle {
             objectName: "splitButtonMenuShape"
             color: control.filled ? Theme.primary : control.tonal ? Theme.high : "transparent"
-            topLeftRadius: control.inner; bottomLeftRadius: control.inner
-            // Opening morphs the outer corners towards a square, so the control
+            // Opening rounds the menu half into a full circle, so the control
             // visibly changes state rather than only showing a menu.
-            topRightRadius: control.menuOpen ? Theme.shapeMedium : control.outer
-            bottomRightRadius: control.menuOpen ? Theme.shapeMedium : control.outer
+            topLeftRadius: control.menuOpen ? control.outer : reveal.down ? control.innerPressed : control.inner
+            bottomLeftRadius: topLeftRadius
+            topRightRadius: control.outer; bottomRightRadius: control.outer
             border.width: control.filled || control.tonal ? 0 : 1
             border.color: Theme.outlineVariant
-            Behavior on topRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
-            Behavior on bottomRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+            Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             Rectangle {
                 anchors.fill: parent
                 topLeftRadius: parent.topLeftRadius; bottomLeftRadius: parent.bottomLeftRadius
@@ -138,6 +147,7 @@ Item {
             Icon {
                 objectName: "splitButtonChevron"
                 name: "chevron"
+                size: control.chevronSize
                 // Small corner leading, full corner trailing: the nudge goes
                 // the other way from the action half.
                 x: (parent.width-width)/2 + Theme.opticalShift(control.inner, control.outer)
