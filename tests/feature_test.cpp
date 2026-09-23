@@ -2595,6 +2595,51 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
   // Turned on the way a person turns it on, from the control in Settings.
   auto navSettings = c.dialog("settingsDialog");
   QTest::qWait(400);
+  c.check(!shownItem(w->contentItem(), "settingsAppearanceHeading"),
+          "the selected Settings category does not repeat its name above the controls");
+  auto accentHeading = shownItem(w->contentItem(), "accentColorHeading");
+  c.check(accentHeading && accentHeading->property("typeRole").toString() == "titleMedium",
+          "Accent color uses the titleMedium role of the other control headings");
+  c.click("settingsCategory_3");
+  c.check(navSettings && navSettings->property("category").toInt() == 3 &&
+              shownItem(w->contentItem(), "shortcutHelpButton") &&
+              shownItem(w->contentItem(), "typeAheadSwitch") &&
+              !shownItem(w->contentItem(), "settingsKeyboardHeading"),
+          "Keyboard follows Library and contains the three keyboard settings");
+  c.click("settingsCategory_4");
+  auto youtubeHeading = shownItem(w->contentItem(), "youtubeGroupHeading");
+  c.check(youtubeHeading && contrastOf(youtubeHeading->property("color").value<QColor>(),
+                                      c.themeColor("surfaceLow")) >= 4.5,
+          "the YouTube group label meets text contrast on the Settings surface");
+  c.click("settingsCategory_0");
+  const QSize settingsWideSize = w->size();
+  w->resize(700, 840);QTest::qWait(350);
+  auto narrowPicker = shownItem(w->contentItem(), "settingsCategoryPicker");
+  auto dropIndicator = narrowPicker ? shownItem(narrowPicker, "settingsCategoryDropIndicator") : nullptr;
+  QQuickItem *pickerLabel = nullptr;
+  if (narrowPicker) {
+    const std::function<void(QQuickItem *)> findLabel = [&](QQuickItem *item) {
+      if (pickerLabel) return;
+      if (item != narrowPicker && item->property("typeRole").isValid() &&
+          item->property("text") == narrowPicker->property("text")) {
+        pickerLabel = item;
+        return;
+      }
+      for (auto child : item->childItems()) findLabel(child);
+    };
+    findLabel(narrowPicker);
+  }
+  c.check(narrowPicker && narrowPicker->property("symbol").toString().isEmpty() &&
+              dropIndicator && qAbs(dropIndicator->rotation() - 90) < 1 &&
+              pickerLabel && qAbs(pickerLabel->mapToItem(narrowPicker, QPointF(0, 0)).x() -
+                                  narrowPicker->property("contentInset").toReal()) < 1,
+          "the narrow category button has one trailing indicator and normal label inset");
+  c.click("settingsCategoryPicker");
+  auto categoryMenu = w->findChild<QObject *>("settingsCategoryMenu");
+  c.check(categoryMenu && categoryMenu->property("visible").toBool(),
+          "the narrow category button opens its peer menu");
+  if(categoryMenu)QMetaObject::invokeMethod(categoryMenu,"close");
+  w->resize(settingsWideSize);QTest::qWait(350);
   c.check(shownItem(w->contentItem(), "navigationSidebar"),
           "Settings offers the two arrangements");
   // Each appearance control carries its own heading. The navigation one had
@@ -2715,7 +2760,9 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
 
   // --- Floating toolbar in the immersive player ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
-  QTest::qWait(300);
+  c.check(c.until([&] { return b->page() == "library" && b->libraryId() == "files" &&
+                               b->results()->count() == 6; }),
+          "the files tab completes navigation before playback begins");
   b->enqueueItems(b->results()->rows);
   b->playAt(0);
   c.check(c.until([&] { return b->playing(); }), "a song plays");

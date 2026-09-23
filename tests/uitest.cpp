@@ -1908,7 +1908,19 @@ void runInteractionRefinementTests(Backend *b,QQuickWindow *w){
   for(int disc=1;disc<=2;++disc){const auto folder=dir+(disc==1?"/music/A":"/music/B");QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","40","-metadata","album=Still Water","-metadata","artist=Example Artist","-metadata","disc="+QString::number(disc),folder+"/Track 01.flac"});check(encode.waitForFinished(10000)&&encode.exitCode()==0,"generate silent disc fixture");for(int n=2;n<=4;++n)QFile::copy(folder+"/Track 01.flac",folder+QString("/Track %1.flac").arg(n,2,10,QChar('0')));}
   b->importMusicFolder(QUrl::fromLocalFile(dir+"/music"));check(until([&]{return !b->importingLocal();}),"import two folders");
   click("settingsButton");auto settings=w->findChild<QObject*>("settingsDialog");check(settings,"Settings opens");
-  for(int i=0;i<5;++i){click("settingsCategory_"+QString::number(i));check(settings&&settings->property("category").toInt()==i,"category selection applies");shot("settings-"+QString::number(i));}
+  const QStringList settingsHeadings{"settingsAppearanceHeading","settingsPlaybackHeading",
+                                     "settingsLibraryHeading","settingsKeyboardHeading",
+                                     "settingsConnectionsHeading","settingsPrivacyHeading"};
+  for(int i=0;i<settingsHeadings.size();++i){
+    click("settingsCategory_"+QString::number(i));
+    check(settings&&settings->property("category").toInt()==i,"category selection applies");
+    auto heading=findItem(w->contentItem(),settingsHeadings[i]);
+    check(heading&&!heading->isVisible(),"selected category does not repeat its name");
+    if(i==3)check(findItem(w->contentItem(),"shortcutHelpButton")->isVisible()&&
+                  findItem(w->contentItem(),"typeAheadSwitch")->isVisible(),
+                  "Keyboard holds shortcut and list-jump controls");
+    shot("settings-"+QString::number(i));
+  }
   auto search=findItem(w->contentItem(),"settingsSearch");if(search){search->forceActiveFocus();for(char c:QByteArray("sleep"))QTest::keyClick(w,c);}QTest::qWait(200);check(findItem(w->contentItem(),"sleepFadeSwitch")->isVisible(),"search finds playback from Privacy category");shot("settings-search");
   settings->setProperty("searchQuery","no-such-option");QTest::qWait(100);check(findItem(w->contentItem(),"settingsNoResults")->isVisible(),"empty search is explicit");settings->setProperty("searchQuery","");settings->setProperty("category",0);
   settings->setProperty("searchQuery","current artwork");QTest::qWait(100);check(findItem(w->contentItem(),"settingsNoResults")->isVisible(),"unavailable current artwork produces no empty section");

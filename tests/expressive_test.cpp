@@ -1671,16 +1671,28 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
 
   // M3 asks that primary text sit in the same position in every list item.
   // A settings group is a list, so one leading edge has to serve all of it.
-  const QStringList names{"Appearance", "Playback", "Library", "Connections", "Privacy & data"};
+  const QStringList names{"Appearance", "Playback", "Library", "Keyboard", "Connections", "Privacy & data"};
+  const QStringList groupNames{"settingsGroup0", "settingsGroup1", "settingsGroup2",
+                               "settingsGroupKeyboard", "settingsGroup3", "settingsGroup4"};
+  const QStringList rowNames{"settingsRows0", "settingsRows1", "settingsRows2",
+                             "settingsRowsKeyboard", "settingsRows3", "settingsRows4"};
+  const QStringList headingNames{"settingsAppearanceHeading", "settingsPlaybackHeading",
+                                 "settingsLibraryHeading", "settingsKeyboardHeading",
+                                 "settingsConnectionsHeading", "settingsPrivacyHeading"};
   auto auditGroups = [&](const QString &context) {
     for (int category = 0; category < names.size(); ++category) {
       settings->setProperty("category", category);
       QTest::qWait(250);
-      auto group = itemNamed(w->contentItem(), "settingsGroup" + QString::number(category));
+      auto group = itemNamed(w->contentItem(), groupNames[category]);
       c.check(group && group->isVisible(), context + ": " + names[category] + " is shown");
       if (!group)
         continue;
-      auto options = itemNamed(group, "settingsRows" + QString::number(category));
+      // CLAUDE.md removes headings that repeat a selected category. Search
+      // results show headings because several categories can appear together.
+      auto heading = itemNamed(group, headingNames[category]);
+      c.check(heading && !heading->isVisible(),
+              context + ": " + names[category] + " does not repeat its selected category");
+      auto options = itemNamed(group, rowNames[category]);
       const auto rows = visibleRows(options);
       c.check(rows.size() >= 3, context + ": " + names[category] + " has rows to align");
       const auto edge = group->mapToScene(QPointF(0, 0)).x();
@@ -1760,10 +1772,12 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(300);
   auto folders = itemNamed(w->contentItem(), "settingsRows2");
   c.check(folders, "library options are shown");
+  settings->setProperty("category", 3);
+  QTest::qWait(300);
   auto opener = shownItem(w->contentItem(), "shortcutHelpButton");
   c.check(opener && opener->property("trailingSymbol") == "chevron",
           "a row that opens a panel shows a trailing icon");
-  settings->setProperty("category", 4);
+  settings->setProperty("category", 5);
   QTest::qWait(300);
   auto immediate = shownItem(w->contentItem(), "clearHistoryButton");
   c.check(immediate && immediate->property("trailingSymbol").toString().isEmpty(),
@@ -1777,7 +1791,7 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   for (int category = 0; category < names.size(); ++category) {
     settings->setProperty("category", category);
     QTest::qWait(200);
-    auto options = itemNamed(w->contentItem(), "settingsRows" + QString::number(category));
+    auto options = itemNamed(w->contentItem(), rowNames[category]);
     for (auto row : visibleRows(options)) {
       auto label = rowLabel(row);
       if (label && label->property("wrapMode").toInt() != 0 &&
@@ -1818,6 +1832,12 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   c.check(shownItem(w->contentItem(), "volumeStepButton") && shownItem(w->contentItem(), "volumeNormalizationSwitch"),
           "a search reaches settings in more than one group");
   c.check(!shownItem(w->contentItem(), "settingsNoResults"), "and does not claim there are none");
+  settings->setProperty("searchQuery", "music");
+  QTest::qWait(300);
+  c.check(shownItem(w->contentItem(), "settingsAppearanceHeading") &&
+              shownItem(w->contentItem(), "settingsLibraryHeading") &&
+              shownItem(w->contentItem(), "settingsConnectionsHeading"),
+          "search results name each matching Settings category");
   settings->setProperty("searchQuery", "zzzz");
   QTest::qWait(300);
   c.check(shownItem(w->contentItem(), "settingsNoResults"), "a search with no matches says so");
