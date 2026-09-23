@@ -1770,6 +1770,35 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
     }
     b->deletePlaylist(shortId);w->resize(before);QTest::qWait(300);
   }
+  // With reuseItems Qt culls a pooled row instead of hiding it, and Tab still
+  // stopped in one: focus could land off screen, on a row describing a track
+  // it no longer holds. Wheel down a long list, then walk it with Tab.
+  {
+    b->openPlaylist(id);QTest::qWait(500);
+    auto tracks=findItem(w->contentItem(),"tracksView");
+    auto content=tracks?tracks->property("contentItem").value<QQuickItem*>():nullptr;
+    if(tracks&&content){
+      const auto p=tracks->mapToScene(QPointF(tracks->width()/2,tracks->height()/2));
+      for(int notch=0;notch<10;++notch){QWheelEvent e(p,w->mapToGlobal(p.toPoint()),QPoint(),QPoint(0,-120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QCoreApplication::sendEvent(w,&e);QTest::qWait(40);}
+      QTest::qWait(900);
+      int pooled=0,shownPooled=0;
+      for(auto row:content->childItems())if(row->property("pooled").toBool()){++pooled;if(row->isVisible())++shownPooled;}
+      check(tracks->property("contentY").toReal()>600&&pooled>0&&shownPooled==0,
+            qPrintable(QString("wheeling down a long list pools rows and hides them (%1 pooled, %2 shown)").arg(pooled).arg(shownPooled)));
+      int rowStops=0,staleStops=0;
+      for(int tab=0;tab<200&&rowStops<12;++tab){
+        QTest::keyClick(w,Qt::Key_Tab);QCoreApplication::processEvents();
+        QQuickItem *row=nullptr;
+        for(auto item=w->activeFocusItem();item&&item!=tracks;item=item->parentItem())if(item->parentItem()==content){row=item;break;}
+        if(!row||!row->property("selectionIndex").isValid())continue;
+        ++rowStops;QQuickItem *live=nullptr;const int index=row->property("selectionIndex").toInt();
+        QMetaObject::invokeMethod(tracks,"itemAtIndex",Q_RETURN_ARG(QQuickItem*,live),Q_ARG(int,index));
+        if(live!=row||!row->isVisible())++staleStops;
+      }
+      check(rowStops>=4&&staleStops==0,qPrintable(QString("Tab stops only in rows the list is showing (%1 stops, %2 stale)").arg(rowStops).arg(staleStops)));
+    }
+    b->setMotion(false);
+  }
   b->stop();b->clearQueue();b->deletePlaylist(id);qunsetenv("SUNG_BUFFER_FIXTURE");fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
 

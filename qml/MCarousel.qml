@@ -36,6 +36,11 @@ ListView {
         required property var modelData
         required property int index
         objectName: "carouselCell_" + index
+        // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+        property bool pooled: false
+        visible: !pooled
+        ListView.onPooled: pooled=true
+        ListView.onReused: pooled=false
         width: carousel.cellWidth
         height: carousel.height
 

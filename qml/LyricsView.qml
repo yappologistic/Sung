@@ -47,6 +47,11 @@ Item {
         ScrollBar.vertical: MScrollBar {}
         delegate: AbstractButton {
             required property var modelData; required property int index; objectName: "lyricSearchResult_"+index
+            // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+            property bool pooled: false
+            visible: !pooled
+            ListView.onPooled: pooled=true
+            ListView.onReused: pooled=false
             width: lyricResults.width; implicitHeight: matchText.implicitHeight+24; enabled: modelData.start>=0
             Accessible.name: modelData.text; Accessible.description: modelData.start>=0 ? "Seek to "+app.formatTime(Math.max(0,modelData.start-app.lyricOffset)) : "Untimed lyric"
             onClicked: lyricPane.jumpMatch(index)

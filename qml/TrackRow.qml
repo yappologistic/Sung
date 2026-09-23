@@ -63,7 +63,14 @@ ItemDelegate {
     signal dismissRequested()
     property bool active: queueMode ? rowIndex===app.currentIndex : app.current.id !== undefined && app.current.id === track.id
     signal menuRequested(var item, int index, var anchor)
-    ListView.onReused: {motionRaised=false;tooltipFocusFromPointer=false;opacity=Qt.binding(()=>enabled?1:Theme.disabledContentOpacity);}
+    // With reuseItems, Qt 6.11 culls a pooled delegate rather than hiding
+    // it, and Tab still stops in a culled item: focus could rest on a row off
+    // screen that still describes the track it held before, and revealing it
+    // positions the list at that stale index. Every reused delegate with a
+    // Tab stop turns invisible while pooled, which Tab does respect.
+    property bool pooled: false
+    ListView.onPooled: pooled=true
+    ListView.onReused: {pooled=false;motionRaised=false;tooltipFocusFromPointer=false;opacity=Qt.binding(()=>enabled?1:Theme.disabledContentOpacity);}
     // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
     Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;objectName:"trackRowResizeMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
     Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}

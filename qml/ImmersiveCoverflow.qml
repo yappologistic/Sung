@@ -113,6 +113,11 @@ ColumnLayout {
             required property var entry
             required property int index
             objectName: "coverflowItem_"+index
+            // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+            property bool pooled: false
+            visible: !pooled
+            ListView.onPooled: pooled=true
+            ListView.onReused: pooled=false
             // ListView gives its current delegate active focus. Mark that
             // focus owner so the window's seek shortcuts yield to this view.
             readonly property bool coverflowNavigation: true

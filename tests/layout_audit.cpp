@@ -368,7 +368,9 @@ struct Audit {
         }
         for (const auto &guard : tabGuards) {
           auto item = guard.data();
-          if (!item)
+          // A view that pools a row hides it; one pooled during the walk is
+          // no longer on screen to reach.
+          if (!item || !item->isVisible())
             continue;
           bool reached = false;
           for (const auto &focusItem : visited)

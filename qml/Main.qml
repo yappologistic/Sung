@@ -1232,6 +1232,11 @@ ApplicationWindow {
                                 delegate: ColumnLayout {
                                     required property var modelData
                                     width: shelves.width; height: implicitHeight; spacing: 12
+                                    // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+                                    property bool pooled: false
+                                    visible: !pooled
+                                    ListView.onPooled: pooled=true
+                                    ListView.onReused: pooled=false
                                     RowLayout {
                                         Layout.fillWidth: true
                                         SungText { heading: true; text: modelData.title; font.pixelSize: Theme.titleLarge; font.weight: Font.Medium; Layout.fillWidth: true }
@@ -2056,6 +2061,11 @@ ApplicationWindow {
                 ScrollBar.vertical: ScrollBar {}
                 delegate: RowLayout {
                     required property string modelData; width: ListView.view.width; height: 64; spacing: 8
+                    // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+                    property bool pooled: false
+                    visible: !pooled
+                    ListView.onPooled: pooled=true
+                    ListView.onReused: pooled=false
                     SungText { text: modelData; Layout.fillWidth: true; elide: Text.ElideMiddle }
                     MButton { symbol: "close"; tip: "Forget folder; keep songs"; enabled: !app.importingLocal; onClicked: app.forgetMusicFolder(modelData) }
                 }
@@ -2136,6 +2146,11 @@ ApplicationWindow {
                     ScrollBar.vertical: ScrollBar {}
                     delegate: RowLayout {
                         required property var modelData; width: ListView.view.width; height: 76; spacing: 12
+                        // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+                        property bool pooled: false
+                        visible: !pooled
+                        ListView.onPooled: pooled=true
+                        ListView.onReused: pooled=false
                         opacity: (cleanupContent.removeDuplicates&&modelData.duplicate)||(cleanupContent.removeMissing&&modelData.missing)?1:0.6
                         ColumnLayout {
                             Layout.fillWidth: true; spacing: 4

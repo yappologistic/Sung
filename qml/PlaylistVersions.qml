@@ -68,6 +68,11 @@ MDialog {
                 required property var modelData
                 required property int index
                 objectName: "playlistVersion_"+index
+                // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+                property bool pooled: false
+                visible: !pooled
+                ListView.onPooled: pooled=true
+                ListView.onReused: pooled=false
                 width: list.width
                 height: 72
                 radius: Theme.shapeLarge

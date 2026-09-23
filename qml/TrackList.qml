@@ -198,7 +198,7 @@ ListView {
         objectName: (list.queueMode?"queueRow_":"trackRow_")+index
         property bool foldedRow:list.foldable && !!list.folded[list.groupKey(entry)]
         height:foldedRow?0:implicitHeight
-        visible:!foldedRow
+        visible:!foldedRow && !pooled
         matchQuery: list.matchQuery
         transform: Translate { y: list.dropIndex<0?0:index>=list.dropIndex?list.dropParting:-list.dropParting
             // DefaultSpatial settles list row movement to its new position.

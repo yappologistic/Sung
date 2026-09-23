@@ -20,6 +20,11 @@ Item {
     readonly property bool playableCover: !!(track.videoId || track.localPath || track.serverSong) || ["album","playlist","local","local-album","local-artist"].indexOf(track.kind)>=0
     readonly property bool loadingCover: !!app.coverPlayId && app.coverPlayId===(track.browseId || track.id || "")
     width: 180; height: width + 68
+    // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
+    property bool pooled: false
+    visible: !pooled
+    GridView.onPooled: pooled=true
+    GridView.onReused: pooled=false
     Item {
         id: art; width: parent.width; height: width
         transform: Translate { x: card.parallax*7 }
