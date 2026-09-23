@@ -3456,19 +3456,26 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
     }
   }
 
-  // Compact windows get the whole screen instead of a menu under the bar.
+  // SearchBar.kt:932-937 recommends a full-screen view on phones. This
+  // desktop field keeps its place, so the suggestion view fills only the
+  // available room below it and never crosses the window edge.
   const double docked = view ? view->property("height").toReal() : 0;
   w->resize(520, 820);
   QTest::qWait(700);
   QMetaObject::invokeMethod(w, "focusSearch");
   QTest::qWait(400);
   if (view) {
-    c.check(view->property("fullScreen").toBool(), "a compact window opens the view full screen");
+    auto surface = anyItem(w->contentItem(), "searchBar");
+    const double bottom = surface ? surface->mapToScene(QPointF(0,view->property("y").toReal()+view->property("height").toReal())).y() : -1;
+    c.check(view->property("compactView").toBool() && surface &&
+                bottom<=w->height()-7,
+            QString("a compact suggestion view stays inside the window below its field (%1 of %2)")
+                .arg(bottom,0,'f',1).arg(w->height()));
     c.check(view->property("height").toReal() > docked,
             QString("taking the height it was not given docked (%1 over %2)")
                 .arg(view->property("height").toReal(), 0, 'f', 0).arg(docked, 0, 'f', 0));
   }
-  c.shot("10-search-full-screen");
+  c.shot("10-search-contained");
   c.check(w->property("sizeClass").toString() == "compact" && w->property("paneMargin").toInt() == 16,
           "and the compact class draws its panes in at 16dp");
 

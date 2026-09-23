@@ -694,7 +694,14 @@ void runSearchSelectionTests(Backend *b,QQuickWindow *w) {
     check(second&&player&&second->mapToScene(QPointF(0,second->height())).y()<=player->mapToScene(QPointF()).y()+1,"two complete compact search rows fit above playback");
     shot(QString("compact-search-%1").arg(theme));
   }
+  b->rememberSearch("Test recent");auto compactField=findItem(w->contentItem(),"searchField");
+  if(compactField){compactField->setProperty("text","");compactField->forceActiveFocus();QMetaObject::invokeMethod(compactField,"updateSuggestions");QTest::qWait(300);
+    auto popup=w->findChild<QObject*>("searchSuggestions");auto bar=findItem(w->contentItem(),"searchBar");
+    check(popup&&bar&&popup->property("visible").toBool()&&bar->mapToScene(QPointF(0,popup->property("y").toReal()+popup->property("height").toReal())).y()<=w->height()-7,"compact suggestions stop inside the window");shot("compact-suggestions");
+    QTest::keyClick(w,Qt::Key_Escape);w->contentItem()->forceActiveFocus();
+  }
   w->setProperty("destination","home");w->resize(1180,900);
+  if(compactField){compactField->setProperty("dismissed",true);compactField->setProperty("text","");}
   w->contentItem()->forceActiveFocus();QTest::qWait(250);
   const auto id=b->createPlaylist("Aurora evenings");b->addItemsToPlaylist(id,songs);b->openPlaylist(id);QTest::qWait(400);
   auto selection=select("tracksView");check(selection,"collection selection exists");

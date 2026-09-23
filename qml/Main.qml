@@ -1514,12 +1514,20 @@ ApplicationWindow {
         }
         Popup {
             id: searchSuggestions; objectName: "searchSuggestions"; parent: searchBox
-            // Material docks the search view under the bar when there
-            // is room and gives it the whole screen when there is not.
-            readonly property bool fullScreen: window.compactWindow
+            // SearchBar.kt:932-937 recommends a full-screen search on phones.
+            // This desktop field stays in place, so the suggestion view uses
+            // only the space below it and keeps keyboard focus in that field.
+            readonly property bool compactView: window.compactWindow
             y: searchBox.height+6; width: searchBox.width
-            height: fullScreen ? Math.max(120,window.height-190)
-                               : Math.min(window.height-220,suggestionList.contentHeight+16)
+            // SearchBarVerticalPadding in SearchBar.kt:4174 leaves 8dp at
+            // the bottom. Reading each ancestor's y keeps this binding live
+            // when a layout moves the bar after a width-only resize.
+            readonly property real roomBelow: {
+                let top=y
+                for(let item=searchBox;item && item!==window.contentItem;item=item.parent)top+=item.y
+                return Math.max(0,window.height-top-8)
+            }
+            height: compactView ? roomBelow : Math.min(roomBelow,suggestionList.contentHeight+16)
             visible: searchField.activeFocus && !searchField.dismissed && searchField.suggestions.length>0
             focus: false; padding: 8; closePolicy: Popup.CloseOnPressOutside
             enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: app.motion?Theme.fast:0; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
