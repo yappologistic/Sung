@@ -20,8 +20,12 @@ AbstractButton {
     // as the glyph plus its space keeps the default square whatever size the
     // glyph itself is drawn at.
     readonly property real sizedSquareWidth: sizedHeight + 2*(iconSpace - iconSpaces[1])
-    readonly property real sizedHeight: Theme.buttonHeights[size] || 40
-    readonly property real sizedIcon: Theme.buttonIcon[size] || 20
+    // IconButton.kt:245 sizes from smallContainerSize without the pointer
+    // branch that Button.kt:1059 uses for labelled buttons.
+    readonly property real sizedHeight: text.length ? (Theme.buttonHeights[size] || 40)
+                                                   : (Theme.iconButtonHeights[size] || 40)
+    readonly property real sizedIcon: text.length ? (Theme.buttonIcon[size] || 20)
+                                                 : (Theme.iconButtonIcon[size] || 24)
     readonly property real sizedGap: Theme.buttonGap[size] || 8
     readonly property real sizedSquare: Theme.buttonSquare[size] || Theme.shapeMedium
     readonly property real sizedPressed: Theme.buttonPressed[size] || Theme.shapeSmall

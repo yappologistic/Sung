@@ -3416,6 +3416,7 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(500);
 
   // --- The button size scale ---
+  b->setPrecisePointer(false);
   QQmlComponent buttonSource(qmlEngine(w), QUrl("qrc:/qml/MButton.qml"));
   QScopedPointer<QObject> buttonObject(buttonSource.create(qmlContext(w)));
   auto sample = qobject_cast<QQuickItem *>(buttonObject.data());
@@ -3461,6 +3462,28 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
       c.check(sample->height() >= 47.5 && sample->width() >= 47.5,
               "and keeps the target Material puts around it");
     }
+    // IconButton.kt:245 keeps SmallIconButtonTokens.ContainerHeight and
+    // IconSize at 40dp and 24dp; Button.kt:1059 shortens labelled buttons.
+    sample->setProperty("iconWidth", QString("uniform"));
+    for (bool precise : {false, true}) {
+      b->setPrecisePointer(precise);
+      QTest::qWait(120);
+      auto shape = sample->property("background").value<QQuickItem *>();
+      auto glyph = anyItem(sample, "materialIcon");
+      c.check(shape && qAbs(shape->height() - 40) < 0.5 &&
+                  glyph && qAbs(glyph->property("size").toDouble() - 24) < 0.5,
+              QString("a small icon button stays 40dp with a 24dp glyph (%1 pointer)")
+                  .arg(precise ? "precise" : "touch"));
+    }
+    sample->setProperty("text", QString("Play"));
+    QTest::qWait(120);
+    auto labelledShape = sample->property("background").value<QQuickItem *>();
+    auto labelledGlyph = anyItem(sample, "materialIcon");
+    c.check(labelledShape && qAbs(labelledShape->height() - 36) < 0.5 &&
+                labelledGlyph && qAbs(labelledGlyph->property("size").toDouble() - 20) < 0.5,
+            "a labelled small button is 36dp with a 20dp icon for a precise pointer");
+    sample->setProperty("text", QString());
+    b->setPrecisePointer(false);
     // Pressing squares the shape by the step its own size takes.
     for (const auto &step : {Width{"xsmall", 8}, Width{"medium", 12}, Width{"large", 16}}) {
       sample->setProperty("size", QString::fromLatin1(step.variant));
@@ -3547,7 +3570,6 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
       sample->setParentItem(nullptr);
     }
   }
-
   // --- The split button's published measurements ---
   if (auto split = shownItem(w->contentItem(), "collectionPlay")) {
     c.check(qAbs(split->property("unit").toDouble() - 40) < 0.5,
@@ -3992,9 +4014,12 @@ void runMaterialSchemeTests(Backend *b, QQuickWindow *w) {
             QString("a precision pointer draws it tighter (%1 against %2)")
                 .arg(anyButton->height(), 0, 'f', 0).arg(comfortable, 0, 'f', 0));
     auto container = anyButton->property("background").value<QQuickItem *>();
-    // Material's small button drops from 40dp to 36dp for a precision pointer.
-    c.check(container && qAbs(container->height() - 36) < 0.5,
-            QString("at Material's 36dp small container (%1)")
+    auto glyph = anyItem(anyButton, "materialIcon");
+    // SmallIconButtonTokens.ContainerHeight and IconSize stay 40dp and 24dp;
+    // IconButton.kt:245 has no precision-pointer sizing branch.
+    c.check(container && qAbs(container->height() - 40) < 0.5 &&
+                glyph && qAbs(glyph->property("size").toDouble() - 24) < 0.5,
+            QString("at Material's 40dp icon container with a 24dp glyph (%1)")
                 .arg(container ? container->height() : 0, 0, 'f', 0));
     c.check(play && play->property("background").value<QQuickItem *>()->height() == 56,
             "while the medium button keeps its own height");

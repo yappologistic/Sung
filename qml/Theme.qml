@@ -84,6 +84,12 @@ QtObject {
                                                         : ({xsmall:32, small:40, medium:56, large:96})
     readonly property var buttonSquare: ({xsmall:shapeMedium, small:shapeMedium, medium:shapeLarge, large:shapeExtraLarge})
     readonly property var buttonIcon: ({xsmall:20, small:20, medium:24, large:32})
+    // XSmallIconButtonTokens, SmallIconButtonTokens, MediumIconButtonTokens and
+    // LargeIconButtonTokens keep their container heights with every pointer.
+    readonly property var iconButtonHeights: ({xsmall:32, small:40, medium:56, large:96})
+    // The same IconSize tokens give icon-only buttons their own glyph sizes;
+    // ButtonSmallTokens.IconSize stays 20dp for a labelled small button.
+    readonly property var iconButtonIcon: ({xsmall:20, small:24, medium:24, large:32})
     readonly property var buttonInset: ({xsmall:16, small:16, medium:24, large:48})
     readonly property var buttonGap: ({xsmall:8, small:8, medium:8, large:12})
     // An icon button is its own component in Material, with its own widths and
