@@ -406,12 +406,33 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   }
   b->seek(11000);QTest::qWait(100);
   choose("artwork");check(player->property("displayedLayout")=="artwork","artwork layout applies");shot("artwork");
+  {
+    // The cover alone centres its details as a narrowing stack, a page
+    // margin below the cover so the title never meets it.
+    auto art=visibleItem(w->contentItem(),"immersiveArtwork");
+    auto heading=visibleItem(w->contentItem(),"immersiveTitle");
+    const double gap=player->property("coverGap").toDouble();
+    check(art&&heading&&gap>=16&&heading->property("horizontalAlignment").toInt()==Qt::AlignHCenter&&
+          heading->mapToScene({0,0}).y()-art->mapToScene({0,art->height()}).y()>=gap-1,
+          qPrintable(QString("artwork view centres the details %1px below the cover").arg(gap)));
+  }
   choose("split");check(player->property("displayedLayout")=="split","split layout applies");shot("split");
   {
     auto pane=visibleItem(w->contentItem(),"lyricsView");
     auto art=visibleItem(w->contentItem(),"immersiveArtwork");
     check(pane&&art&&pane->mapToScene({0,0}).x()>art->mapToScene({art->width(),0}).x(),
           "split lyrics remain to the right of the artwork");
+    // Beside lyrics the details stay left-aligned: the link text keeps the
+    // title's edge inside its 12dp padded state layer.
+    auto heading=visibleItem(w->contentItem(),"immersiveTitle");
+    auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
+    auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
+    auto artistInk=artistLink?artistLink->property("contentItem").value<QQuickItem*>():nullptr;
+    auto albumInk=albumLink?albumLink->property("contentItem").value<QQuickItem*>():nullptr;
+    check(heading&&artistInk&&albumInk&&heading->property("horizontalAlignment").toInt()==Qt::AlignLeft&&
+          qAbs(heading->mapToScene({0,0}).x()-artistInk->mapToScene({0,0}).x())<1&&
+          qAbs(heading->mapToScene({0,0}).x()-albumInk->mapToScene({0,0}).x())<1,
+          "split view keeps the details left-aligned on one edge");
   }
   b->seek(11000);
   choose("singalong");QTest::qWait(500);shot("singalong-dark");
@@ -759,16 +780,15 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
       auto detailAlbum=visibleItem(w->contentItem(),"immersiveAlbumButton");
       auto artistInk=detailArtist?detailArtist->property("contentItem").value<QQuickItem*>():nullptr;
       auto albumInk=detailAlbum?detailAlbum->property("contentItem").value<QQuickItem*>():nullptr;
-      check(detailTitle&&detailArtist&&detailAlbum&&artistInk&&albumInk&&
-            qAbs(detailTitle->mapToScene({0,0}).x()-artistInk->mapToScene({0,0}).x())<1&&
-            qAbs(detailTitle->mapToScene({0,0}).x()-albumInk->mapToScene({0,0}).x())<1&&
+      auto cover=visibleItem(w->contentItem(),"immersiveArtwork");
+      // The cover is centred at whatever size fits, so the details share its
+      // centre line rather than an edge that moves with the window.
+      check(detailTitle&&detailArtist&&detailAlbum&&artistInk&&albumInk&&cover&&
+            detailTitle->property("horizontalAlignment").toInt()==Qt::AlignHCenter&&
+            qAbs(centre(detailTitle)-centre(cover))<1&&qAbs(centre(artistInk)-centre(cover))<1&&
+            qAbs(centre(albumInk)-centre(cover))<1&&
             detailTitle->mapToScene({detailTitle->width(),0}).x()<=width+1,
-            qPrintable(QString("%1px %2 details align and stay inside the window").arg(width).arg(theme)));
-      if(width>=1024){
-        auto cover=visibleItem(w->contentItem(),"immersiveArtwork");
-        check(cover&&detailTitle&&qAbs(detailTitle->mapToScene({0,0}).x()-cover->mapToScene({0,0}).x())<=16,
-              qPrintable(QString("%1px %2 details stay beside the cover edge").arg(width).arg(theme)));
-      }
+            qPrintable(QString("%1px %2 details centre under the cover inside the window").arg(width).arg(theme)));
       shot(QString("artwork-%1-%2").arg(width).arg(theme));
     }
     b->setTheme("dark");
@@ -886,14 +906,15 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   auto albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
   auto artistText=artistLink?artistLink->property("contentItem").value<QQuickItem*>():nullptr;
   auto albumText=albumLink?albumLink->property("contentItem").value<QQuickItem*>():nullptr;
-  // Button.kt:1015,1025 puts 12dp inside a text button on each side.
-  // Its container extends outside the title measure so the ink shares x.
+  // Button.kt:1015,1025 puts 12dp inside a text button on each side. The
+  // links hug their labels on the title's centre line, never wider than the
+  // title measure plus that padding.
+  const auto midline=[](QQuickItem *item){return item->mapToScene({item->width()/2,0}).x();};
   check(title&&artistLink&&albumLink&&artistText&&albumText&&
-        qAbs(title->mapToScene({0,0}).x()-artistText->mapToScene({0,0}).x())<1&&
-        qAbs(title->mapToScene({0,0}).x()-albumText->mapToScene({0,0}).x())<1&&
-        qAbs(artistLink->width()-title->width()-24)<1&&
-        qAbs(albumLink->width()-title->width()-24)<1,
-        "metadata ink shares the title edge inside 12dp padded state layers");
+        qAbs(midline(title)-midline(artistText))<1&&qAbs(midline(title)-midline(albumText))<1&&
+        qAbs(artistLink->width()-qMin(title->width()+24,artistText->implicitWidth()+24))<1&&
+        qAbs(albumLink->width()-qMin(title->width()+24,albumText->implicitWidth()+24))<1,
+        "metadata links hug their labels on the title's centre line");
   check(title&&title->property("wrapMode").toInt()==QQmlExpression(qmlContext(title),title,"Text.WordWrap").evaluate().toInt()&&
         title->property("elide").toInt()==QQmlExpression(qmlContext(title),title,"Text.ElideRight").evaluate().toInt()&&
         title->property("maximumLineCount").toInt()==2,
@@ -987,8 +1008,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
         check(heading&&link&&label&&link->height()>=48&&
               link->property("leftPadding").toDouble()==12&&
               link->property("rightPadding").toDouble()==12&&
-              qAbs(label->mapToScene({0,0}).x()-heading->mapToScene({0,0}).x())<1,
-              qPrintable(QString("%1px %2 %3 link pads its focus container without moving text")
+              qAbs(label->mapToScene({label->width()/2,0}).x()-heading->mapToScene({heading->width()/2,0}).x())<1,
+              qPrintable(QString("%1px %2 %3 link pads its focus container on the title's centre line")
                 .arg(size.width()).arg(theme).arg(kindName)));
         shot(QString("focus-%1-%2-%3").arg(kindName.toLower()).arg(size.width()).arg(theme));
       }

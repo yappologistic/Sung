@@ -36,10 +36,17 @@ Item {
     // The metadata column needs room for ordinary words even when the split
     // view is narrow. The floor is a layout allowance, not an artwork size.
     readonly property real coverColumnWidth: Math.max(200,width*(displayedLayout==="artwork"?0.55:0.34))
-    // Material has no now-playing text measure token. At tall desktop widths
-    // 520px keeps the shared edge close to the height-limited square cover;
-    // the column itself sets the floor when the window is narrow.
+    // Material has no now-playing text measure token. 520px caps the title's
+    // two lines; the column sets the floor when it is narrower.
     readonly property real detailsMeasure: Math.min(520,coverColumn.width)
+    // With the cover alone, the title, artist and album centre under it as a
+    // narrowing stack: the cover is the largest square that fits, so its edges
+    // move with the window while its centre does not. Beside lyrics they stay
+    // left-aligned, reading with the lines next to them.
+    readonly property bool detailsCentred: displayedLayout==="artwork"
+    // The page margin (16dp compact, 24dp beyond) between the cover and the
+    // title, so a height-limited cover gives way instead of meeting the text.
+    readonly property real coverGap: width<600?Theme.spaceLarge:Theme.spaceExtraLarge
     // At the immersive 40px lyric size, 760px holds roughly 35 characters.
     // The measure is centred only where the window content also fits gutters.
     readonly property real lyricMeasure: 760
@@ -69,7 +76,7 @@ Item {
     // gaps and the natural control heights before reserving the optional row.
     readonly property real coverflowCoverBudget: (Window.window?Window.window.height:height)-2*(width<600?16:24)
         -topControls.implicitHeight-transport.implicitHeight-seekRow.implicitHeight
-        -coverflowReserve-4*shell.spacing-title.implicitHeight-2*48
+        -coverflowReserve-4*shell.spacing-title.implicitHeight-(detailsCentred?coverGap:0)-2*48
     readonly property bool coverflowVisible: coverflow && app.queue.count>0 &&
         (displayedLayout==="lyrics" || displayedLayout==="singalong" || coverflowCoverBudget>=160)
     function hasKeyboardFocus(item) {
@@ -171,6 +178,7 @@ Item {
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.topMargin: player.detailsCentred ? player.coverGap : 0
                     // Typography.kt:115-133 reads the TypeScaleTokens roles.
                     // TypeScaleTokens.kt:117-127,343-353 gives headline-large
                     // 32sp/40sp with medium emphasis, nearest the old 30px;
@@ -178,6 +186,7 @@ Item {
                     typeRole: player.width<900?"titleLarge":"headlineLarge"
                     emphasized: true
                     font.pixelSize: player.width<900?Theme.titleLarge:Theme.headlineLarge
+                    horizontalAlignment: player.detailsCentred ? Text.AlignHCenter : Text.AlignLeft
 
                     // Qt Text.WordWrap keeps whole words; ElideRight marks the
                     // last line when the two-line limit omits the rest.
@@ -186,8 +195,10 @@ Item {
                     maximumLineCount: 2
                     clip: true
                 }
-                // Button.kt:1015,1025 places 12dp inside a text button. The
-                // target grows into the margin so its ink keeps the title edge.
+                // Button.kt:1015,1025 places 12dp inside a text button. Centred
+                // under the cover, each link hugs its label the way a text
+                // button does; left-aligned beside lyrics, it reaches 12dp into
+                // the margin so its text keeps the title's edge.
                 Item {
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsMeasure
@@ -195,7 +206,9 @@ Item {
                     implicitHeight: 48
                     AbstractButton {
                         objectName: "immersiveArtistButton"
-                        anchors.fill: parent; anchors.leftMargin: -12; anchors.rightMargin: -12
+                        x: player.detailsCentred ? (parent.width-width)/2 : -12
+                        width: player.detailsCentred ? Math.min(parent.width+24,implicitContentWidth+24) : parent.width+24
+                        height: parent.height
                         leftPadding: 12; rightPadding: 12
                         enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
                         Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
@@ -217,7 +230,9 @@ Item {
                     visible: !!app.current.album
                     AbstractButton {
                         objectName: "immersiveAlbumButton"
-                        anchors.fill: parent; anchors.leftMargin: -12; anchors.rightMargin: -12
+                        x: player.detailsCentred ? (parent.width-width)/2 : -12
+                        width: player.detailsCentred ? Math.min(parent.width+24,implicitContentWidth+24) : parent.width+24
+                        height: parent.height
                         leftPadding: 12; rightPadding: 12
                         enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
                         Accessible.name: "Open album \u00b7 "+(app.current.album || "")
