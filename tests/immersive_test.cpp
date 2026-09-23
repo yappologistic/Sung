@@ -293,9 +293,16 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   for(auto line:lyricLines)if(line->isVisible()&&!line->property("current").toBool()&&line->property("index").toInt()==2)seekLine=line;
   check(seekLine,"a non-current lyric can be targeted");
   if(seekLine){
+    check(waitFor([&]{
+            const auto before=seekLine->mapToScene(seekLine->boundingRect().center());
+            QTest::qWait(60);
+            const auto after=seekLine->mapToScene(seekLine->boundingRect().center());
+            return qAbs(before.y()-after.y())<0.5&&after.y()>0&&after.y()<w->height();
+          }),"resting lyric settles inside the viewport before pointer input");
     const auto point=seekLine->mapToScene(seekLine->boundingRect().center()).toPoint();
     QTest::mouseMove(w,point);
-    check(waitFor([&]{return seekLine->property("hovered").toBool();}),"resting lyric remains hoverable");
+    check(waitFor([&]{return seekLine->property("hovered").toBool();}),
+          qPrintable(QString("resting lyric remains hoverable at %1,%2").arg(point.x()).arg(point.y())));
     QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
     check(waitFor([&]{return b->position()>=19500&&b->position()<=20500;}),"clicking a resting lyric seeks its timestamp");
   }
@@ -612,8 +619,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   // The artwork, transport, and seek bar must share a centre at every width
   // used in the immersive captures, including the compact layout.
   b->setMotion(false);
-  for(int width:{1440,1024,840,600}){
-    resizeTo(width,width==600?620:900);
+  for(int width:{480,600,840,1024,1440,2560}){
+    resizeTo(width,width<=600?620:900);
     auto artwork=visibleItem(w->contentItem(),"immersiveArtwork");
     auto toolbar=visibleItem(w->contentItem(),"immersiveToolbar");
     auto seek=visibleItem(w->contentItem(),"immersiveSeek");
@@ -625,8 +632,30 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
             qPrintable(QString("%1px centres art %2, transport %3, seek %4 differ by <=2px")
                        .arg(width).arg(art,0,'f',1).arg(bar,0,'f',1).arg(wave,0,'f',1)));
     }
-    shot(QString("artwork-%1").arg(width));
+    for(const auto &theme:{"dark","light"}){
+      b->setTheme(theme);
+      auto detailTitle=visibleItem(w->contentItem(),"immersiveTitle");
+      auto detailArtist=visibleItem(w->contentItem(),"immersiveArtistButton");
+      auto detailAlbum=visibleItem(w->contentItem(),"immersiveAlbumButton");
+      check(detailTitle&&detailArtist&&detailAlbum&&
+            qAbs(detailTitle->mapToScene({0,0}).x()-detailArtist->mapToScene({0,0}).x())<1&&
+            qAbs(detailTitle->mapToScene({0,0}).x()-detailAlbum->mapToScene({0,0}).x())<1&&
+            detailTitle->mapToScene({detailTitle->width(),0}).x()<=width+1,
+            qPrintable(QString("%1px %2 details align and stay inside the window").arg(width).arg(theme)));
+      if(width>=1024){
+        auto cover=visibleItem(w->contentItem(),"immersiveArtwork");
+        check(cover&&detailTitle&&qAbs(detailTitle->mapToScene({0,0}).x()-cover->mapToScene({0,0}).x())<=16,
+              qPrintable(QString("%1px %2 details stay beside the cover edge").arg(width).arg(theme)));
+      }
+      shot(QString("artwork-%1-%2").arg(width).arg(theme));
+    }
+    b->setTheme("dark");
   }
+  b->setColorContrast(1);
+  for(const auto &theme:{"dark","light"}){
+    b->setTheme(theme);shot(QString("high-contrast-%1").arg(theme));
+  }
+  b->setColorContrast(0);b->setTheme("dark");
   resizeTo(480,780);
   click("immersiveLayoutButton");
   check(waitFor(menuOpen),"layout menu opens for coverflow");
@@ -834,6 +863,72 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     check(waitFor([&]{return mini->height()<height&&!visibleItem(mini->contentItem(),"miniLyricContainer");}),
           "missing lyrics collapses unused mini-player space");
     check(mini->grabWindow().save(dir+"/mini-no-lyrics.png"),"compact mini capture");
+    mini->hide();
   }
+  QDir().mkpath(dir+"/bare");
+  const QString longName="Coming ashore after a long and winding trip across the still water into the early morning light";
+  QProcess bareEncode;
+  bareEncode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono",
+                     "-t","120","-metadata","title="+longName,"-metadata","album=Open Sky",
+                     "-metadata","artist=Example Artist",dir+"/bare/long.flac"});
+  check(bareEncode.waitForFinished(30000)&&bareEncode.exitCode()==0,"generate long-title track without artwork");
+  b->importMusicFolder(QUrl::fromLocalFile(dir+"/bare"));
+  check(waitFor([&]{return !b->importingLocal();}),"import artwork-free long-title fixture");
+  b->library("files");
+  QVariantMap bareSong;
+  for(const auto &row:b->results()->rows)if(row.toMap().value("title")==longName)bareSong=row.toMap();
+  check(!bareSong.isEmpty()&&bareSong.value("art").toString().isEmpty(),
+        "long-title fixture has no artwork source");
+  if(!bareSong.isEmpty()){
+    b->clearQueue();b->enqueueItems({bareSong});b->playAt(0);
+    check(waitFor([&]{return b->playing()&&b->queue()->count()==1;}),"one-song queue plays long title");
+    w->setProperty("immersive",true);resizeTo(480,780);
+    player=visibleItem(w->contentItem(),"immersivePlayer");
+    title=visibleItem(w->contentItem(),"immersiveTitle");
+    check(title&&title->property("lineCount").toInt()==2&&title->property("truncated").toBool(),
+          "long title uses two lines with an ellipsis");
+    check(waitFor([&]{return !visibleItem(w->contentItem(),"toastBar");}),
+          "queue notification clears before edge captures");
+    shot("long-title-no-artwork-dark");
+    b->setTheme("light");shot("long-title-no-artwork-light");b->setTheme("dark");
+    resizeTo(480,900);
+    QMetaObject::invokeMethod(player,"wake");
+    check(waitFor([&]{return visibleItem(w->contentItem(),"coverflowView");}),
+          "one-song coverflow wakes for the edge capture");
+    auto oneFlow=visibleItem(w->contentItem(),"coverflowView");
+    check(player&&player->property("coverflow").toBool()&&oneFlow&&
+          oneFlow->property("count").toInt()==1,
+          qPrintable(QString("one-song coverflow: selected %1, visible %2, count %3")
+            .arg(player?player->property("coverflow").toBool():false)
+            .arg(bool(oneFlow)).arg(oneFlow?oneFlow->property("count").toInt():-1)));
+    shot("one-song-coverflow");
+  }
+  QVariantMap plainSong{{"id","12345678901"},{"videoId","12345678901"},
+                        {"kind","song"},{"title","Untimed song"},
+                        {"artist","Test artist"},{"seconds",120},{"available",true}};
+  qputenv("SUNG_BUFFER_FIXTURE","1");
+  b->clearQueue();b->enqueueItems({plainSong});b->playAt(0);
+  check(waitFor([&]{return b->lyrics()=="Test lyrics"&&b->lyricLines().isEmpty();}),
+        "fixture supplies unsynced lyrics without timed lines");
+  player=visibleItem(w->contentItem(),"immersivePlayer");
+  if(player){
+    if(player->property("coverflow").toBool()){
+      // The menu toggle was exercised above. Restore the reading-only edge
+      // setup without competing with a queue notification over the menu.
+      QMetaObject::invokeMethod(player,"coverflowRequested",Q_ARG(bool,false));
+      check(waitFor([&]{player=visibleItem(w->contentItem(),"immersivePlayer");
+                         return player&&!player->property("coverflow").toBool();}),
+            "coverflow is off for the unsynced reading capture");
+    }
+    choose("lyrics");
+    check(player->property("displayedLayout")=="lyrics"&&
+          visibleItem(w->contentItem(),"lyricsView"),
+          "unsynced lyrics retain a reading layout");
+    check(waitFor([&]{return !visibleItem(w->contentItem(),"toastBar");}),
+          "fixture queue notification clears before unsynced capture");
+    shot("unsynced-lyrics-dark");
+    b->setTheme("light");shot("unsynced-lyrics-light");b->setTheme("dark");
+  }
+  qunsetenv("SUNG_BUFFER_FIXTURE");
   b->stop();b->clearQueue();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
