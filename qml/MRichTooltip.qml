@@ -36,8 +36,10 @@ ToolTip {
             width: Math.min(280, implicitWidth)
             text: tip.subhead
             color: Theme.muted
-            font.pixelSize: Theme.labelLarge
-            emphasized: true
+            // RichTooltipTokens.SubheadFont is title small, which carries
+            // its own medium weight; it is not an emphasized label.
+            font.pixelSize: Theme.titleSmall
+            typeRole: "titleSmall"
             wrapMode: Text.Wrap
         }
         SungText {
@@ -61,9 +63,10 @@ ToolTip {
         }
     }
     background: Rectangle {
+        // RichTooltipTokens: surfaceContainer, the medium corner and two
+        // levels of lift, and no outline; the lift is what sets it off.
         color: Theme.container
         radius: Theme.shapeMedium
-        border.width: 1; border.color: Theme.outlineVariant
         MElevation { anchors.fill: parent; radius: parent.radius; level: 2 }
     }
     enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.enterDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }

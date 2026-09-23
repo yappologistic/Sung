@@ -13,14 +13,19 @@ import QtQuick.Controls
 ToolTip {
     id: tip
 
-    // Material publishes no padding for the plain tooltip, so this is ours.
-    padding: 8
+    // Compose pads the plain tooltip 8dp across and 4dp down, holds it to at
+    // least 40x24 and wraps it at 200 (Tooltip.kt, PlainTooltipContentPadding,
+    // TooltipMinWidth/Height, plainTooltipMaxWidth). There are no tokens for
+    // these, which is why they live in the source.
+    leftPadding: 8; rightPadding: 8; topPadding: 4; bottomPadding: 4
     contentItem: SungText {
         text: tip.text
         font.pixelSize: Theme.bodySmall
         color: Theme.inverseSurfaceText
         wrapMode: Text.Wrap
     }
+    implicitWidth: Math.max(40, Math.min(200, contentItem.implicitWidth + leftPadding + rightPadding))
+    implicitHeight: Math.max(24, contentItem.implicitHeight + topPadding + bottomPadding)
     background: Rectangle {
         objectName: "tooltipContainer"
         color: Theme.inverseSurface
