@@ -4,9 +4,8 @@ import QtQuick
 //
 // Material separates two cases. Destinations reached from the rail have no
 // spatial relationship to each other, so they *fade through*: the outgoing view
-// leaves over the first 30% of the transition, and the incoming one arrives
-// over the remaining 70% while growing from 92%. Tabs inside a destination are
-// peers laid out along one line, so they share the *X axis*: the outgoing view
+// leaves before the incoming one arrives while growing from 92%. Tabs inside
+// a destination are peers along one line, so they share the *X axis*: the outgoing view
 // leaves towards the side it came from and the incoming one arrives from the
 // other, travelling 30dp.
 //
@@ -23,10 +22,12 @@ QtObject {
     // the X axis can be travelled without fighting the layout that placed it.
     property Item target: null
 
-    // M3 gives the whole transition 300ms and the outgoing half 30% of it.
-    readonly property int totalDuration: 300
-    readonly property int leaveDuration: Math.round(totalDuration*0.3)
-    readonly property int arriveDuration: totalDuration-leaveDuration
+    // Menu.kt:1829-1831 uses FastEffects for the staged fade; PaneMotion.kt:
+    // 150-177 uses DefaultSpatial for pane travel and scale. The outgoing
+    // FastEffects fade completes before the incoming pane starts.
+    readonly property int leaveDuration: travel===0?Theme.springFastEffectsMs:Theme.springSpatialMs
+    readonly property int arriveDuration: Theme.springSpatialMs
+    readonly property int totalDuration: leaveDuration+arriveDuration
     readonly property real arriveScale: 0.92
     readonly property real axisTravel: 30
 
@@ -35,6 +36,18 @@ QtObject {
     property real travel: 0
 
     signal navigated()
+
+    // Turning motion off during a staged transition finishes the pending
+    // navigation in the same frame and hands the target back at rest.
+    property Connections motionSettings: Connections {
+        target: app
+        function onSettingsChanged() {
+            if (app.motion || !root.running) return
+            const wasLeaving=root.leave.running
+            root.settle()
+            if(wasLeaving)root.swap()
+        }
+    }
 
     // Destinations with no spatial relationship.
     function fadeThrough(action) { begin(action,0) }
@@ -68,12 +81,16 @@ QtObject {
 
     property Animation leave: ParallelAnimation {
         NumberAnimation {
-            target: root.target; property: "opacity"; to: 0; duration: root.leaveDuration
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.exitCurve
+            objectName: "navLeaveFade"
+            // FastEffects is the critically damped exit fade from Menu.kt.
+            target: root.target; property: "opacity"; to: 0; duration: Theme.springFastEffectsMs
+            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects
         }
         NumberAnimation {
-            target: root.target; property: "shift"; to: -root.travel; duration: root.leaveDuration
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.exitCurve
+            objectName: "navLeaveShift"
+            // PaneMotion.kt:150-177 uses DefaultSpatial for pane travel.
+            target: root.target; property: "shift"; to: -root.travel; duration: root.travel===0?0:Theme.springSpatialMs
+            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial
         }
         onFinished: {
             root.swap()
@@ -89,16 +106,23 @@ QtObject {
 
     property Animation arrive: ParallelAnimation {
         NumberAnimation {
-            target: root.target; property: "opacity"; to: 1; duration: root.arriveDuration
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.enterCurve
+            objectName: "navArriveFade"
+            // DefaultEffects restores a screen's opacity without overshoot;
+            // PaneMotion.kt:150-177 pairs pane visibility with its bounds.
+            target: root.target; property: "opacity"; to: 1; duration: Theme.springEffectsMs
+            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects
         }
         NumberAnimation {
-            target: root.target; property: "scale"; to: 1; duration: root.arriveDuration
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.enterCurve
+            objectName: "navArriveScale"
+            // PaneMotion.kt:150-177 uses DefaultSpatial for pane bounds.
+            target: root.target; property: "scale"; to: 1; duration: Theme.springSpatialMs
+            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial
         }
         NumberAnimation {
-            target: root.target; property: "shift"; to: 0; duration: root.arriveDuration
-            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.enterCurve
+            objectName: "navArriveShift"
+            // DefaultSpatial carries shared-axis travel; fade-through has none.
+            target: root.target; property: "shift"; to: 0; duration: root.travel===0?0:Theme.springSpatialMs
+            easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial
         }
     }
 }

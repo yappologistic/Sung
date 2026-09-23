@@ -20,6 +20,8 @@
 #include <QQmlEngine>
 #include <QQuickImageProvider>
 #include <QQmlExpression>
+#include <QQmlListReference>
+#include <qqml.h>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QFont>
@@ -28,6 +30,7 @@
 #include <QSignalSpy>
 #include <QTest>
 #include <qpa/qwindowsysteminterface.h>
+#include <algorithm>
 #include <functional>
 
 namespace {
@@ -54,6 +57,26 @@ QQuickItem *anyItem(QQuickItem *root, const QString &name) {
     if (auto found = anyItem(child, name))
       return found;
   return nullptr;
+}
+QObject *motionObject(QObject *owner, const char *property) {
+  if (!owner)
+    return nullptr;
+  // Qt defers Behavior.animation and Transition.animations until used. Build
+  // the declared object now so the stage can inspect the pair it will run.
+  qmlExecuteDeferred(owner);
+  return QQmlProperty(owner, property).read().value<QObject *>();
+}
+QObject *motionAt(QObject *group, std::initializer_list<int> indices) {
+  for (const int index : indices) {
+    if (!group)
+      return nullptr;
+    qmlExecuteDeferred(group);
+    const QQmlListReference animations(group, "animations");
+    if (!animations.isReadable() || index >= animations.count())
+      return nullptr;
+    group = animations.at(index);
+  }
+  return group;
 }
 
 // How far past a container's right edge anything inside it is drawn. A row
@@ -418,12 +441,15 @@ void runNavigationMotionTests(Backend *b, QQuickWindow *w) {
         frames.append({int(clock.elapsed()), shell->opacity(), shell->scale(), arriving->width()});
         QTest::qWait(16);
       }
-      // Nothing may jump. A step of more than a fifth of the range in one
-      // frame is a cut rather than a movement, and that is what reads as a
-      // jolt however short the animation is.
+      // FastEffects moves at most 0.349 over any 16ms phase of its solved
+      // response (0.327 on the 0,16,32ms grid). The strict 0.5 boundary
+      // allows uneven frame waits yet rejects a one-frame cut or two half
+      // cuts. Intermediate frames and the final settle are checked below.
       double worstOpacity = 0, worstScale = 0;
+      int worstIndex = 0;
       for (int i = 1; i < frames.size(); ++i) {
-        worstOpacity = qMax(worstOpacity, qAbs(frames[i].opacity - frames[i - 1].opacity));
+        const double step = qAbs(frames[i].opacity - frames[i - 1].opacity);
+        if (step > worstOpacity) { worstOpacity = step; worstIndex = i; }
         if (frames[i].opacity > 0.02 && frames[i - 1].opacity > 0.02)
           worstScale = qMax(worstScale, qAbs(frames[i].scale - frames[i - 1].scale));
       }
@@ -432,9 +458,19 @@ void runNavigationMotionTests(Backend *b, QQuickWindow *w) {
         worstGap = qMax(worstGap, frames[i].ms - frames[i - 1].ms);
         if (qAbs(frames[i].opacity - frames[i - 1].opacity) >= worstOpacity - 1e-9) atMs = frames[i].ms;
       }
-      c.check(worstOpacity <= 0.34,
-              QString("the view fades rather than cutting (worst step %1 at %2ms, sampled every %3ms at worst, %4 frames)")
-                  .arg(worstOpacity, 0, 'f', 3).arg(atMs).arg(worstGap).arg(frames.size()));
+      c.check(worstOpacity < 0.5,
+              QString("the view fades rather than cutting (worst step %1 at %2ms, "
+                      "sampled every %3ms at worst, %4 frames; prior %5 at %6ms, next %7 at %8ms)")
+                  .arg(worstOpacity, 0, 'f', 3).arg(atMs).arg(worstGap).arg(frames.size())
+                  .arg(frames[worstIndex - 1].opacity, 0, 'f', 3).arg(frames[worstIndex - 1].ms)
+                  .arg(frames[worstIndex].opacity, 0, 'f', 3).arg(frames[worstIndex].ms));
+      const int intermediate = std::count_if(frames.cbegin(), frames.cend(),
+                                             [](const Frame &f) { return f.opacity > 0.05 && f.opacity < 0.95; });
+      c.check(intermediate >= 3 &&
+                  std::any_of(frames.cbegin(), frames.cend(),
+                              [](const Frame &f) { return f.opacity < 0.05; }) &&
+                  frames.last().opacity > 0.99,
+              "the fade has intermediate frames, reaches the outgoing view, and settles");
       c.check(worstScale <= 0.05,
               QString("and grows rather than snapping (worst step %1)").arg(worstScale, 0, 'f', 3));
       // The indicator and the view finish together. One still travelling long
@@ -468,12 +504,28 @@ void runNavigationMotionTests(Backend *b, QQuickWindow *w) {
   if (!column || !body || !destinations || !tabs)
     return c.finish();
 
-  // --- The durations Material specifies ---
-  c.check(destinations->property("totalDuration").toInt() == 300, "a transition lasts 300ms");
-  c.check(destinations->property("leaveDuration").toInt() == 90,
-          "the outgoing view leaves over the first 30%");
-  c.check(destinations->property("arriveDuration").toInt() == 210,
-          "the incoming view arrives over the remaining 70%");
+  // The two fade-through stages take their durations from the solved springs.
+  // FastEffects exits before DefaultSpatial brings in the scaled destination.
+  const int leaveMs = c.evaluate("Theme.springFastEffectsMs").toInt();
+  const int arriveMs = c.evaluate("Theme.springSpatialMs").toInt();
+  c.check(destinations->property("leaveDuration").toInt() == leaveMs,
+          "the outgoing fade uses FastEffects' settling time");
+  c.check(destinations->property("arriveDuration").toInt() == arriveMs &&
+              destinations->property("totalDuration").toInt() == leaveMs + arriveMs,
+          "the incoming spatial movement and staged total derive from springs");
+  auto leaveGroup = motionObject(destinations, "leave");
+  auto arriveGroup = motionObject(destinations, "arrive");
+  auto springAnimation = [&](QObject *animation, int ms, const char *curveName) {
+    return animation && animation->property("duration").toInt() == ms &&
+           QQmlProperty(animation, "easing.bezierCurve").read().toList() ==
+               c.evaluate("Theme." + QString::fromLatin1(curveName)).toList();
+  };
+  c.check(springAnimation(motionAt(leaveGroup, {0}), leaveMs, "springFastEffects") &&
+              springAnimation(motionAt(arriveGroup, {0}),
+                              c.evaluate("Theme.springEffectsMs").toInt(), "springEffects") &&
+              springAnimation(motionAt(arriveGroup, {1}), arriveMs, "springSpatial") &&
+              springAnimation(motionAt(arriveGroup, {2}), 0, "springSpatial"),
+          "navigation fade and movement read matching spring pairs");
   c.check(qAbs(destinations->property("arriveScale").toReal() - 0.92) < 0.001,
           "fading through grows the incoming view from 92%");
   c.check(qAbs(destinations->property("axisTravel").toReal() - 30) < 0.001,
@@ -549,6 +601,17 @@ void runNavigationMotionTests(Backend *b, QQuickWindow *w) {
           "and leaves nothing half-animated");
   c.check(w->property("libraryTab") == "files", "navigation still arrives");
   c.shot("05-reduced-motion");
+  b->setMotion(true);
+
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("favorites")));
+  QTest::qWait(40);
+  b->setMotion(false);
+  QCoreApplication::processEvents();
+  c.check(!tabs->property("running").toBool() &&
+              qAbs(body->opacity() - 1) < 0.01 &&
+              qAbs(body->property("shift").toReal()) < 0.01 &&
+              w->property("libraryTab") == "favorites",
+          "turning motion off during travel finishes the pending tab in one frame");
   b->setMotion(true);
 
   // --- A second navigation mid-flight must not strand the view ---
@@ -1910,6 +1973,12 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
                 .arg(expected.durationMs)
                 .arg(c.evaluate("Theme." + pair.first + "Ms").toInt()));
   }
+  // Menu.kt:1829-1831 and NavigationDrawer.kt:351-355 use FastEffects to
+  // close. Both exit aliases must describe that same solved spring.
+  c.check(c.evaluate("Theme.exitDuration").toInt() ==
+                  c.evaluate("Theme.springFastEffectsMs").toInt() &&
+              curve("exitCurve") == curve("springFastEffects"),
+          "the exit fade's duration and curve are one FastEffects spring");
   // A spatial spring passes its target and an effects spring does not, which
   // is the whole reason Material separates them.
   const double spatialPeak = peakOf(curve("springSpatial"));

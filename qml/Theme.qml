@@ -396,9 +396,11 @@ QtObject {
     readonly property int normal: springEffectsMs
     readonly property int slow: springSlowEffectsMs
     readonly property int enterDuration: springFastEffectsMs
-    readonly property int exitDuration: app.motion ? 100 : 0
+    // Menu.kt:1829-1831 and NavigationDrawer.kt:351-355 use FastEffects to
+    // close. Opacity must settle without spatial overshoot.
+    readonly property int exitDuration: springFastEffectsMs
     readonly property var enterCurve: springFastEffects
-    readonly property var exitCurve: [0.3,0,1,1,1,1]
+    readonly property var exitCurve: springFastEffects
     readonly property var fastSpatialCurve: springFastSpatial
     readonly property var effectsCurve: springEffects
     readonly property var fastEffectsCurve: springFastEffects
