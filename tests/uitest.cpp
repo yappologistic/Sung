@@ -1379,11 +1379,50 @@ void runLibraryQolTests(Backend *b,QQuickWindow *w) {
   const auto dir=qEnvironmentVariable("SUNG_TEST_OUTPUT");QDir().mkpath(dir);
   auto shot=[&](const char *name){QTest::qWait(400);check(w->grabWindow().save(dir+"/"+name+".png"),name);};
   QWindowSystemInterface::handleFocusWindowChanged(w);w->resize(1180,800);b->setVolume(0);b->setAutoplay(false);b->setPrepareNext(false);b->setTheme("dark");
+  QTest::qWait(350);
+  if(auto skip=findItem(w->contentItem(),"onboardingSkip");skip&&skip->isVisible()){
+    QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,skip->mapToScene(skip->boundingRect().center()).toPoint());
+    QTest::qWait(300);
+  }
   auto settings=w->findChild<QObject*>("settingsDialog");check(settings,"settings dialog exists");
   if(settings){QMetaObject::invokeMethod(settings,"open");}QTest::qWait(350);
   auto search=findItem(w->contentItem(),"settingsSearch");check(search,"settings search exists");
   if(search){search->forceActiveFocus();QTest::keyClick(w,Qt::Key_V);QTest::keyClick(w,Qt::Key_O);QTest::keyClick(w,Qt::Key_L);}
   QTest::qWait(120);check(settings&&settings->property("searchQuery").toString()=="vol","settings search accepts typing");
+  if(search){
+    QTest::keyClick(w,Qt::Key_A,Qt::ControlModifier);
+    for(const QChar letter:QStringLiteral("navigation"))QTest::keyClick(w,letter.toLatin1());
+    QTest::qWait(180);
+    auto navigation=findItem(w->contentItem(),"navigationTop");
+    check(navigation&&navigation->isVisible()&&
+          !findItem(w->contentItem(),"settingsNoResults")->isVisible(),
+          "search reaches the Navigation control through its group");
+    check(w->grabWindow().save(dir+"/01a-navigation-search.png"),"capture navigation search");
+    // Each distinct first word used by a Settings control must keep at least
+    // one containing group visible. These are the first words of the control
+    // match strings in Main.qml, including the six category headings.
+    const QStringList firstTerms={"accent","album","ambient","animated","animations",
+      "appearance","audio","autoplay","backdrop","clear","color","contrast",
+      "crossfade","current","customize","density","export","find","gapless",
+      "import","keep","keyboard","listening","music","navigation","online",
+      "pause","playback","pointer","prepare","quick","resume","sleep","start",
+      "sung","track","type","update","volume","youtube"};
+    bool allTermsReachable=true;
+    for(const auto &term:firstTerms){
+      QTest::keyClick(w,Qt::Key_A,Qt::ControlModifier);
+      for(const QChar letter:term)QTest::keyClick(w,letter.toLatin1());
+      QTest::qWait(15);
+      auto noResults=findItem(w->contentItem(),"settingsNoResults");
+      if(!noResults||noResults->isVisible()){
+        fprintf(stdout,"SETTINGS_UNREACHABLE %s\n",qPrintable(term));
+        allTermsReachable=false;
+      }
+    }
+    check(allTermsReachable,"every control first search term reaches a Settings group");
+    QTest::keyClick(w,Qt::Key_A,Qt::ControlModifier);
+    for(const QChar letter:QStringLiteral("vol"))QTest::keyClick(w,letter.toLatin1());
+    QTest::qWait(120);
+  }
   auto volume=findItem(w->contentItem(),"volumeStepButton");auto notification=findItem(w->contentItem(),"trackNotificationsSwitch");
   check(volume&&volume->isVisible()&&notification&&!notification->isVisible(),"settings filters unrelated controls");shot("01-settings-search");
   if(settings)settings->setProperty("searchQuery","Keep played songs offline");
