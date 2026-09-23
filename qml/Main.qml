@@ -1662,7 +1662,7 @@ ApplicationWindow {
                 MButton { objectName: "smartShuffleQueueButton"; symbol: "shuffle"; tip: "Shuffle upcoming · spread out artists"; enabled: app.queue.count-Math.max(0,app.currentIndex+1)>1; onClicked: app.smartShuffleQueue() }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 2
-                    SungText { text: window.countText(app.queue.count); color: Theme.muted; Layout.fillWidth: true }
+                    SungText { objectName: "queueWaitingCount"; text: {const n=Math.max(0,app.queue.count-Math.max(0,app.currentIndex+1));return n+(n===1?" song waiting":" songs waiting");} color: Theme.muted; Layout.fillWidth: true }
                     ColumnLayout {
                         Layout.fillWidth: true; spacing: 2; visible: !!app.queueTime
                         SungText {objectName:"queueTimeLabel"; text:app.queueTime; color:Theme.muted; font.pixelSize:Theme.bodySmall; Layout.fillWidth:true}

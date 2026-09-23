@@ -2606,6 +2606,17 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
             QString("counting them exactly (%1 of %2 queued)")
                 .arg(queueBadge->property("display").toString())
                 .arg(b->queue()->count()));
+    b->playAt(0);
+    c.check(c.until([&] { return b->currentIndex() == 0 && b->playing(); }),
+            "the queue fixture begins playing");
+    c.check(queueBadge->property("display").toString() == "3",
+            "the badge excludes the song playing now");
+    w->setProperty("side", "queue");
+    QTest::qWait(200);
+    auto waiting = shownItem(w->contentItem(), "queueWaitingCount");
+    c.check(waiting && waiting->property("text").toString() == "3 songs waiting",
+            "the queue footer agrees with the badge while playing");
+    w->setProperty("side", "");
     // Material's large badge is 16dp tall and grows only as wide as it must.
     c.check(queueBadge->height() == 16 && queueBadge->width() >= 16,
             "drawn at Material's large size");
