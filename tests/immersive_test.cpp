@@ -14,6 +14,7 @@
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QProcess>
+#include <QPointer>
 #include <QStringList>
 #include <QTest>
 #include <qpa/qwindowsysteminterface.h>
@@ -416,8 +417,56 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(sheet&&waitFor([&]{return !sheet->property("visible").toBool();})&&w->property("immersive").toBool(),
         "Escape closes sheet only");
   b->playAt(0);check(waitFor([&]{return b->playing()&&b->lyricLines().size()==5;}),"original track and lyrics restore");
-  player->forceActiveFocus();QTest::mouseMove(w,QPoint(8,8));QMetaObject::invokeMethod(player,"wake");
+  player->forceActiveFocus();
+  auto parkedPlay=visibleItem(w->contentItem(),"immersivePlayButton");
+  auto parkedLayout=visibleItem(w->contentItem(),"immersiveLayoutButton");
+  auto parkedSeek=visibleItem(w->contentItem(),"immersiveSeek");
+  auto parkedQueue=visibleItem(w->contentItem(),"immersiveQueueButton");
+  auto parkedVolume=visibleItem(w->contentItem(),"exactVolumeButton");
+  auto accessibleTreeHas=[&](QObject *target){
+    auto root=QAccessible::queryAccessibleInterface(w);
+    std::function<bool(QAccessibleInterface*,int)> find=[&](QAccessibleInterface *node,int depth){
+      if(!node||depth>32)return false;
+      if(node->object()==target)return true;
+      for(int i=0;i<node->childCount();++i)if(find(node->child(i),depth+1))return true;
+      return false;
+    };
+    return find(root,0);
+  };
+  check(parkedPlay&&parkedLayout&&parkedSeek&&parkedQueue&&parkedVolume&&
+        accessibleTreeHas(parkedPlay)&&accessibleTreeHas(parkedLayout)&&
+        accessibleTreeHas(parkedSeek)&&accessibleTreeHas(parkedQueue)&&
+        accessibleTreeHas(parkedVolume),
+        "visible controls are in the accessibility tree");
+  const auto parkedPoint=parkedPlay?parkedPlay->mapToScene(parkedPlay->boundingRect().center()).toPoint():QPoint(8,8);
+  QTest::mouseMove(w,parkedPoint);QMetaObject::invokeMethod(player,"wake");
   check(waitFor([&]{return !player->property("controlsShown").toBool();}),"idle playback hides controls");
+  QTest::qWait(350);
+  shot("controls-hidden");
+  auto hiddenTop=visibleItem(w->contentItem(),"immersiveTopControls");
+  auto hiddenBar=visibleItem(w->contentItem(),"immersiveToolbar");
+  auto hiddenSeek=visibleItem(w->contentItem(),"immersiveSeekRow");
+  check(hiddenTop&&hiddenBar&&hiddenSeek&&
+        !hiddenTop->isEnabled()&&!hiddenBar->isEnabled()&&!hiddenSeek->isEnabled(),
+        "faded controls leave hit testing and keyboard focus");
+  check(hiddenTop&&hiddenBar&&hiddenSeek&&
+        QQmlProperty::read(hiddenTop,"Accessible.ignored",qmlContext(hiddenTop)).toBool()&&
+        QQmlProperty::read(hiddenBar,"Accessible.ignored",qmlContext(hiddenBar)).toBool()&&
+        QQmlProperty::read(hiddenSeek,"Accessible.ignored",qmlContext(hiddenSeek)).toBool()&&
+        !accessibleTreeHas(parkedPlay)&&!accessibleTreeHas(parkedLayout)&&
+        !accessibleTreeHas(parkedSeek)&&!accessibleTreeHas(parkedQueue)&&
+        !accessibleTreeHas(parkedVolume),
+        qPrintable(QString("faded controls leave AT: play %1 layout %2 seek %3 queue %4 volume %5")
+          .arg(accessibleTreeHas(parkedPlay)).arg(accessibleTreeHas(parkedLayout))
+          .arg(accessibleTreeHas(parkedSeek)).arg(accessibleTreeHas(parkedQueue))
+          .arg(accessibleTreeHas(parkedVolume))));
+  const bool wasPlaying=b->playing();
+  QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,parkedPoint);
+  check(b->playing()==wasPlaying&&!player->property("controlsShown").toBool(),
+        "a parked click cannot activate the hidden play button");
+  QTest::keyClick(w,Qt::Key_F6);
+  check(waitFor([&]{return player->property("controlsShown").toBool();}),
+        "a key wakes hidden controls");
   QTest::mouseMove(w,QPoint(30,30));
   check(waitFor([&]{return player->property("controlsShown").toBool();}),"pointer movement restores controls");
   b->pause();QTest::qWait(3800);check(player->property("controlsShown").toBool(),"paused playback keeps controls visible");
@@ -594,10 +643,6 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     b->setMotion(true);
     const auto spatial=b->motionSprings(b->motionScheme()!="standard").value("defaultSpatial").toMap();
     const int spatialMs=spatial.value("ms").toInt();
-    auto slide=w->findChild<QObject*>("coverflowHighlightMotion");
-    check(slide&&slide->property("duration").toInt()==spatialMs&&
-          QQmlProperty::read(slide,"easing.bezierCurve",qmlContext(slide)).toList()==spatial.value("curve").toList(),
-          "coverflow highlight uses DefaultSpatial duration and curve");
     const double startX=covers->property("contentX").toDouble();
     auto next=visibleItem(w->contentItem(),"immersiveNextButton");
     check(next,"immersive next button is reachable");
@@ -606,6 +651,19 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
       QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);
       check(waitFor([&]{return b->currentIndex()==1;}),"clicking Next changes the playing cover");
       QTest::qWait(spatialMs/3);
+      // Behavior.animation is Qt's documented route to the live animation.
+      // Read it after a user click has started the lazy highlight motion.
+      QObject *slide=nullptr;
+      if(highlight)for(auto child:highlight->children())
+        if(QByteArray(child->metaObject()->className()).contains("Behavior")){
+          auto animation=child->property("animation");
+          if(animation.convert(QMetaType::fromType<QObject*>()))slide=animation.value<QObject*>();
+        }
+      check(slide&&slide->objectName()=="coverflowHighlightMotion"&&
+            slide->property("duration").toInt()==spatialMs&&
+            QQmlProperty::read(slide,"easing.bezierCurve",qmlContext(slide)).toList()==spatial.value("curve").toList(),
+            qPrintable(QString("coverflow highlight uses DefaultSpatial duration and curve (%1/%2)")
+              .arg(slide?slide->property("duration").toInt():-1).arg(spatialMs)));
       const double middleX=covers->property("contentX").toDouble();
       check(waitFor([&]{
               auto target=visibleItem(w->contentItem(),"coverflowItem_1");
@@ -640,6 +698,25 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
             covers->mapToScene({covers->width()/2,0}).x())<2,
             "reduced motion centres the previous cover immediately");
     }
+  }
+  if(covers){
+    auto flowSlot=covers->parentItem()&&covers->parentItem()->parentItem()
+                    ?covers->parentItem()->parentItem()->parentItem():nullptr;
+    const auto slotRect=flowSlot?flowSlot->mapRectToScene(flowSlot->boundingRect()):QRectF();
+    QPointer<QQuickItem> heldCover=covers;
+    check(accessibleTreeHas(covers),"visible coverflow list is in the accessibility tree");
+    player->forceActiveFocus();QTest::mouseMove(w,QPoint(8,8));QMetaObject::invokeMethod(player,"wake");
+    check(waitFor([&]{return !player->property("controlsShown").toBool();}),
+          "coverflow controls auto-hide after inactivity");
+    QTest::qWait(350);
+    check(flowSlot&&flowSlot->isVisible()&&!visibleItem(w->contentItem(),"coverflowView")&&
+          qAbs(flowSlot->mapRectToScene(flowSlot->boundingRect()).top()-slotRect.top())<1&&
+          qAbs(flowSlot->height()-slotRect.height())<1&&heldCover.isNull(),
+          "hidden coverflow leaves input and accessibility without moving its layout slot");
+    shot("coverflow-controls-hidden");
+    QTest::keyClick(w,Qt::Key_F6);
+    check(waitFor([&]{return visibleItem(w->contentItem(),"coverflowView");}),
+          "keyboard input restores coverflow controls");
   }
   auto title=visibleItem(w->contentItem(),"immersiveTitle");
   auto artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");

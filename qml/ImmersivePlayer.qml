@@ -102,17 +102,20 @@ Item {
             id: topControls
             objectName: "immersiveTopControls"
             Layout.fillWidth: true; opacity: player.controlsShown?1:0
+            // Qt Quick Item.enabled removes input and focus after the fade.
+            // Each exposed control below also leaves the accessibility tree.
+            enabled: opacity>0; Accessible.ignored: opacity===0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
-            MButton { objectName: "exitImmersiveButton"; symbol: "back"; tip: "Exit immersive · Esc"; onClicked: player.exitRequested() }
+            MButton { objectName: "exitImmersiveButton"; symbol: "back"; tip: "Exit immersive · Esc"; Accessible.ignored: topControls.opacity===0; onClicked: player.exitRequested() }
             Item { Layout.fillWidth: true }
             // Material keeps an app bar to a few trailing actions and folds the
             // rest behind one overflow. Five of them sat here, one of which
             // already wore the overflow glyph while opening a layout menu, so
             // the icon that means "more actions" did not. There is one now,
             // and it means it.
-            MButton { objectName: "immersiveLyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; enabled: player.hasLyrics && player.displayedLayout!=="singalong"; onClicked: player.showLyricsSearch() }
-            MButton { symbol: "heart"; selected: app.liked; tip: app.liked?"Unlike":"Like"; enabled: app.currentIndex>=0; onClicked: app.toggleLike(app.current) }
-            MButton {id:layoutButton;objectName:"immersiveLayoutButton";symbol:"more";tip:"More actions";selected:layoutMenu.visible;onClicked:layoutMenu.popup(layoutButton,width-layoutMenu.width,height+4)}
+            MButton { objectName: "immersiveLyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; enabled: player.hasLyrics && player.displayedLayout!=="singalong"; Accessible.ignored: topControls.opacity===0; onClicked: player.showLyricsSearch() }
+            MButton { symbol: "heart"; selected: app.liked; tip: app.liked?"Unlike":"Like"; enabled: app.currentIndex>=0; Accessible.ignored: topControls.opacity===0; onClicked: app.toggleLike(app.current) }
+            MButton {id:layoutButton;objectName:"immersiveLayoutButton";symbol:"more";tip:"More actions";selected:layoutMenu.visible;Accessible.ignored: topControls.opacity===0;onClicked:layoutMenu.popup(layoutButton,width-layoutMenu.width,height+4)}
         }
         RowLayout {
             id: body; objectName:"immersiveBody"
@@ -200,14 +203,26 @@ Item {
             Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" && body.lyricMeasureFits }
             SingAlong { id: immersiveSingAlong; visible:player.displayedLayout==="singalong"; Layout.fillWidth: true; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0 }
         }
-        ImmersiveCoverflow {
-            id: upNext
+        Item {
+            id: coverflowSlot
             Layout.fillWidth: true
-            Layout.preferredHeight: reserved
+            property real measuredHeight: 0
+            Layout.preferredHeight: measuredHeight
             visible: player.coverflowVisible
             opacity: player.controlsShown?1:0
+            enabled: opacity>0
+            // Destroy the faded carousel's delegates after its opacity reaches
+            // zero. The cached natural height keeps the layout slot in place.
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
-            onShowAllRequested: player.queueRequested()
+            Loader {
+                id: upNext
+                anchors.fill: parent
+                active: coverflowSlot.opacity>0 && player.coverflowVisible
+                readonly property real reserved: item ? item.reserved : coverflowSlot.measuredHeight
+                onLoaded: coverflowSlot.measuredHeight=item.reserved
+                sourceComponent: ImmersiveCoverflow { onShowAllRequested: player.queueRequested() }
+            }
+            Connections {target:upNext.item;function onReservedChanged(){coverflowSlot.measuredHeight=upNext.item.reserved;}}
         }
         // Material replaced the bottom app bar with docked and floating
         // toolbars. The transport floats over the artwork rather than being
@@ -219,13 +234,14 @@ Item {
             objectName: "immersiveToolbar"
             Layout.alignment: Qt.AlignHCenter
             opacity: player.controlsShown?1:0
+            enabled: opacity>0; Accessible.ignored: opacity===0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
             content: [
-            MButton { symbol: "shuffle"; toggle: true; selected: app.shuffle; tip: app.shuffle?"Shuffle on":"Shuffle off"; onClicked: app.shuffle=!app.shuffle },
-            MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() },
-            MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; implicitWidth: 80; implicitHeight: 56; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; onClicked: app.toggle() },
-            MButton { objectName: "immersiveNextButton"; symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() },
-            MButton { symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; onClicked: app.repeat=(app.repeat+1)%3 }
+            MButton { symbol: "shuffle"; toggle: true; selected: app.shuffle; tip: app.shuffle?"Shuffle on":"Shuffle off"; Accessible.ignored: transport.opacity===0; onClicked: app.shuffle=!app.shuffle },
+            MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.previous() },
+            MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; implicitWidth: 80; implicitHeight: 56; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.toggle() },
+            MButton { objectName: "immersiveNextButton"; symbol: "next"; tip: "Next"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.next() },
+            MButton { symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; Accessible.ignored: transport.opacity===0; onClicked: app.repeat=(app.repeat+1)%3 }
             ]
         }
         // The bar itself is what sits on the window's centre line, not the row
@@ -236,18 +252,39 @@ Item {
         RowLayout {
             id: seekRow; objectName: "immersiveSeekRow"
             Layout.fillWidth: true; spacing: 12; opacity:player.controlsShown?1:0
+            enabled: opacity>0; Accessible.ignored: opacity===0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
             Item { Layout.preferredWidth: seekTrailing.implicitWidth; Layout.preferredHeight: 1 }
             Item { Layout.fillWidth: true }
-            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40 }
-            SeekBar { objectName: "immersiveSeek"; Layout.fillWidth: true; Layout.maximumWidth: 640 }
-            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight }
+            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.position); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40; Accessible.ignored: seekRow.opacity===0 }
+            SeekBar { objectName: "immersiveSeek"; Layout.fillWidth: true; Layout.maximumWidth: 640; Accessible.ignored: seekRow.opacity===0 }
+            SungText { font.features: {"tnum": 1}; text: app.formatTime(app.duration); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true; Layout.preferredWidth: 40; horizontalAlignment: Text.AlignRight; Accessible.ignored: seekRow.opacity===0 }
             Item { Layout.fillWidth: true }
             RowLayout {
                 id: seekTrailing
                 spacing: 12
-                MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue \u00b7 Ctrl+L";Accessible.name:"Queue \u00b7 Ctrl+L";onClicked:player.queueRequested()}
-                VolumeControl {id:immersiveVolume;showSlider:false}
+                MButton {objectName:"immersiveQueueButton";symbol:"queue";tip:player.externalModalOpen?"":"Queue \u00b7 Ctrl+L";Accessible.name:"Queue \u00b7 Ctrl+L";Accessible.ignored:seekRow.opacity===0;onClicked:player.queueRequested()}
+                Item {
+                    id: volumeSlot
+                    property real measuredWidth: 48
+                    property real measuredHeight: 48
+                    Layout.preferredWidth: measuredWidth
+                    Layout.preferredHeight: measuredHeight
+                    // Qt keeps invisible descendants in the accessible tree.
+                    // Unload the volume control only after the fade, retaining
+                    // its measured slot so the seek bar stays centred.
+                    Loader {
+                        id: immersiveVolume
+                        anchors.fill: parent
+                        active: seekRow.opacity>0
+                        readonly property bool popupVisible: item ? item.popupVisible : false
+                        sourceComponent: VolumeControl { showSlider:false }
+                        onLoaded: {
+                            volumeSlot.measuredWidth=item.implicitWidth;
+                            volumeSlot.measuredHeight=item.implicitHeight;
+                        }
+                    }
+                }
             }
         }
     }
