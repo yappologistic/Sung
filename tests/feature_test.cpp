@@ -2815,6 +2815,37 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return !artwork || !artwork->property("visible").toBool(); }),
           "Artwork closes before compact dialogs open");
 
+  // At 480dp the header X is the dismissive action. The footer disappears
+  // for Close-only dialogs but retains an accepting action beside Cancel.
+  w->resize(480, 620);
+  QTest::qWait(450);
+  for (const char *name : {"settingsDialog", "shortcutHelp", "sessionsDialog", "trackDetailsDialog"}) {
+    auto compact = c.dialog(name);
+    auto footer = compact ? compact->property("footer").value<QQuickItem *>() : nullptr;
+    auto header = compact ? compact->property("header").value<QQuickItem *>() : nullptr;
+    auto close = header ? anyItem(header, "dialogClose") : nullptr;
+    c.check(compact && compact->property("fullScreen").toBool() && close && close->isVisible(),
+            QString("%1 has its full-screen close action").arg(name));
+    c.check(footer && !footer->isVisible() && footer->implicitHeight() == 0,
+            QString("%1 drops its duplicate Close footer").arg(name));
+    c.shot(QString("07c-compact-") + name);
+    c.closeDialog(compact);
+    c.check(c.until([&] { return !compact || !compact->property("visible").toBool(); }),
+            QString("%1 closes before the next dialog").arg(name));
+  }
+  auto confirm = c.dialog("deletePlaylistDialog");
+  auto confirmFooter = confirm ? confirm->property("footer").value<QQuickItem *>() : nullptr;
+  c.check(confirmFooter && confirmFooter->isVisible(),
+          "a full-screen confirmation keeps its action footer");
+  c.check(c.evaluate("deletePlaylistDialog.standardButton(Dialog.Yes).visible").toBool() &&
+              !c.evaluate("deletePlaylistDialog.standardButton(Dialog.No).visible").toBool(),
+          "the confirming action remains while the duplicate No is hidden");
+  c.shot("07c-compact-dialog-actions");
+  c.closeDialog(confirm);
+  c.check(c.until([&] { return !confirm || !confirm->property("visible").toBool(); }),
+          "the confirmation closes before returning to the page");
+  w->resize(1400, 900);
+  QTest::qWait(450);
 
   // --- The search view ---
   b->rememberSearch("aurora");

@@ -27,8 +27,8 @@ T.Dialog {
     T.Overlay.modal: Rectangle { color: Theme.scrimColor() }
     T.Overlay.modeless: Rectangle { color: Color.transparent(dialog.palette.shadow, 0.12) }
     // A compact window has no room to float a dialog inside it, so Material
-    // gives the dialog the window: square corners, no inset, and the actions
-    // pinned to the bottom edge rather than centred in the middle of nowhere.
+    // gives the dialog the window: square corners, no inset, and confirming
+    // actions at the bottom edge when the dialog has them.
     // A popup's parent is the overlay, which is the size of the window; the
     // Window attached property is not available from here.
     readonly property bool fullScreen: parent ? parent.width < 600 : false
@@ -77,6 +77,10 @@ T.Dialog {
     // A dialog that brings its own footer measured it against the padding
     // and keeps it.
     property bool standardFooter: false
+    // Qt DialogButtonBox gives Cancel, Close and Abort RejectRole, and No and
+    // NoToAll NoRole. The full-screen header X already performs that action.
+    readonly property int dismissiveButtons: Dialog.Cancel | Dialog.Close | Dialog.Abort | Dialog.No | Dialog.NoToAll
+    readonly property int footerActions: standardButtons & ~dismissiveButtons
     padding: 24
     topPadding: fullScreen ? 24 : 0
     bottomPadding: !fullScreen && standardFooter && footer && footer.visible ? 0 : 24
@@ -151,12 +155,14 @@ T.Dialog {
     // them again, and a box that is not there yet is handed them when it
     // becomes the footer.
     readonly property Component buttonBar: DialogButtonBox {
-        visible: dialog.standardButtons !== Dialog.NoButton
+        // In full-screen mode the header X dismisses the dialog. A second
+        // dismissive button would duplicate it, so an empty footer disappears.
+        visible: dialog.fullScreen ? dialog.footerActions !== Dialog.NoButton
+                                   : dialog.standardButtons !== Dialog.NoButton
         alignment: Qt.AlignRight
         buttonLayout: DialogButtonBox.AndroidLayout
-        // Material's full-screen dialog puts its actions on a 56dp bar at the
-        // bottom edge; a floating one keeps the 24dp inset it sits in.
-        implicitHeight: dialog.fullScreen ? 56 : contentHeight+48
+        // Confirming actions remain reachable at the bottom in full screen.
+        implicitHeight: !visible ? 0 : dialog.fullScreen ? 56 : contentHeight+48
         padding: dialog.fullScreen ? 8 : 24; spacing: 8
         background: Item {
             Rectangle {
@@ -170,6 +176,8 @@ T.Dialog {
         }
         delegate: MButton {
             objectName: dialog.objectName + "_button_" + DialogButtonBox.buttonRole
+            visible: !dialog.fullScreen || (DialogButtonBox.buttonRole !== DialogButtonBox.RejectRole &&
+                                             DialogButtonBox.buttonRole !== DialogButtonBox.NoRole)
             readonly property bool confirming: DialogButtonBox.buttonRole === DialogButtonBox.AcceptRole || DialogButtonBox.buttonRole === DialogButtonBox.YesRole
             ink: Theme.primary; enabled: !confirming || dialog.acceptEnabled
             Component.onCompleted: if (confirming && dialog.acceptText) text = Qt.binding(() => dialog.acceptText)
