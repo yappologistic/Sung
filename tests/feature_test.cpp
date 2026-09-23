@@ -6388,6 +6388,9 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
     c.check(c.until([&] { return b->page() == "local-album"; }), "opening one shows the album");
     QTest::qWait(700);
     c.check(pane && pane->isVisible(), "and the grid it came from stays beside it");
+    c.check(!shownItem(w->contentItem(), "libraryTabs") &&
+                !shownItem(w->contentItem(), "localFacetTabs"),
+            "detail tracks have neither library tab row between header and list");
     c.check(b->listPaneTitle() == "Albums",
             QString("named for what it is (%1)").arg(b->listPaneTitle()));
     c.check(b->listPane()->count() == 2,

@@ -863,13 +863,15 @@ ApplicationWindow {
                         }
                         LibraryTabs {
                             objectName: "libraryTabs"
-                            visible: window.destination==="library"; Layout.fillWidth: true
+                            // ListDetailPaneScaffold.kt:224-253 gives a detail
+                            // its own pane role; tabs select root collections.
+                            visible: window.destination==="library" && (app.page==="library" || (app.page==="server" && !app.collectionItem.id)); Layout.fillWidth: true
                             currentKey: window.libraryTab
                             dotKey: app.importingLocal ? "files" : ""
                             onChosen: key => window.chooseLibrary(key)
                         }
                         RowLayout {
-                            visible: window.destination==="library" && ["files","local-albums","local-artists"].indexOf(window.libraryTab)>=0
+                            visible: window.destination==="library" && app.page==="library" && ["files","local-albums","local-artists"].indexOf(window.libraryTab)>=0
                             Layout.fillWidth: true; spacing: 8
                             LibraryTabs {
                                 objectName: "localFacetTabs"

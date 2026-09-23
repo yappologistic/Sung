@@ -1700,7 +1700,23 @@ void runLibraryPolishTests(Backend *b,QQuickWindow *w) {
   auto grid=findItem(w->contentItem(),"localGroups");check(grid&&grid->isVisible(),"album grid visible");shot("local-albums");
   auto search=findItem(w->contentItem(),"localGroupSearch");check(search&&search->isVisible(),"album search visible");b->collection()->setQuery("Second");QTest::qWait(100);check(b->collection()->count()==1,"album search filters");b->collection()->setQuery("");
   const auto album=b->results()->get(0);b->open(album);check(b->results()->count()==2&&b->page()=="local-album","album opens tracks");songs=b->results()->rows;shot("local-album-tracks");
-  b->back();check(b->page()=="library"&&b->libraryId()=="local-albums","back returns to album grid");
+  check(!findItem(w->contentItem(),"libraryTabs")->isVisible() &&
+        !findItem(w->contentItem(),"localFacetTabs")->isVisible(),
+        "album detail removes both root tab rows");
+  b->collection()->setQuery("no-matching-track");QTest::qWait(180);
+  auto emptyAction=findItem(w->contentItem(),"emptyStateAction");
+  check(emptyAction&&emptyAction->isVisible(),"collection empty action is shown for no matches");
+  if(emptyAction)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+      emptyAction->mapToScene(QPointF(emptyAction->width()/2,emptyAction->height()/2)).toPoint());
+  QTest::qWait(200);check(b->collection()->query().isEmpty(),"collection empty action clears filters from a real click");
+  auto backFromAlbum=findItem(w->contentItem(),"backButton");
+  check(backFromAlbum&&backFromAlbum->isVisible(),"Back is reachable from album detail");
+  if(backFromAlbum)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+      backFromAlbum->mapToScene(QPointF(backFromAlbum->width()/2,backFromAlbum->height()/2)).toPoint());
+  check(until([&]{return b->page()=="library"&&b->libraryId()=="local-albums";}),
+        "clicking Back returns to the album grid tab");
+  QTest::qWait(180);check(findItem(w->contentItem(),"libraryTabs")->isVisible() &&
+      findItem(w->contentItem(),"localFacetTabs")->isVisible(),"Back restores the root tabs");
   b->library("local-artists");check(b->results()->count()==1,"artist grid groups imports");b->open(b->results()->get(0));check(b->results()->count()==4,"artist opens songs");
   const auto id=b->createPlaylist("After hours");b->addItemsToPlaylist(id,songs);b->openPlaylist(id);
   auto dialog=w->findChild<QObject*>("playlistCoverDialog");check(dialog!=nullptr,"cover dialog exists");
