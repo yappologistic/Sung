@@ -2101,6 +2101,31 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
             "the actions appear");
     c.check(c.until([&] { return shape && shape->property("radius").toDouble() > rested + 2; }, 2000),
             "and the button morphs into the menu's close button");
+    // FabMenuBaselineTokens: the close button is 56dp on the primary role,
+    // and the items stand 4dp apart.
+    c.check(c.until([&] { return qAbs(fab->width() - 56) < 0.5 && qAbs(fab->height() - 56) < 0.5; }, 2000),
+            QString("at the close button's 56dp (%1x%2)").arg(fab->width()).arg(fab->height()));
+    c.check(shape && shape->property("color").value<QColor>() == c.themeColor("primary"),
+            "on the primary role");
+    auto firstItem = shownItem(w->contentItem(), "fabMenuItem_0");
+    auto secondItem = shownItem(w->contentItem(), "fabMenuItem_1");
+    if (firstItem && secondItem) {
+      const auto gap = [&] {
+        const double a = firstItem->mapToScene(QPointF(0, 0)).y(), b = secondItem->mapToScene(QPointF(0, 0)).y();
+        return qAbs(a - b) - firstItem->height();
+      };
+      c.check(c.until([&] { return qAbs(gap() - 4) < 0.5; }, 2000),
+              QString("with 4dp between the items (%1)").arg(gap(), 0, 'f', 1));
+      // Each item's icon starts 24dp in (ListItemLeadingSpace). A row told to
+      // centre itself inside the control sat on the wider item's left edge.
+      for (auto item : {firstItem, secondItem}) {
+        auto row = item->property("contentItem").value<QQuickItem *>();
+        auto glyph = row && !row->childItems().isEmpty() ? row->childItems().first() : nullptr;
+        const double inset = glyph ? glyph->mapToItem(item, QPointF(0, 0)).x() : -1;
+        c.check(qAbs(inset - 24) < 0.5,
+                QString("%1's icon starts 24dp in (%2)").arg(item->objectName()).arg(inset, 0, 'f', 1));
+      }
+    }
     c.shot("02-fab-menu-open");
     c.click("fab");
     c.check(c.until([&] { return !fabMenu->property("open").toBool(); }, 3000), "tapping again closes them");

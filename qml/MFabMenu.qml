@@ -25,6 +25,11 @@ Item {
     // library is not the screen's primary action, and at 56dp the FAB outweighed
     // everything around it.
     readonly property real fabSize: 40
+    // Open, it becomes the menu's close button: 56dp, full round, a 20dp
+    // glyph, on the primary role rather than its container
+    // (FabMenuBaselineTokens.CloseButton*, and the final colours of
+    // ToggleFloatingActionButtonDefaults in FloatingActionButtonMenu.kt).
+    readonly property real closeSize: 56
     // Material's rail carries the FAB or extended FAB at its head, above the
     // destinations. A FAB up there opens downward, and towards the content
     // rather than away from it.
@@ -66,9 +71,10 @@ Item {
         // pressing the button a second time reads as closing the menu.
         closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside
         onClosed: root.open = false
-        // The menu opens from the FAB's own edge, towards the content.
+        // The menu opens from the FAB's own edge, towards the content, 8dp
+        // clear of it (FabMenuBaselineTokens.CloseButtonBetweenSpace).
         x: root.leadingEdge ? 0 : fab.width - width
-        y: root.downward ? fab.height + 12 : -height - 12
+        y: root.downward ? fab.height + 8 : -height - 8
         // What keeps the actions reachable: a menu wider than the room on that
         // side is moved back inside the window rather than hanging off it.
         margins: 12
@@ -78,7 +84,8 @@ Item {
         contentItem: Column {
             id: items
             objectName: "fabMenuItems"
-            spacing: 8
+            // FabMenuBaselineTokens.ListItemBetweenSpace.
+            spacing: 4
             // Items arrive from the FAB, nearest first. The column owns their
             // y, so the arrival is its own add transition: an item that
             // animates its own y fights the column, and every item lands on
@@ -106,8 +113,15 @@ Item {
                     // the row that is not the widest is aligned by hand,
                     // towards the edge the menu opened from.
                     x: root.leadingEdge ? 0 : parent.width - width
+                    // FabMenuBaselineTokens.ListItem*: 56dp tall, 24dp at each
+                    // end, a 24dp icon 8dp from the label, raised three levels.
                     height: 56
-                    implicitWidth: entryLabel.implicitWidth + 72
+                    // The ends are padding on the control. A Control stretches
+                    // its content item to the width it is given, so a Row told
+                    // to centre itself started at the left edge instead, and a
+                    // wider item's icon sat on its rim.
+                    leftPadding: 24; rightPadding: 24
+                    implicitWidth: leftPadding + contentItem.implicitWidth + rightPadding
                     hoverEnabled: true
                     focusPolicy: Qt.StrongFocus
                     Accessible.name: modelData.label
@@ -115,6 +129,7 @@ Item {
                     background: Rectangle {
                         radius: Theme.shapeFull(entry.height)
                         color: Theme.primaryContainer
+                        MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
                         Rectangle {
                             anchors.fill: parent; radius: parent.radius
                             color: Theme.containerText
@@ -123,16 +138,15 @@ Item {
                         }
                     }
                     contentItem: Row {
-                        anchors.centerIn: parent
-                        spacing: 12
+                        spacing: 8
                         Icon { anchors.verticalCenter: parent.verticalCenter; name: entry.modelData.symbol || ""; size: 24; ink: Theme.containerText }
                         SungText {
                             id: entryLabel
                             anchors.verticalCenter: parent.verticalCenter
                             text: entry.modelData.label; color: Theme.containerText
-                            // Material's menu items carry a plain label-large, not
-                            // an emphasized one; the icon beside it is the weight.
-                            font.pixelSize: Theme.labelLarge; labelRole: true
+                            // Compose sets a FAB menu item in title medium
+                            // (FloatingActionButtonMenu.kt, FloatingActionButtonMenuItem).
+                            font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"
                         }
                     }
                 }
@@ -143,18 +157,19 @@ Item {
     AbstractButton {
         id: fab
         objectName: "fab"
-        width: root.extended && !root.open
-                 ? Theme.extendedFabInset*2 + 24 + Theme.extendedFabGap + fabLabel.implicitWidth
-                 : root.extended ? Theme.extendedFabHeight : root.fabSize
-        height: root.extended ? Theme.extendedFabHeight : root.fabSize
+        width: root.open ? root.closeSize
+             : root.extended ? Theme.extendedFabInset*2 + 24 + Theme.extendedFabGap + fabLabel.implicitWidth
+             : root.fabSize
+        height: root.open ? root.closeSize : root.extended ? Theme.extendedFabHeight : root.fabSize
         Behavior on width { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+        Behavior on height { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
         Accessible.name: root.open ? "Close actions" : (root.label || "Actions")
         onClicked: root.open = !root.open
         background: Rectangle {
             objectName: "fabShape"
-            color: root.open ? Theme.high : Theme.primaryContainer
+            color: root.open ? Theme.primary : Theme.primaryContainer
             // A small FAB rests at the medium shape step and morphs to full
             // when it becomes the menu's close button.
             radius: root.open ? Theme.shapeFull(fab.height) : root.extended ? Theme.shapeLarge : Theme.shapeMedium
@@ -163,7 +178,7 @@ Item {
             MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
             Rectangle {
                 anchors.fill: parent; radius: parent.radius
-                color: Theme.containerText
+                color: root.open ? Theme.primaryText : Theme.containerText
                 opacity: fab.down || fab.visualFocus ? Theme.pressedOpacity : fab.hovered ? Theme.hoverOpacity : 0
                 Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs } }
             }
@@ -176,8 +191,10 @@ Item {
                 objectName: "fabLabel"
                 visible: root.extended && !root.open
                 text: root.label
+                // The small extended FAB's label is title medium
+                // (FloatingActionButton.kt, SmallExtendedFabTextStyle).
                 font.pixelSize: Theme.titleMedium
-                labelRole: true
+                typeRole: "titleMedium"
                 color: Theme.containerText
                 anchors.verticalCenter: parent.verticalCenter
                 x: Theme.extendedFabInset + 24 + Theme.extendedFabGap
@@ -187,8 +204,8 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 x: fabLabel.visible ? Theme.extendedFabInset : (parent.width-width)/2
                 name: root.open ? "close" : root.symbol
-                size: 24
-                ink: root.open ? Theme.text : Theme.containerText
+                size: root.open ? 20 : 24
+                ink: root.open ? Theme.primaryText : Theme.containerText
                 rotation: root.open ? 90 : 0
                 Behavior on rotation { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             }
