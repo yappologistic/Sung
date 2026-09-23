@@ -1842,7 +1842,11 @@ void runVisualRefinementTests(Backend *b,QQuickWindow *w){
   if(tracks){tracks->setProperty("contentY",tracks->property("originY").toDouble()+300);}QTest::qWait(450);check(album&&album->width()<=42,"header collapses during scroll");shot("04-collapsed-header");
   b->setCompactDensity(true);QTest::qWait(300);
   check(b->compactDensity(),"compact density applies");shot("05-compact-list");
-  if(tracks){QMetaObject::invokeMethod(tracks,"positionViewAtBeginning");}QTest::qWait(350);check(album&&album->width()>100,"header expands at list beginning");auto denseRow=findItem(w->contentItem(),"trackRow_0");check(denseRow&&qAbs(denseRow->height()-56)<1,"compact rows use 56px height");
+  if(tracks){QMetaObject::invokeMethod(tracks,"positionViewAtBeginning");}QTest::qWait(350);check(album&&album->width()>100,"header expands at list beginning");auto denseRow=findItem(w->contentItem(),"trackRow_0"),denseLead=denseRow?findItem(denseRow,"trackLeading"):nullptr;
+  // ListTokens.ItemOneLineContainerHeight and ItemLeadingAvatarSize keep the
+  // user's compact option at 56dp high with a 40dp leading slot.
+  check(denseRow&&denseLead&&qAbs(denseRow->height()-56)<1&&qAbs(denseLead->width()-40)<1,
+        "compact album rows use a 56dp body and 40dp leading slot");
   b->playCollection(0);check(until([&]{return b->playing();}),"playback starts");
   click("playerOutputButton");auto picker=w->findChild<QObject*>("outputPicker");check(picker&&picker->property("visible").toBool(),"output picker opens beside player");QTest::qWait(180);
   // The visible row owns radio semantics; the disabled indicator is decorative.

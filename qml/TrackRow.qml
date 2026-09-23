@@ -166,12 +166,15 @@ ItemDelegate {
         onDoubleClicked: mouse=> {if(!(mouse.modifiers&(Qt.ControlModifier|Qt.ShiftModifier)))row.clicked();}
     }
     contentItem: RowLayout {
-        // Material's list item keeps 12dp between the leading element and what
-        // it introduces.
+        // ListItem.kt:1976-1977 reads ListTokens.ItemBetweenSpace (12dp) as
+        // the leading-to-text gap; ItemLeadingSpace is outer padding.
         spacing: 12
         transform: Translate { x: row.swipe }
         Item {
-            Layout.preferredWidth: row.queueMode?(app.compactDensity?36:48):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
+            objectName: "trackLeading"
+            // ListTokens.ItemLeadingImageWidth/Height is 56dp. The compact
+            // option uses ItemLeadingAvatarSize (40dp), including in queue rows.
+            Layout.preferredWidth: row.queueMode?(app.compactDensity?40:56):Theme.rowArtwork; Layout.preferredHeight: Layout.preferredWidth
             Icon { anchors.centerIn: parent; name: "shuffle"; size: 24; ink: Theme.primary; visible: row.track.kind==="smart" }
             Artwork { visible: row.track.kind!=="smart"; anchors.fill: parent; url: row.track.art || ""; radius: Theme.shapeSmall; pixels: 112 }
             // Material puts a selection control in a list item's leading slot,

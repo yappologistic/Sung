@@ -252,8 +252,12 @@ QtObject {
     readonly property int titleMedium: 16
     readonly property int titleSmall: 14
     readonly property int bodySmall: 12
+    // ListTokens.ItemTwoLineContainerHeight is 72dp; compact density is the
+    // user's 56dp option, matching ItemOneLineContainerHeight.
     readonly property int rowHeight: app.viewCompactDensity ? 56 : 72
-    readonly property int rowArtwork: app.viewCompactDensity ? 36 : 48
+    // ListTokens.ItemLeadingImageWidth/Height is 56dp. The compact option
+    // uses ItemLeadingAvatarSize (40dp) to leave room within its 56dp row.
+    readonly property int rowArtwork: app.viewCompactDensity ? 40 : 56
     readonly property int gridCell: app.viewCompactDensity ? 148 : 180
     readonly property int bodyLarge: 16
     readonly property int bodyMedium: 14

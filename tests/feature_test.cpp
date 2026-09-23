@@ -2844,6 +2844,14 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return b->results()->count() == 6; }), "the library is listed");
   QTest::qWait(500);
 
+  // ListTokens.ItemTwoLineContainerHeight and ItemLeadingImageWidth/Height:
+  // the ordinary row is 72dp tall and its cover occupies 56dp.
+  auto ordinaryRow = shownItem(w->contentItem(), "trackRow_0");
+  auto ordinaryLead = ordinaryRow ? anyItem(ordinaryRow, "trackLeading") : nullptr;
+  c.check(ordinaryRow && ordinaryLead && qAbs(ordinaryRow->height() - 72) < 1 &&
+              qAbs(ordinaryLead->width() - 56) < 1,
+          "ListTokens gives the ordinary two-line row a 72dp body and 56dp image");
+
   // --- The fill axis: filled where you are, outlined where you are not ---
   auto railHome = shownItem(w->contentItem(), "navBar_home");
   auto railLibrary = shownItem(w->contentItem(), "navBar_library");
@@ -2928,6 +2936,19 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
             "the badge excludes the song playing now");
     w->setProperty("side", "queue");
     QTest::qWait(200);
+    auto queueRow = shownItem(w->contentItem(), "queueRow_0");
+    auto queueLead = queueRow ? anyItem(queueRow, "trackLeading") : nullptr;
+    c.check(queueRow && queueLead && qAbs(queueRow->height() - 72) < 1 &&
+                qAbs(queueLead->width() - 56) < 1,
+            "queue rows use ListTokens' 72dp body and 56dp image too");
+    b->setCompactDensity(true);
+    QTest::qWait(250);
+    c.check(queueRow && queueLead && qAbs(queueRow->height() - 56) < 1 &&
+                qAbs(queueLead->width() - 40) < 1,
+            "compact queue rows use the 56dp option and ItemLeadingAvatarSize 40dp");
+    c.shot("03a-compact-queue-row");
+    b->setCompactDensity(false);
+    QTest::qWait(250);
     auto waiting = shownItem(w->contentItem(), "queueWaitingCount");
     c.check(waiting && waiting->property("text").toString() == "3 songs waiting",
             "the queue footer agrees with the badge while playing");
