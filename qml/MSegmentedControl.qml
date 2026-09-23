@@ -41,7 +41,7 @@ Item {
     Accessible.name: accessibleName
     FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium }
 
-    // The spacing Material leaves between connected buttons.
+    // ConnectedButtonGroupSmallTokens.BetweenSpace is 2dp.
     readonly property real gap: 2
     readonly property real evenWidth: (width - gap*Math.max(0, options.length-1))/Math.max(1, options.length)
     // What the pressed button takes, and what each of the others gives back.
@@ -96,18 +96,20 @@ Item {
                 bottomLeftRadius: topLeftRadius
                 topRightRadius: button.trailing ? outer : inner
                 bottomRightRadius: topRightRadius
-                // Material selects a segment with the secondary container, not
-                // the primary one: it marks a choice rather than an action.
-                color: button.selected ? Theme.secondaryContainer : "transparent"
-                border.width: 1; border.color: Theme.outline
+                // ToggleButtonDefaults.defaultToggleButtonColors reads
+                // FilledButtonTokens: unselected surfaceContainer/onSurfaceVariant,
+                // selected primary/onPrimary. The connected sample uses no border.
+                color: button.selected ? Theme.primary : Theme.container
+                border.width: 0
                 Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-                Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
-                Behavior on topRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+                // ToggleButton.kt:173-181 morphs connected shapes on FastSpatial.
+                Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { id: segmentShapeSpring; objectName: "segmentShapeSpring"; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+                Behavior on topRightRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
                 Rectangle {
                     anchors.fill: parent
                     topLeftRadius: parent.topLeftRadius; bottomLeftRadius: parent.bottomLeftRadius
                     topRightRadius: parent.topRightRadius; bottomRightRadius: parent.bottomRightRadius
-                    color: button.selected ? Theme.secondaryContainerText : Theme.text
+                    color: button.selected ? Theme.primaryText : Theme.muted
                     opacity: button.down || button.visualFocus ? Theme.pressedOpacity : button.hovered ? Theme.hoverOpacity : 0
                     Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                 }
@@ -120,8 +122,9 @@ Item {
                     x: (parent.width-width)/2 + Theme.opticalShift(button.leading && !button.selected ? Theme.shapeFull(40) : Theme.shapeSmall,
                                                                    button.trailing && !button.selected ? Theme.shapeFull(40) : Theme.shapeSmall)
                     spacing: 8
-                    Icon { name: "check"; size: 18; visible: button.selected; ink: Theme.secondaryContainerText; anchors.verticalCenter: parent.verticalCenter }
-                    SungText { text: button.text; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium; color: button.selected ? Theme.secondaryContainerText : Theme.text; elide: Text.ElideRight; width: Math.min(implicitWidth, button.width-(button.selected?42:24)) }
+                    // ButtonGroupSamples.kt:155-190 shows choice by filled colour
+                    // and shape; its icons only swap variants when an icon exists.
+                    SungText { text: button.text; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium; color: button.selected ? Theme.primaryText : Theme.muted; elide: Text.ElideRight; width: Math.min(implicitWidth, button.width-24) }
                 }
             }
             Rectangle {

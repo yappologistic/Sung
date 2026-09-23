@@ -5317,7 +5317,8 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
     }
   }
 
-  // --- A segment marks a choice, so it takes the secondary container ---
+  // ButtonGroupSamples.kt:155-190 uses filled ToggleButton colours, no border
+  // or check, and RadioButton semantics for a connected single choice.
   if (auto dialog = w->findChild<QObject *>("settingsDialog")) {
     QMetaObject::invokeMethod(dialog, "open");
     QTest::qWait(700);
@@ -5327,8 +5328,19 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
     c.check(chosen && chosen->property("selected").toBool(), "a segment can be chosen");
     if (chosen)
       if (auto shape = anyItem(chosen, "segmentBackground")) {
-        c.check(shape->property("color").value<QColor>() == c.themeColor("secondaryContainer"),
-                "and is filled with the secondary container Material marks it in");
+        c.check(shape->property("color").value<QColor>() == c.themeColor("primary"),
+                "the chosen connected button fills with primary");
+        c.check(qAbs(QQmlProperty::read(shape, "border.width", qmlContext(shape)).toDouble()) < 0.1,
+                "the connected ToggleButton has no border");
+        c.check(QQmlProperty::read(chosen, "Accessible.role", qmlContext(chosen)).toInt() ==
+                    c.evaluate("Accessible.RadioButton").toInt() &&
+                    QQmlProperty::read(chosen, "Accessible.checked", qmlContext(chosen)).toBool(),
+                "the chosen segment reports radio selection");
+        if (auto other = shownItem(w->contentItem(), "themeLight")) {
+          auto otherShape = anyItem(other, "segmentBackground");
+          c.check(otherShape && otherShape->property("color").value<QColor>() == c.themeColor("container"),
+                  "the unchecked connected button uses surfaceContainer");
+        }
         c.shot("07-segmented-choice");
       }
     QMetaObject::invokeMethod(dialog, "close");
