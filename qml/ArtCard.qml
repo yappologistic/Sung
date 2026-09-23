@@ -42,10 +42,13 @@ Item {
     }
     MButton { id: cardAction; objectName: "cardAction"; anchors.right: art.right; anchors.bottom: art.bottom; anchors.margins: 12; busy: card.loadingCover; symbol: card.playableCover ? "play" : "chevron"; tip: (card.playableCover ? "Play " : "Open ") + (card.track.title || ""); filled: true; opacity: hover.hovered || openCard.activeFocus || cardAction.activeFocus || card.loadingCover ? 1 : 0; visible: opacity>0; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } onClicked: {if(card.playableCover)app.playCover(card.track);else app.open(card.track);} }
     MButton {
+        objectName: "cardPinAction"
         anchors.right: art.right; anchors.top: art.top; anchors.margins: 12
         symbol: "pin"; tonal: true; toggle: true; selected: {app.pins;return app.isPinned(card.track);}
         tip: selected?"Unpin from Home":"Pin to Home"
-        visible: !String(card.track.kind).startsWith("local-") && !(card.track.videoId || card.track.localPath) && (hover.hovered || openCard.activeFocus || activeFocus || selected)
+        // Keep the contextual action in the tab order while focus crosses
+        // from the cover to its other action, then hide it when focus leaves.
+        visible: !String(card.track.kind).startsWith("local-") && !(card.track.videoId || card.track.localPath) && (hover.hovered || openCard.activeFocus || cardAction.activeFocus || activeFocus || selected)
         onClicked: app.togglePin(card.track)
     }
     MatchText { anchors.top: art.bottom; anchors.topMargin: 12; width: parent.width; revealFocused: openCard.activeFocus; sourceText: card.track.title || ""; font.pixelSize: Theme.bodyLarge; font.weight: Font.Medium }

@@ -2376,6 +2376,33 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     QAccessible::installUpdateHandler(previous);
   }
 
+  // A contextual Pin action must survive the Tab hop through the card's
+  // playback action; otherwise it vanishes before keyboard focus can reach it.
+  {
+    QQmlComponent cardSource(qmlEngine(w), QUrl("qrc:/qml/ArtCard.qml"));
+    QScopedPointer<QObject> made(cardSource.create(qmlContext(w)));
+    auto card = qobject_cast<QQuickItem *>(made.data());
+    c.check(card, "a collection card is available for keyboard reach");
+    if (card) {
+      card->setParentItem(w->contentItem());
+      card->setX(100);card->setY(350);card->setZ(100);
+      card->setProperty("track", QVariantMap{{"id","keyboard-pin-fixture"},{"kind","album"},{"title","Keyboard pin fixture"}});
+      auto open = anyItem(card,"openCollectionCard");
+      auto play = anyItem(card,"cardAction");
+      auto pin = anyItem(card,"cardPinAction");
+      if (open && play && pin) {
+        open->forceActiveFocus(Qt::TabFocusReason);QTest::qWait(300);
+        QTest::keyClick(w,Qt::Key_Tab);QTest::qWait(80);
+        c.check(play->hasActiveFocus() && pin->isVisible(),
+                "the Pin action remains visible when Tab focuses the card action");
+        QTest::keyClick(w,Qt::Key_Tab);QTest::qWait(80);
+        c.check(pin->hasActiveFocus(),"Tab reaches the collection Pin action");
+        c.shot("00b-card-pin-keyboard");
+      } else c.check(false,"collection card exposes cover, playback and Pin actions");
+      card->setParentItem(nullptr);
+    }
+  }
+
   paintCover(c.directory + "/music/cover.png", QColor("#1f4f6b"), QColor("#d98324"));
   for (int i = 1; i <= 6; ++i)
     if (!encodeTrack(c, QString("%1/music/%2.flac").arg(c.directory).arg(i),
