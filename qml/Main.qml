@@ -1270,6 +1270,10 @@ ApplicationWindow {
                     anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
                     readonly property bool twoRow: width < 604
                     readonly property bool showQueue: !window.compactWindow
+                    // This bar gives the title 160dp, enough for roughly 18
+                    // title-style characters. Below that, an inline secondary
+                    // action is worth less than the name of the playing song.
+                    readonly property real preferredTitleWidth: 160
                     // AppBarDsl.kt:312-346 reserves an overflow action before
                     // measuring the others. Keep the 120dp seek minimum and
                     // fold the least-used actions until both measured sides fit.
@@ -1284,7 +1288,9 @@ ApplicationWindow {
                         return widths.reduce((sum, value) => sum + value, 0) + Math.max(0, widths.length-1)*playerRightRow.spacing
                     }
                     function fits(like, output, lyrics, volume) {
-                        const left = nowButton.implicitWidth + playerLeftRow.spacing + nowDetails.Layout.minimumWidth
+                        // RowLayout gives the cover its explicit preferred width.
+                        // Its implicit width is 8dp smaller than that footprint.
+                        const left = nowButton.Layout.preferredWidth + playerLeftRow.spacing + preferredTitleWidth
                                    + (like ? playerLeftRow.spacing + likeButton.implicitWidth : 0)
                         return width >= 212 + 32 + 2*Math.max(left, needRight(like, output, lyrics, volume))
                     }
@@ -1292,7 +1298,10 @@ ApplicationWindow {
                     readonly property bool showOutput: !twoRow && (showLike || fits(false, true, true, true))
                     readonly property bool showLyrics: !twoRow && (showOutput || fits(false, false, true, true))
                     readonly property bool showVolume: !twoRow && (showLyrics || fits(false, false, false, true))
-                    readonly property real leftNeed: nowButton.implicitWidth + playerLeftRow.spacing + nowDetails.Layout.minimumWidth
+                    // Once every foldable action is in overflow, the title may
+                    // use its existing 100dp minimum to keep seeking usable.
+                    readonly property real leftNeed: nowButton.Layout.preferredWidth + playerLeftRow.spacing
+                                                     + (showLike || showOutput || showLyrics || showVolume ? preferredTitleWidth : nowDetails.Layout.minimumWidth)
                                                      + (showLike ? playerLeftRow.spacing + likeButton.implicitWidth : 0)
                     readonly property real rightNeed: needRight(showLike, showOutput, showLyrics, showVolume)
                     readonly property real sideNeed: Math.max(leftNeed,rightNeed)

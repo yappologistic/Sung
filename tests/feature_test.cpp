@@ -3930,8 +3930,19 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
     }
     crowded->setVisible(false);
   }
+  auto namedTrack = b->results()->get(0);
+  namedTrack["title"] = "Coming ashore";
+  b->playItem(namedTrack);
+  c.check(c.until([&] { return b->current().value("title") == "Coming ashore" && b->playing(); }),
+          "the title fixture plays from the local library");
+  c.check(c.until([&] {
+            auto title = anyItem(w->contentItem(), "nowTitle");
+            auto label = title ? title->property("contentItem").value<QQuickItem *>() : nullptr;
+            return label && label->property("sourceText") == "Coming ashore";
+          }), "the player shows Coming ashore");
   // SmallIconButtonTokens uses 40dp buttons. The bar keeps a 100dp title;
   // under 668px the 120dp seek track takes a second row.
+  bool wholeAt1440 = false;
   for (const int width : {1440, 1920, 2560, 1024, 900, 840, 800, 668, 667, 600, 480}) {
     w->resize(width, width == 480 ? 620 : 800);
     QTest::qWait(450);
@@ -3941,6 +3952,16 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
     auto transport = anyItem(w->contentItem(), "playerTransport");
     auto layout = anyItem(w->contentItem(), "playerLayout");
     auto seekRow = anyItem(w->contentItem(), "playerSeekRow");
+    auto titleLabel = title ? title->property("contentItem").value<QQuickItem *>() : nullptr;
+    QStringList inlineActions;
+    if (width >= 980) inlineActions << "Shuffle" << "Repeat";
+    if (layout) {
+      if (layout->property("showLike").toBool()) inlineActions << "Like";
+      if (layout->property("showLyrics").toBool()) inlineActions << "Lyrics";
+      if (layout->property("showQueue").toBool()) inlineActions << "Queue";
+      if (layout->property("showOutput").toBool()) inlineActions << "Speaker";
+      if (layout->property("showVolume").toBool()) inlineActions << "Volume";
+    }
     const bool twoRow = layout && layout->property("twoRow").toBool();
     c.check(layout && twoRow == (width < 668),
             QString("the %1px bar selects the layout before its title or seek can shrink").arg(width));
@@ -3961,7 +3982,22 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
     c.check(seek && seek->width() >= 120,
             QString("the %1px player keeps at least 120px of seek track").arg(width));
     c.check(title && title->isVisible() && title->width() >= 100,
-            QString("the %1px title remains visible with at least 100px").arg(width));
+            QString("the %1px title stays at least 100px (%2px title, %3px seek; inline %4)")
+                .arg(width).arg(title ? title->width() : 0, 0, 'f', 0)
+                .arg(seek ? seek->width() : 0, 0, 'f', 0).arg(inlineActions.join(", ")));
+    if (width == 1440)
+      wholeAt1440 = title && title->width() >= 160 && titleLabel &&
+                    titleLabel->property("sourceText") == "Coming ashore" &&
+                    !titleLabel->property("truncated").toBool();
+    if (width == 1024)
+      c.check(wholeAt1440 && title && title->width() >= 160 && titleLabel &&
+                  titleLabel->property("sourceText") == "Coming ashore" &&
+                  !titleLabel->property("truncated").toBool(),
+              QString("Coming ashore stays whole at 1440 and 1024 (%1px at 1024)")
+                  .arg(title ? title->width() : 0, 0, 'f', 0));
+    if (width == 668)
+      c.check(layout && !layout->property("showVolume").toBool(),
+              "the 668px bar folds volume after other actions to keep the title minimum");
     if (!twoRow && bar && transport)
       c.check(qAbs(transport->mapToItem(bar, QPointF(transport->width()/2, 0)).x()-bar->width()/2) <= 2,
               QString("the %1px transport is centred within 2px").arg(width));
