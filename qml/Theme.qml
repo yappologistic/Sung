@@ -308,13 +308,20 @@ QtObject {
     readonly property color focusRing: secondary
 
     // Material's four state layers, and what it does to a disabled control: the
-    // container drops to a tenth of onSurface and the content to 38% of
-    // onSurfaceVariant, rather than the whole control fading together.
+    // container drops to a tenth of onSurface and the content to 38%, rather
+    // than the whole control fading together. The content is onSurface on most
+    // components; a labelled button dims onSurfaceVariant instead
+    // (FilledButtonTokens.DisabledLabelTextColor and its siblings).
     readonly property real hoverOpacity: 0.08
     readonly property real focusOpacity: 0.10
     readonly property real pressedOpacity: 0.10
     readonly property real draggedOpacity: 0.16
     readonly property real disabledContainerOpacity: 0.10
+    // The tenth belongs to the expressive buttons (FilledButtonTokens). Chips,
+    // the switch track and the tonal button still dim to 12%
+    // (FilterChipTokens.FlatDisabled*Opacity, SwitchTokens.DisabledTrackOpacity,
+    // FilledTonalButtonTokens.DisabledContainerOpacity).
+    readonly property real disabledSurfaceOpacity: 0.12
     readonly property real disabledContentOpacity: 0.38
     readonly property bool followDesktop: app.theme === "system" && desktopTheme.available
     readonly property bool dark: followDesktop ? desktopTheme.dark : app.theme === "dark" || (app.theme === "system" && Application.styleHints.colorScheme === Qt.Dark)
