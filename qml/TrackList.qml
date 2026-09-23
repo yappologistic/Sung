@@ -40,6 +40,113 @@ ListView {
     onGroupDiscsChanged:{folded={};scheduleGroups();}
     onModelChanged:{folded={};scheduleGroups();}
     Component.onCompleted:{groupReady=true;rebuildGroups();}
+    // Tab walks the list in its own order: a group's heading, then its rows.
+    // Tab otherwise follows the item tree, and the view creates and reuses
+    // rows wherever they fall among its children, so it skipped rows in any
+    // list longer than the view. The first and last stop of each row and
+    // heading hand Tab on here. Coming in from outside, Tab lands on the
+    // list's first unit and Shift+Tab on its last, as in reading order.
+    property bool steppingTab: false
+    function groupStart(row){return !foldable || row===0 || groupKey(model.get(row-1))!==groupKey(model.get(row));}
+    function headingFor(key){
+        for(const child of contentItem.children)
+            if(child.visible && child.section===key && child.objectName.endsWith("Heading"))return child;
+        return null;
+    }
+    function inUnit(item){
+        for(let part=item;part && part!==list;part=part.parent)
+            if(part.parent===contentItem)return part.selectionIndex!==undefined || part.objectName.endsWith("Heading");
+        return false;
+    }
+    // A row, or the heading above it: forward focuses its first stop,
+    // backward its last. A row without one (a smart playlist) is passed over.
+    function focusUnit(row,heading,forward){
+        positionViewAtIndex(row,ListView.Contain);
+        const unit=heading?headingFor(groupKey(model.get(row))):itemAtIndex(row);
+        const stop=unit?(forward?unit.firstTabStop():unit.lastTabStop()):null;
+        if(!stop)return false;
+        steppingTab=true;
+        stop.forceActiveFocus(forward?Qt.TabFocusReason:Qt.BacktabFocusReason);
+        steppingTab=false;
+        return true;
+    }
+    // Past the last row, or before the first: the nearest stop in the window
+    // that is neither a row nor a heading. The footer's button counts.
+    function leave(forward){
+        let item=Window.window?Window.window.activeFocusItem:null;
+        for(let step=0;item && step<400;++step){
+            item=item.nextItemInFocusChain(forward);
+            if(item && !inUnit(item)){
+                steppingTab=true;item.forceActiveFocus(forward?Qt.TabFocusReason:Qt.BacktabFocusReason);steppingTab=false;
+                return true;
+            }
+        }
+        return false;
+    }
+    // The unit after or before row `row` (or the heading above it), as
+    // {row, heading}; null past either end.
+    function nextUnit(row,heading,forward){
+        if(forward){
+            if(heading && !rowFolded(row))return {row:row,heading:false};
+            let next=row+1;
+            if(heading)while(next<count && !groupStart(next))++next;
+            return next<count ? {row:next,heading:foldable && groupStart(next)} : null;
+        }
+        if(!heading && foldable && groupStart(row))return {row:row,heading:true};
+        const previous=row-1;
+        if(previous<0)return null;
+        if(rowFolded(previous))return {row:groupRows[groupKey(model.get(previous))][0],heading:true};
+        return {row:previous,heading:false};
+    }
+    // Focus the next unit that has a stop; false past either end.
+    function stepUnits(row,heading,forward){
+        let unit={row:row,heading:heading};
+        for(let step=0;step<=count;++step){
+            unit=nextUnit(unit.row,unit.heading,forward);
+            if(!unit)return false;
+            if(focusUnit(unit.row,unit.heading,forward))return true;
+        }
+        return false;
+    }
+    function tabFrom(row,heading,forward){return stepUnits(row,heading,forward) || leave(forward);}
+    // For a container that moves focus itself (MBottomSheet): one step in
+    // list order from `item`, or false when the step would leave the list.
+    function stepFrom(item,forward){
+        for(let part=item;part && part!==list;part=part.parent){
+            if(part.parent!==contentItem)continue;
+            if(part.selectionIndex!==undefined)return stepUnits(part.selectionIndex,false,forward);
+            if(!part.objectName.endsWith("Heading") || part.firstRow<0)return false;
+            // A heading's own two buttons come one after the other.
+            const within=forward?part.lastTabStop():part.firstTabStop();
+            if(within && item!==within && (forward?item===part.firstTabStop():item===part.lastTabStop())){
+                within.forceActiveFocus(forward?Qt.TabFocusReason:Qt.BacktabFocusReason);
+                return true;
+            }
+            return stepUnits(part.firstRow,true,forward);
+        }
+        return false;
+    }
+    function enter(forward){
+        if(count<1)return false;
+        if(forward)return focusUnit(0,foldable,true) || tabFrom(0,foldable,true);
+        const last=count-1;
+        if(rowFolded(last)){
+            const start=groupRows[groupKey(model.get(last))][0];
+            return focusUnit(start,true,false) || tabFrom(start,true,false);
+        }
+        return focusUnit(last,false,false) || tabFrom(last,false,false);
+    }
+    property var focusBefore: null
+    Connections {
+        target: list.Window.window
+        function onActiveFocusItemChanged() {
+            const item=list.Window.window.activeFocusItem;
+            const before=list.focusBefore;list.focusBefore=item;
+            if(!item || list.steppingTab || !list.inUnit(item) || (before && list.inUnit(before)))return;
+            if(item.focusReason===Qt.TabFocusReason)list.enter(true);
+            else if(item.focusReason===Qt.BacktabFocusReason)list.enter(false);
+        }
+    }
     // Type-ahead jump. The buffer collects printable keys until a short pause,
     // so "bl" finds "Blue Hour" rather than every row starting with "b".
     property string typeAhead: ""
@@ -105,10 +212,14 @@ ListView {
     section.criteria: ViewSection.FullString
     section.delegate: Item {
         id:heading;required property string section
+        // A group's heading is its own Tab unit, ahead of its rows.
+        function firstTabStop(){return groupToggle.visible?groupToggle:null}
+        function lastTabStop(){return groupPlay.visible?groupPlay:null}
+        readonly property int firstRow:(list.groupRows[heading.section] || [-1])[0]
         objectName: list.groupFolders ? "folderHeading" : "sourceHeading"
         width:list.width;height:list.foldable?48:32
         RowLayout {anchors.fill:parent;spacing:4
-            MButton {objectName:"toggleGroup_"+heading.section;visible:list.foldable;Layout.fillWidth:true;Layout.minimumWidth:0;leftAligned:true
+            MButton {id:groupToggle;Keys.onBacktabPressed:event=>event.accepted=heading.firstRow>=0 && list.tabFrom(heading.firstRow,true,false);Keys.onTabPressed:event=>event.accepted=!!(event.modifiers&Qt.ShiftModifier) && heading.firstRow>=0 && list.tabFrom(heading.firstRow,true,false);objectName:"toggleGroup_"+heading.section;visible:list.foldable;Layout.fillWidth:true;Layout.minimumWidth:0;leftAligned:true
                 text:(list.groupFolders?app.musicFolderLabel(heading.section):heading.section)+" · "+(list.groupRows[heading.section] || []).length
                 tip:(list.folded[heading.section]?"Expand ":"Collapse ")+heading.section
                 symbol:"";contentInset:12;
@@ -133,7 +244,7 @@ ListView {
                 Accessible.ignored:true
             }
             SungText {objectName:"groupHeading";visible:!list.foldable;Layout.fillWidth:true;Layout.leftMargin:12;text:heading.section;color:Theme.muted;font.pixelSize:Theme.titleSmall;typeRole:"titleSmall";elide:Text.ElideRight}
-            MButton {objectName:"playGroup_"+heading.section;visible:list.foldable;symbol:"play";tip:"Play "+heading.section;onClicked:app.playGroup(heading.section,list.groupFolders)}
+            MButton {id:groupPlay;Keys.onTabPressed:event=>event.accepted=!(event.modifiers&Qt.ShiftModifier) && heading.firstRow>=0 && list.tabFrom(heading.firstRow,true,true);objectName:"playGroup_"+heading.section;visible:list.foldable;symbol:"play";tip:"Play "+heading.section;onClicked:app.playGroup(heading.section,list.groupFolders)}
         }
     }
     RowSelection { id: selection; model: list.model }

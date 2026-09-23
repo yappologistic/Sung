@@ -333,7 +333,13 @@ struct Audit {
         QList<QPointer<QQuickItem>> visited;
         if (scope == window->contentItem())
           scope->forceActiveFocus(Qt::TabFocusReason);
-        const int cap = std::min(600, std::max(60, int(tabItems.size()) * 3));
+        // A walk ends when Tab comes back to where it started. A long list
+        // walks its rows in order and reuses their delegates as it scrolls,
+        // so one control can come back for a later row before the walk is
+        // done; meeting it twice is not the end. The cap only stops a trap.
+        const int cap = 600;
+        QPointer<QQuickItem> first;
+        QString firstLabel;
         for (int step = 0; step < cap; ++step) {
           QTest::keyClick(window, Qt::Key_Tab);
           // Main.qml's revealFocus runs through Qt.callLater once the focus
@@ -341,9 +347,15 @@ struct Audit {
           // person, before judging what is on screen.
           QCoreApplication::processEvents();
           auto current = window->activeFocusItem();
-          if (!current || std::any_of(visited.cbegin(), visited.cend(),
-                                      [current](const auto &seen) { return seen == current; }))
+          // A walk that starts in a list starts on a reused control, which
+          // is only back at the start when it shows the same row again.
+          if (!current || (first && current == first.data() && label(current) == firstLabel) ||
+              (!visited.isEmpty() && visited.last().data() == current))
             break;
+          if (!first) {
+            first = current;
+            firstLabel = label(current);
+          }
           visited.append(current);
           // A reveal that repositions a ListView can finish on the view's
           // next layout pass. Give a control that starts out hidden up to

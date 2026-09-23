@@ -71,6 +71,11 @@ ItemDelegate {
     property bool pooled: false
     ListView.onPooled: pooled=true
     ListView.onReused: {pooled=false;motionRaised=false;tooltipFocusFromPointer=false;opacity=Qt.binding(()=>enabled?1:Theme.disabledContentOpacity);}
+    // A row's one Tab stop is its actions button; from there Tab and
+    // Shift+Tab move to the next or previous row in list order (TrackList.qml).
+    function firstTabStop(){return actionsButton.visible?actionsButton:null}
+    function lastTabStop(){return firstTabStop()}
+    function stepTab(forward){return !!listOwner && !!listOwner.tabFrom && listOwner.tabFrom(selectionIndex,false,forward)}
     // PaneMotion.kt:150-177 uses DefaultSpatial for bounds changes.
     Behavior on implicitHeight {enabled:app.motion && visible && !dragging;NumberAnimation {id:rowResize;objectName:"trackRowResizeMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
     Connections {target:app;function onSettingsChanged(){if(!app.motion)rowResize.complete();}}
@@ -236,6 +241,6 @@ ItemDelegate {
         // A row's trailing supporting text is label small
         // (ListTokens.ItemTrailingSupportingTextFont), not body small.
         SungText { font.features: {"tnum": 1}; visible: !row.queueMode || row.width>350; text: row.track.duration || (row.track.seconds ? app.formatTime(row.track.seconds*1000) : ""); font.pixelSize: Theme.labelSmall; labelRole: true; color: row.supportInk; Layout.rightMargin: 2 }
-        MButton { visible: row.track.kind!=="smart"; symbol: "more"; tip: "Track actions"; Accessible.name: "Actions for "+(row.track.title||"track"); ink: row.actionInk; onClicked: row.menuRequested(row.track,row.rowIndex,this) }
+        MButton { id: actionsButton; Keys.onTabPressed: event => event.accepted=row.stepTab(!(event.modifiers&Qt.ShiftModifier)); Keys.onBacktabPressed: event => event.accepted=row.stepTab(false); visible: row.track.kind!=="smart"; symbol: "more"; tip: "Track actions"; Accessible.name: "Actions for "+(row.track.title||"track"); ink: row.actionInk; onClicked: row.menuRequested(row.track,row.rowIndex,this) }
     }
 }

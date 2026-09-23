@@ -43,13 +43,30 @@ Item {
             if (item === sheet) return true
         return false
     }
+    // A list that walks its rows in its own order (TrackList.qml) takes the
+    // step first, and the sheet counts it as one place: its rows sit among
+    // their siblings in whatever order the view made them.
+    function owningList(item) {
+        for (let part = item ? item.parent : null; part && part !== sheet; part = part.parent)
+            if (part.stepFrom !== undefined && part.enter !== undefined && part.inUnit(item)) return part
+        return null
+    }
     function moveFocus(backward) {
+        const focus = sheet.Window.window.activeFocusItem
+        const list = owningList(focus)
+        if (list && list.stepFrom(focus, !backward)) return
         const items = []
         focusableItems(body, items)
         if (!items.length) { sheet.forceActiveFocus(); return }
-        const current = items.indexOf(sheet.Window.window.activeFocusItem)
-        const next = (current + (backward ? items.length - 1 : 1)) % items.length
-        items[next].forceActiveFocus(backward ? Qt.BacktabFocusReason : Qt.TabFocusReason)
+        const places = []
+        for (const item of items) {
+            const place = owningList(item) || item
+            if (places.indexOf(place) < 0) places.push(place)
+        }
+        const current = places.indexOf(list || focus)
+        const next = places[(current + (backward ? places.length - 1 : 1)) % places.length]
+        if (next.stepFrom !== undefined && next.enter(!backward)) return
+        next.forceActiveFocus(backward ? Qt.BacktabFocusReason : Qt.TabFocusReason)
     }
     function focusFirst() {
         if (!focusPending || !open || !visible) return

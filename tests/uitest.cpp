@@ -19,6 +19,7 @@
 #include <QFile>
 #include <QQuickItem>
 #include <QPointer>
+#include <QSet>
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QJSValue>
@@ -1796,6 +1797,36 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
         if(live!=row||!row->isVisible())++staleStops;
       }
       check(rowStops>=4&&staleStops==0,qPrintable(QString("Tab stops only in rows the list is showing (%1 stops, %2 stale)").arg(rowStops).arg(staleStops)));
+      // Tab walks the list in list order: in from the header at the first
+      // row, every row and its actions, and out after the last, where the
+      // item tree alone jumped between reused rows and left early.
+      for(int notch=0;notch<12;++notch){QWheelEvent e(p,w->mapToGlobal(p.toPoint()),QPoint(),QPoint(0,120),Qt::NoButton,Qt::NoModifier,Qt::NoScrollPhase,false);QCoreApplication::sendEvent(w,&e);QTest::qWait(40);}
+      QTest::qWait(900);
+      if(auto tools=findItem(w->contentItem(),"collectionToolsButton"))tools->forceActiveFocus(Qt::TabFocusReason);
+      QList<int> walked;bool left=false;
+      for(int tab=0;tab<200&&!left;++tab){
+        QTest::keyClick(w,Qt::Key_Tab);QCoreApplication::processEvents();
+        QQuickItem *row=nullptr;
+        for(auto item=w->activeFocusItem();item&&item!=tracks;item=item->parentItem())if(item->parentItem()==content){row=item;break;}
+        if(row&&row->property("selectionIndex").isValid())walked<<row->property("selectionIndex").toInt();
+        else if(!walked.isEmpty())left=true;
+      }
+      bool ordered=!walked.isEmpty();for(int i=1;i<walked.size();++i)if(walked[i]<walked[i-1])ordered=false;
+      const int rows=tracks->property("count").toInt();
+      check(ordered&&walked.first()==0&&walked.last()==rows-1&&QSet<int>(walked.begin(),walked.end()).size()==rows,
+            qPrintable(QString("Tab walks all %1 rows in order (%2 stops, rows %3 to %4)").arg(rows).arg(walked.size()).arg(walked.isEmpty()?-1:walked.first()).arg(walked.isEmpty()?-1:walked.last())));
+      // Shift+Tab walks back the same way.
+      QList<int> back;left=false;
+      for(int tab=0;tab<200&&!left;++tab){
+        QTest::keyClick(w,Qt::Key_Tab,Qt::ShiftModifier);QCoreApplication::processEvents();
+        QQuickItem *row=nullptr;
+        for(auto item=w->activeFocusItem();item&&item!=tracks;item=item->parentItem())if(item->parentItem()==content){row=item;break;}
+        if(row&&row->property("selectionIndex").isValid())back<<row->property("selectionIndex").toInt();
+        else if(!back.isEmpty())left=true;
+      }
+      bool reversed=!back.isEmpty();for(int i=1;i<back.size();++i)if(back[i]>back[i-1])reversed=false;
+      check(reversed&&back.first()==rows-1&&back.last()==0,
+            qPrintable(QString("Shift+Tab walks back in order (%1 stops, rows %2 to %3)").arg(back.size()).arg(back.isEmpty()?-1:back.first()).arg(back.isEmpty()?-1:back.last())));
     }
     b->setMotion(false);
   }
@@ -2556,7 +2587,29 @@ void runInteractionRefinementTests(Backend *b,QQuickWindow *w){
   click("artworkZoomReset");check(viewer->property("zoom").toDouble()==1,"artwork zoom resets");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(250);check(!viewer->property("visible").toBool()&&viewer->property("source").toString().isEmpty(),"closing viewer releases source");
   QMetaObject::invokeMethod(w,"navigateBack");QTest::qWait(80);check(w->property("albumFlying").toBool()&&w->property("albumReturning").toBool(),"Back starts reverse cover flight");check(w->grabWindow().save(dir+"/reverse-flight.png"),"reverse-flight capture");check(until([&]{return !w->property("albumFlying").toBool();}),"reverse flight settles");
   auto grid=findItem(w->contentItem(),"localGroups");const auto before=grid->property("cellWidth").toDouble();b->setCompactDensity(true);QTest::qWait(90);const auto middle=grid->property("cellWidth").toDouble();QTest::qWait(300);const auto after=grid->property("cellWidth").toDouble();check(middle!=before&&middle!=after,"density changes interpolate grid dimensions");b->setCompactDensity(false);QTest::qWait(350);
-  b->library("files");b->collection()->setSortKey("folder");QTest::qWait(300);auto tracks=findItem(w->contentItem(),"tracksView");const auto key=QFileInfo(dir+"/music/A/Track 01.flac").absolutePath();click("toggleGroup_"+key);auto selection=tracks->property("selection").value<RowSelection*>();check(selection,"group selection exists");if(selection){selection->selectAll();check(selection->count()==4,"Select All excludes folded songs");selection->clear();}shot("folded-folders");click("playGroup_"+key);check(until([&]{return b->playing();}),"folded group plays");check(b->queue()->count()==4,"group play queues only group members");
+  b->library("files");b->collection()->setSortKey("folder");QTest::qWait(300);auto tracks=findItem(w->contentItem(),"tracksView");const auto key=QFileInfo(dir+"/music/A/Track 01.flac").absolutePath();click("toggleGroup_"+key);auto selection=tracks->property("selection").value<RowSelection*>();check(selection,"group selection exists");if(selection){selection->selectAll();check(selection->count()==4,"Select All excludes folded songs");selection->clear();}shot("folded-folders");
+  {
+    // Tab walks a grouped list in list order: a heading's two buttons, then
+    // its rows, passing over the rows of a folded group.
+    const auto foldedRows=tracks->property("groupRows").toMap().value(key).toList();
+    if(auto tools=findItem(w->contentItem(),"collectionToolsButton"))tools->forceActiveFocus(Qt::TabFocusReason);
+    QStringList stops;bool entered=false,left=false;
+    for(int tab=0;tab<120&&!left;++tab){
+      QTest::keyClick(w,Qt::Key_Tab);QCoreApplication::processEvents();
+      QString stop;
+      for(auto item=w->activeFocusItem();item&&item!=tracks;item=item->parentItem()){
+        if(item->objectName().startsWith("toggleGroup_")||item->objectName().startsWith("playGroup_")){stop=item->objectName();break;}
+        if(item->property("selectionIndex").isValid()){stop=QString::number(item->property("selectionIndex").toInt());break;}
+      }
+      if(!stop.isEmpty()){entered=true;stops<<stop;}else if(entered)left=true;
+    }
+    bool rowsInOrder=true,foldedSkipped=true;int lastRow=-1,rowsSeen=0;
+    for(const auto &stop:stops){bool number=false;const int row=stop.toInt(&number);if(!number)continue;++rowsSeen;if(row<lastRow)rowsInOrder=false;lastRow=row;for(const auto &hidden:foldedRows)if(hidden.toInt()==row)foldedSkipped=false;}
+    check(stops.size()>=4&&stops.value(0)=="toggleGroup_"+key&&stops.value(1)=="playGroup_"+key&&stops.value(2).startsWith("toggleGroup_")&&rowsSeen>0&&rowsInOrder&&foldedSkipped,
+          qPrintable("Tab walks the folder groups in order, past the folded one: "+stops.mid(0,6).join(", ")));
+    QMetaObject::invokeMethod(tracks,"positionViewAtBeginning");QTest::qWait(300);
+  }
+  click("playGroup_"+key);check(until([&]{return b->playing();}),"folded group plays");check(b->queue()->count()==4,"group play queues only group members");
   b->pause();b->setSleep(-1);b->seek(20000);check(b->sleepFade(),"sleep fade enabled");b->setSleep(0);
   b->library("local-albums");b->setViewMode("grid");QTest::qWait(300);click("openCollectionCard");QTest::qWait(600);check(b->albumInfo().value("multipleDiscs").toBool(),"album recognizes multiple discs");click("toggleGroup_Disc 1");shot("folded-discs");click("playGroup_Disc 1");check(b->queue()->count()==4,"disc play queues only selected disc");
   b->setMotion(false);QMetaObject::invokeMethod(w,"navigateBack");QTest::qWait(50);check(!w->property("albumFlying").toBool(),"reduced motion skips reverse flight");b->setCompactDensity(true);QTest::qWait(50);check(qAbs(grid->property("cellWidth").toDouble()-after)<1,"reduced motion density changes immediately");b->setCompactDensity(false);b->setMotion(true);b->stop();b->clearQueue();
