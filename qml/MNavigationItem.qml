@@ -12,6 +12,12 @@ AbstractButton {
     // `badged` alone draws the dot.
     property bool badged: false
     property int badgeCount: -1
+    // Where the glyph leads the label, a rail's item keeps 20dp between its
+    // leading edge and the indicator (WNRItemHorizontalPadding); a drawer's
+    // item is its indicator and keeps none. NavigationItem.kt makes the
+    // whole item selectable and shows the ripple on the indicator alone, so
+    // the padding still takes the click but never shows a state.
+    property real itemPadding: 0
     implicitWidth: expanded ? 220 : 80
     // Material's rail item container is 64dp tall.
     implicitHeight: expanded ? 56 : 64
@@ -26,14 +32,14 @@ AbstractButton {
             objectName: "navigationIndicator"
             // M3 lets the expanded indicator fill its container rather than hug
             // the label; the target area spans the full rail either way.
-            x: control.expanded ? 0 : (parent.width-width)/2
+            x: control.expanded ? control.itemPadding : (parent.width-width)/2
             // Material wraps the glyph in the indicator with (32-24)/2 either
             // side of it, so the two share a centre. Stacked, that puts the
             // indicator 4dp down from the top of the container.
             y: control.expanded ? 0 : 4
             // Material's active indicator is 56 by 32 where the destination is
             // stacked, and fills its container where it is laid out in a row.
-            width: control.expanded ? parent.width : 56
+            width: control.expanded ? parent.width-control.itemPadding : 56
             height: control.expanded ? parent.height : 32
             // The indicator's shape is full; pressing squares it towards the
             // large step, which is the app's own interaction feel rather than
@@ -55,6 +61,7 @@ AbstractButton {
         Rectangle {
             objectName: "navigationFocusRing"
             anchors.fill: parent; anchors.margins: 2; radius: Theme.shapeLarge
+            anchors.leftMargin: control.expanded ? control.itemPadding+2 : 2
             color: "transparent"; border.color: Theme.focusRing; border.width: 2
             visible: control.visualFocus
         }
@@ -88,9 +95,9 @@ AbstractButton {
         }
         Row {
             objectName: "navigationRow"
-            // Material's horizontal rail item: 16dp either side of the row,
-            // and 8dp between the glyph and the words.
-            anchors.fill: parent; anchors.leftMargin: 16; anchors.rightMargin: 16
+            // Material's horizontal rail item: 16dp inside the indicator either
+            // side of the row, and 8dp between the glyph and the words.
+            anchors.fill: parent; anchors.leftMargin: control.itemPadding+16; anchors.rightMargin: 16
             spacing: 8
             visible: opacity>0; opacity: control.expanded ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }

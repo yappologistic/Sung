@@ -3192,6 +3192,34 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
             "and carries the library's action at its head");
     c.check(w->findChildren<QQuickItem *>("libraryFab").size() == 1,
             "which is the same one button the other arrangement puts on the pane");
+    // WideNavigationRail.kt keeps an item's indicator 20dp in from the
+    // rail's edge in both forms, so opening the rail does not move it and it
+    // never meets the window's edge. The header's glyph holds its line too.
+    auto pillEdges = [&](const QString &name) {
+      auto item = shownItem(rail, name);
+      auto pill = item ? anyItem(item, "navigationIndicator") : nullptr;
+      if (!pill)
+        return QPointF(-100, -100);
+      const double left = pill->mapToItem(rail, QPointF(0, 0)).x();
+      return QPointF(left, rail->width() - left - pill->width());
+    };
+    auto menuCentre = [&] {
+      auto menu = shownItem(rail, "navigationMenuButton");
+      return menu ? menu->mapToItem(rail, QPointF(menu->width() / 2, 0)).x() : -100.0;
+    };
+    const double collapsedPill = pillEdges("nav_library").x();
+    const double collapsedMenu = menuCentre();
+    c.check(qAbs(collapsedPill - 20) < 1 && qAbs(collapsedMenu - 48) < 1,
+            QString("collapsed, the indicator starts 20dp in and the menu glyph centres on 48dp (%1, %2)")
+                .arg(collapsedPill).arg(collapsedMenu));
+    // Two pins give the expanded rail its secondary destinations.
+    QVariantList railPins;
+    for (int i = 0; i < 2; ++i) {
+      QVariantMap pin{{"id", QString("rail-fixture-%1").arg(i)},
+                      {"kind", "album"}, {"title", QString("Rail pin %1").arg(i)}};
+      b->togglePin(pin);
+      railPins << pin;
+    }
     // The rail opens into Material's expanded form, where the pins live.
     c.click("navigationMenuButton");
     c.check(c.until([&] { return rail->property("expanded").toBool(); }, 3000),
@@ -3199,10 +3227,58 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
     QTest::qWait(700);
     c.check(rail->width() >= 220 && rail->width() <= 360,
             QString("into Material's 220 to 360dp range (%1)").arg(rail->width(), 0, 'f', 0));
+    for (const auto *name : {"nav_home", "nav_search", "nav_library", "navPin_0", "navPin_1"}) {
+      const auto edges = pillEdges(name);
+      c.check(qAbs(edges.x() - 20) < 1 && qAbs(edges.y() - 20) < 1,
+              QString("expanded, %1 keeps its indicator 20dp from both rail edges (%2, %3)")
+                  .arg(name).arg(edges.x()).arg(edges.y()));
+    }
+    c.check(qAbs(menuCentre() - collapsedMenu) < 1,
+            QString("and the menu glyph has not moved (%1)").arg(menuCentre()));
+    auto home = shownItem(rail, "nav_home");
+    auto homeRow = home ? anyItem(home, "navigationRow") : nullptr;
+    auto pinnedLabel = shownItem(rail, "navigationPinnedLabel");
+    c.check(homeRow && pinnedLabel && qAbs(homeRow->mapToItem(rail, QPointF(0, 0)).x() - 36) < 1 &&
+                qAbs(pinnedLabel->mapToItem(rail, QPointF(0, 0)).x() - 36) < 1,
+            "glyphs sit 16dp inside the indicator, on the collapsed glyph's line, with the Pinned label");
     c.shot("11-sidebar-expanded");
+    // NavigationItem.kt makes the whole item selectable and shows the state on
+    // the indicator alone, so the margin beside it still takes the pointer.
+    if (auto pin = shownItem(rail, "navPin_0")) {
+      QTest::mouseMove(w, pin->mapToScene(QPointF(8, pin->height() / 2)).toPoint());
+      c.check(c.until([&] { return pin->property("hovered").toBool(); }, 2000),
+              "the margin beside a pin hovers it");
+      c.shot("11a-sidebar-pin-hover");
+    }
+    if (auto search = shownItem(rail, "nav_search")) {
+      const QPoint margin = search->mapToScene(QPointF(8, search->height() / 2)).toPoint();
+      QTest::mouseMove(w, margin);
+      c.check(c.until([&] { return search->property("hovered").toBool(); }, 2000),
+              "and the margin beside a destination hovers it");
+      c.shot("11b-sidebar-destination-hover");
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, margin);
+      c.check(c.until([&] { return rail->property("current").toString() == "search"; }, 3000),
+              "and a click there opens it");
+      // From the keyboard the ring draws around the inset indicator, not
+      // the whole item. The search page puts focus in its field once it has
+      // arrived, so the walk back to the rail starts after that.
+      QTest::mouseMove(w, QPoint(w->width() / 2, w->height() / 2));
+      QTest::qWait(800);
+      QTest::keyClick(w, Qt::Key_Tab);
+      for (int i = 0; i < 12 && !search->hasActiveFocus(); ++i)
+        QTest::keyClick(w, Qt::Key_Tab, Qt::ShiftModifier);
+      c.shot("11c-sidebar-focus");
+      auto ring = anyItem(search, "navigationFocusRing");
+      c.check(search->hasActiveFocus() && search->property("visualFocus").toBool() && ring &&
+                  ring->isVisible() && qAbs(ring->mapToItem(rail, QPointF(0, 0)).x() - 22) < 1,
+              QString("Shift+Tab rings the destination 2dp inside its indicator (%1)")
+                  .arg(ring ? ring->mapToItem(rail, QPointF(0, 0)).x() : -1));
+    }
     c.click("navigationMenuButton");
     c.check(c.until([&] { return !rail->property("expanded").toBool(); }, 3000),
             "and closes it again");
+    for (const auto &pin : railPins)
+      b->togglePin(pin.toMap());
   }
   // Below the rail's width the arrangement falls back to the bar against the
   // bottom edge and the drawer, which is where it kept them before.

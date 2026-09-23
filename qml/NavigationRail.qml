@@ -49,6 +49,13 @@ ColumnLayout {
     // Material's collapsed rail is 96dp wide and sets 4dp between its
     // destinations; the header above them keeps 8dp of its own.
     Layout.fillHeight: true; Layout.topMargin: 24; spacing: 4
+    // WideNavigationRail.kt:1387 sets WNRItemHorizontalPadding, 20dp between
+    // the rail's edge and an item's indicator: what 96dp leaves either side
+    // of the collapsed 56dp indicator, so the indicator keeps its leading
+    // edge as the rail opens. The rail keeps the same 20dp after its widest
+    // item (:380). The glyph sits 16dp inside the indicator, at 36dp in both
+    // forms, and the rest of the expanded rail lines up on those two edges.
+    readonly property real itemInset: 20
 
     MButton {
         objectName: "navigationMenuButton"
@@ -56,7 +63,9 @@ ColumnLayout {
         tip: rail.expanded ? "Collapse navigation" : "Expand navigation"
         enabled: rail.roomToExpand
         Layout.alignment: rail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-        Layout.leftMargin: rail.expanded ? 16 : 0
+        // NavigationRailSamples.kt pads the header's icon button 24dp from the
+        // start, which keeps its glyph on the destinations' 36dp keyline.
+        Layout.leftMargin: rail.expanded ? 24 : 0
         onClicked: rail.toggleRequested()
     }
     // Material's rail carries the surface's primary action above its
@@ -69,7 +78,7 @@ ColumnLayout {
         Layout.preferredWidth: visible ? rail.fabWidth : 0
         Layout.preferredHeight: visible ? rail.fabHeight : 0
         Layout.alignment: rail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-        Layout.leftMargin: rail.expanded ? 16 : 0
+        Layout.leftMargin: rail.expanded ? rail.itemInset : 0
         Layout.topMargin: 4; Layout.bottomMargin: 4
     }
     Repeater {
@@ -82,7 +91,8 @@ ColumnLayout {
             objectName: "nav_"+modelData.key
             expanded: rail.expanded
             Layout.alignment: rail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-            Layout.preferredWidth: rail.expanded ? rail.shownWidth-24 : 80
+            Layout.preferredWidth: rail.expanded ? rail.shownWidth-rail.itemInset : 80
+            itemPadding: rail.itemInset
             Layout.preferredHeight: rail.expanded ? 56 : 64
             symbol: modelData.icon; text: modelData.label; selected: rail.current===modelData.key
             // Importing is pending work inside the library, so the destination
@@ -91,8 +101,8 @@ ColumnLayout {
             onClicked: rail.chosen(modelData.key)
         }
     }
-    MDivider { objectName: "navigationDivider"; visible: rail.shownPins.length>0; Layout.preferredWidth: rail.shownWidth-32; Layout.alignment: Qt.AlignLeft; Layout.leftMargin: 16; Layout.topMargin: 4 }
-    SungText { objectName: "navigationPinnedLabel"; visible: rail.shownPins.length>0; text: "Pinned"; color: Theme.muted; font.pixelSize: Theme.titleSmall; typeRole: "titleSmall"; Layout.leftMargin: 20; Layout.alignment: Qt.AlignLeft }
+    MDivider { objectName: "navigationDivider"; visible: rail.shownPins.length>0; Layout.preferredWidth: rail.shownWidth-2*rail.itemInset; Layout.alignment: Qt.AlignLeft; Layout.leftMargin: rail.itemInset; Layout.topMargin: 4 }
+    SungText { objectName: "navigationPinnedLabel"; visible: rail.shownPins.length>0; text: "Pinned"; color: Theme.muted; font.pixelSize: Theme.titleSmall; typeRole: "titleSmall"; Layout.leftMargin: rail.itemInset+16; Layout.alignment: Qt.AlignLeft }
     Repeater {
         model: rail.shownPins
         MNavigationItem {
@@ -101,7 +111,8 @@ ColumnLayout {
             objectName: "navPin_"+index
             expanded: true
             Layout.alignment: Qt.AlignLeft
-            Layout.preferredWidth: rail.shownWidth-24; Layout.preferredHeight: 48
+            Layout.preferredWidth: rail.shownWidth-rail.itemInset; Layout.preferredHeight: 48
+            itemPadding: rail.itemInset
             artUrl: modelData.art || ""; text: modelData.title || ""
             selected: rail.current==="library" && !!modelData.id && rail.pinSelected(modelData)
             onClicked: rail.pinChosen(modelData)
@@ -116,17 +127,17 @@ ColumnLayout {
     // between the two slots, so there is only ever one of each in the window.
     Item {
         id: railMiniHost
-        Layout.preferredWidth: rail.expanded ? rail.shownWidth-32 : 48
+        Layout.preferredWidth: rail.expanded ? rail.shownWidth-2*rail.itemInset : 48
         Layout.preferredHeight: 48
         Layout.alignment: rail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-        Layout.leftMargin: rail.expanded ? 16 : 0
+        Layout.leftMargin: rail.expanded ? rail.itemInset : 0
     }
     Item {
         id: railSettingsHost
-        Layout.preferredWidth: rail.expanded ? rail.shownWidth-32 : 48
+        Layout.preferredWidth: rail.expanded ? rail.shownWidth-2*rail.itemInset : 48
         Layout.preferredHeight: 48
         Layout.alignment: rail.expanded ? Qt.AlignLeft : Qt.AlignHCenter
-        Layout.leftMargin: rail.expanded ? 16 : 0
+        Layout.leftMargin: rail.expanded ? rail.itemInset : 0
         Layout.bottomMargin: 20
     }
 }
