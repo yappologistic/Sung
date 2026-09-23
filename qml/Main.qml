@@ -786,7 +786,7 @@ ApplicationWindow {
                             collapse: content.headerCollapse
                         }
                         RowLayout {
-                            visible: !window.artistPage
+                            visible: !window.artistPage && app.page!=="library"
                             Layout.fillWidth: true; spacing: 16
                             readonly property var playlistData: app.page==="local" ? (app.playlists.find(p => p.id===app.libraryId) || ({})) : ({})
                             // ArtCard.qml uses PlaylistCover for the grid mosaic;
@@ -808,7 +808,7 @@ ApplicationWindow {
                                     Layout.minimumWidth: 0; Layout.maximumWidth: 720
                                     Layout.preferredHeight: visible ? 56 : 0
                                 }
-                            SungText {heading: true; visible: !pageSearchHost.visible; text: window.serverDisconnected ? "Music server" : window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
+                            SungText {heading: true; visible: !pageSearchHost.visible && !(app.page==="server" && !app.collectionItem.id); text: app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                                 SungText { objectName: "albumArtist"; visible: !!app.albumInfo.artist;opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true; text: app.albumInfo.artist || ""; font.pixelSize: Theme.bodyLarge; color: Theme.muted; maximumLineCount: 2; wrapMode: Text.Wrap }
                                 SungText { objectName: "albumSummary"; visible: !!app.albumInfo.summary || app.page==="local";opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true
                                     text: {
@@ -842,12 +842,6 @@ ApplicationWindow {
                                      visible:!!app.collectionItem.id, trigger:function(){app.togglePin(app.collectionItem)}},
                                     {key:"refresh", symbol:"refresh", label:"Refresh", enabled:!app.busy,
                                      visible:app.page!=="library"&&app.page!=="local", trigger:function(){app.refresh()}},
-                                    {key:"folders", name:"musicFoldersButton", symbol:"folder", text:"Folders", label:"Manage music folders",
-                                     visible:window.destination==="library" && window.libraryTab==="files",
-                                     trigger:function(){musicFoldersDialog.open()}},
-                                    {key:"rescan", name:"rescanFoldersButton", symbol:"refresh", label:"Rescan music folders", enabled:!app.importingLocal,
-                                     visible:window.destination==="library" && window.libraryTab==="files" && app.musicFolders.length>0,
-                                     trigger:function(){app.rescanMusicFolders()}},
                                     {key:"cleanup", name:"playlistCleanupButton", text:"Clean up", label:"Clean up", visible:window.editableLocal,
                                      trigger:function(){window.openCleanup(window.localPlaylist)}},
                                     {key:"editRules", name:"editSmartPlaylistButton", text:"Edit rules", label:"Edit rules",
@@ -920,10 +914,11 @@ ApplicationWindow {
                             // An artist's hero owns these actions while it is
                             // open; the row takes them back as it collapses, so
                             // exactly one Play is ever on screen.
-                            visible: tracks.selection.count===0 && app.results.count>0 && !window.feedShowing && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong) && (!window.artistPage || content.compactHeader)
+                            visible: (tracks.selection.count===0 && app.results.count>0 && !window.feedShowing && !(window.destination==="library" && window.libraryTab==="playlists" && !window.localPlaylist) && !!(app.results.get(0).videoId || app.results.get(0).localPath || app.results.get(0).serverSong) && (!window.artistPage || content.compactHeader)) || (app.page==="library" && app.libraryId==="files")
                             Layout.fillWidth: true; spacing: 12
                             MSplitButton {
                                 objectName: "collectionPlay"
+                                visible: app.results.count>0
                                 text: "Play"; symbol: "play"; filled: true
                                 enabled: app.collection.count>0
                                 onClicked: app.playCollection(0)
@@ -951,6 +946,14 @@ ApplicationWindow {
                             Item { Layout.fillWidth: true }
                             MButton { objectName: "collectionToolsButton"; symbol: "filter"; tip: "Find and sort songs"; selected: window.collectionTools || !!app.collection.query || app.collection.sortKey!=="original"; onClicked: {window.collectionTools=!window.collectionTools;if(window.collectionTools)Qt.callLater(()=>collectionSearch.forceActiveFocus());} }
                             SungText { visible: !app.albumInfo.summary || content.compactHeader || !!app.collection.query; text: app.collection.query ? app.collection.count+" / "+app.results.count : window.countText(app.results.count); color: Theme.muted; font.pixelSize: Theme.bodySmall }
+                            // MAppBarRow keeps Folders then Rescan in order and
+                            // folds whichever does not fit beside the list tools.
+                            MAppBarRow { objectName:"collectionFolderActions"; visible:app.page==="library" && app.libraryId==="files"; Layout.preferredWidth:implicitWidth; Layout.preferredHeight:48
+                                actions:[
+                                    {key:"folders",name:"musicFoldersButton",symbol:"folder",text:"Folders",label:"Manage music folders",visible:true,trigger:function(){musicFoldersDialog.open()}},
+                                    {key:"rescan",name:"rescanFoldersButton",symbol:"refresh",label:"Rescan music folders",enabled:!app.importingLocal,visible:app.musicFolders.length>0,trigger:function(){app.rescanMusicFolders()}}
+                                ]
+                            }
                         }
                         RowLayout {
                             visible: window.hasSongCollection && window.collectionTools

@@ -6183,10 +6183,15 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
           "a style that names its role is taken at its word");
   c.check(c.evaluate("Theme.lineFor(16,false,'')").toInt() == 24,
           "and a line height comes with the size");
-  // What the window actually renders with.
+  // A library root no longer repeats its selected tab as a headline. Home
+  // still has a headline, so inspect the rendered role there.
+  b->home();
+  c.check(c.until([&] { return !b->busy(); }), "Home opens for a type-scale sample");
   auto title = shownItem(w->contentItem(), "collectionHeaderTitle");
   c.check(title && title->property("lineHeightMode").toInt() == 1,
           "text is laid out on the absolute line height Material publishes");
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
+  QTest::qWait(350);
   if (auto sample = shownItem(w->contentItem(), "trackTitle")) {
     const auto font = sample->property("font").value<QFont>();
     c.check(font.letterSpacing() > 0,
@@ -6358,24 +6363,25 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
   const auto scrimmed = c.evaluate("Theme.scrimColor()").value<QColor>();
   c.check(qAbs(scrimmed.alphaF() - 0.32) < 0.01, "and mixes to it on demand");
 
-  // --- The page header holds still between tabs ---
-  // The album grid used to tighten the pane's margins, so the title and the
-  // tabs jumped 8px each time it came up.
+  // A selected root tab already names the page; its row begins at the same
+  // place when switching from Songs to Albums.
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
   QTest::qWait(800);
-  QPointF songsTitle(-1, -1);
-  if (auto title = shownItem(w->contentItem(), "collectionHeaderTitle"))
-    songsTitle = title->mapToScene(QPointF(0, 0));
+  c.check(!shownItem(w->contentItem(), "collectionHeaderTitle"),
+          "Local files does not restate the selected tab in a headline");
+  QPointF songsTabs(-1, -1);
+  if (auto tabs = shownItem(w->contentItem(), "libraryTabs"))
+    songsTabs = tabs->mapToScene(QPointF(0, 0));
 
   // --- The list a detail was opened from stays beside it ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("local-albums")));
   c.check(c.until([&] { return b->results()->count() == 2; }), "the library groups into albums");
   QTest::qWait(500);
-  if (auto title = shownItem(w->contentItem(), "collectionHeaderTitle")) {
-    const auto gridTitle = title->mapToScene(QPointF(0, 0));
-    c.check(songsTitle.x() >= 0 && (gridTitle - songsTitle).manhattanLength() < 1,
-            QString("the title stays put when the album grid comes up (%1,%2 against %3,%4)")
-                .arg(gridTitle.x()).arg(gridTitle.y()).arg(songsTitle.x()).arg(songsTitle.y()));
+  if (auto tabs = shownItem(w->contentItem(), "libraryTabs")) {
+    const auto gridTabs = tabs->mapToScene(QPointF(0, 0));
+    c.check(songsTabs.x() >= 0 && (gridTabs - songsTabs).manhattanLength() < 1,
+            QString("the tabs stay put when the album grid comes up (%1,%2 against %3,%4)")
+                .arg(gridTabs.x()).arg(gridTabs.y()).arg(songsTabs.x()).arg(songsTabs.y()));
   }
   auto pane = anyItem(w->contentItem(), "listPane");
   c.check(pane && !pane->isVisible(), "with no list pane while the grid is the page");

@@ -1696,6 +1696,19 @@ void runLibraryPolishTests(Backend *b,QQuickWindow *w) {
     encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","sine=frequency=220:sample_rate=8000","-t","120","-metadata","title=Song "+QString::number(i+1),"-metadata",i<2?"album=First album":"album=Second album","-metadata","artist=Test artist","-metadata","album_artist=Test artist","-metadata","track="+QString::number(i+1),"-threads","1","-y",file});
     check(encode.waitForFinished(10000)&&encode.exitCode()==0,"audio fixture encoded");b->importLocalFiles({QUrl::fromLocalFile(file)});check(until([&]{return !b->importingLocal();}),"local song imported");
   }
+  b->library("files");QTest::qWait(180);
+  auto rootTitle=findItem(w->contentItem(),"collectionHeaderTitle");
+  auto folderActions=findItem(w->contentItem(),"collectionFolderActions");
+  auto folders=folderActions?findItem(folderActions,"musicFoldersButton"):nullptr;
+  check(rootTitle&&!rootTitle->isVisible()&&folderActions&&folderActions->isVisible()&&folders&&folders->isVisible(),
+        "Local files puts Folders at the trailing list tools instead of repeating its tab name");
+  if(folders)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+      folders->mapToScene(QPointF(folders->width()/2,folders->height()/2)).toPoint());
+  QTest::qWait(180);
+  auto foldersDialog=w->findChild<QObject*>("musicFoldersDialog");
+  check(foldersDialog&&foldersDialog->property("visible").toBool(),"Folders still opens from its new row");
+  if(foldersDialog)QMetaObject::invokeMethod(foldersDialog,"close");
+  QTest::qWait(150);
   b->library("local-albums");QTest::qWait(400);check(b->results()->count()==2,"album grid groups imports");
   auto grid=findItem(w->contentItem(),"localGroups");check(grid&&grid->isVisible(),"album grid visible");shot("local-albums");
   auto search=findItem(w->contentItem(),"localGroupSearch");check(search&&search->isVisible(),"album search visible");b->collection()->setQuery("Second");QTest::qWait(100);check(b->collection()->count()==1,"album search filters");b->collection()->setQuery("");
