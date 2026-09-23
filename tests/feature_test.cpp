@@ -2336,6 +2336,46 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
   b->setWatchMusicFolders(false);
   b->setOnlineArtwork(false);
 
+  // Qt 6.8 Accessible.announce sends the active choice while the search
+  // field keeps keyboard focus. Capture the accessibility event itself.
+  {
+    static QStringList announcements;
+    announcements.clear();
+    const auto previous = QAccessible::installUpdateHandler(+[](QAccessibleEvent *event) {
+      if (event->type() == QAccessible::Announcement)
+        announcements << static_cast<QAccessibleAnnouncementEvent *>(event)->message();
+    });
+    QAccessible::setActive(true);
+    QTest::keyClick(w, Qt::Key_P, Qt::ControlModifier | Qt::ShiftModifier);
+    c.check(c.until([&] { return shownItem(w->contentItem(), "commandSearch") != nullptr; }),
+            "Quick actions opens from its shortcut");
+    auto results = shownItem(w->contentItem(), "commandResults");
+    auto field = shownItem(w->contentItem(), "commandSearch");
+    if (field && results && results->property("count").toInt() > 1) {
+      c.check(c.until([&] { return field->hasActiveFocus(); }),
+              "Quick actions field receives keyboard focus");
+      QTest::qWait(300);
+      QTest::keyClick(w, Qt::Key_Down);
+      QTest::qWait(80);
+      auto selected = shownItem(results, "command_home-layout");
+      if (!selected) {
+        const int index = results->property("currentIndex").toInt();
+        const auto item = results->property("currentItem").value<QQuickItem *>();
+        selected = index == 1 ? item : nullptr;
+      }
+      auto accessible = selected ? QAccessible::queryAccessibleInterface(selected) : nullptr;
+      c.check(field->hasActiveFocus() && selected && accessible &&
+                  accessible->role() == QAccessible::ListItem && accessible->state().selected &&
+                  accessible->text(QAccessible::Name) == selected->property("text").toString(),
+              "arrow choice has selected list-item semantics while typing focus remains");
+      c.check(accessible && announcements.contains(accessible->text(QAccessible::Name)),
+              "arrow choice is announced to assistive technology");
+      c.shot("00-command-accessibility");
+    } else c.check(false, "Quick actions has multiple accessible results");
+    QTest::keyClick(w, Qt::Key_Escape);
+    QAccessible::installUpdateHandler(previous);
+  }
+
   paintCover(c.directory + "/music/cover.png", QColor("#1f4f6b"), QColor("#d98324"));
   for (int i = 1; i <= 6; ++i)
     if (!encodeTrack(c, QString("%1/music/%2.flac").arg(c.directory).arg(i),
