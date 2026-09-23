@@ -979,19 +979,20 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
   if(liked&&playlists&&history&&tabs){
     liked->forceActiveFocus(Qt::TabFocusReason);QTest::keyClick(w,Qt::Key_Right);QTest::qWait(50);
     check(playlists->hasActiveFocus(),"Right arrow moves library tab focus without seeking");
-    QTest::keyClick(w,Qt::Key_Space);QTest::qWait(100);
-    check(w->property("libraryTab").toString()=="playlists","keyboard activates library destination");
+    QTest::keyClick(w,Qt::Key_Space);
+    // NavigationTransition swaps the page after its spring exit completes.
+    check(until([&]{return w->property("libraryTab").toString()=="playlists";}),"keyboard activates library destination");
     auto ring=findItem(playlists,"tabFocusRing");check(ring&&ring->isVisible(),"keyboard-focused library tab has a distinct focus outline");
     QTest::keyClick(w,Qt::Key_Tab);QTest::qWait(50);
     check(!w->activeFocusItem()||!w->activeFocusItem()->property("libraryNavigation").toBool(),"Tab exits the tab strip instead of visiting each tab");
     QTest::keyClick(w,Qt::Key_Backtab);QTest::qWait(50);
-    check(playlists->hasActiveFocus(),"Shift+Tab re-enters at the selected library tab");
+    check(until([&]{return playlists->hasActiveFocus();}),"Shift+Tab re-enters at the selected library tab");
     QQmlProperty(tabs,"Layout.maximumWidth",qmlContext(w)).write(240);w->grabWindow();QTest::qWait(50);
     QTest::keyClick(w,Qt::Key_End);QTest::qWait(80);
     auto rect=history->mapRectToItem(tabs,history->boundingRect());
     check(history->hasActiveFocus()&&tabs->property("contentX").toDouble()>0&&rect.left()>=-1&&rect.right()<=tabs->width()+1,"focused last tab scrolls into compact tab viewport");
-    QTest::keyClick(w,Qt::Key_Return);QTest::qWait(100);
-    check(w->property("libraryTab").toString()=="server","last library tab remains actionable when scrolled");
+    QTest::keyClick(w,Qt::Key_Return);
+    check(until([&]{return w->property("libraryTab").toString()=="server";}),"last library tab remains actionable when scrolled");
     shot("09-library-tabs");
     QQmlProperty(tabs,"Layout.maximumWidth",qmlContext(w)).write(1000);w->grabWindow();QTest::qWait(100);
     check(tabs->property("contentX").toDouble()==0,"expanding the tab strip restores the left edge without blank space");
@@ -1920,7 +1921,7 @@ void runListeningRefinementTests(Backend *b,QQuickWindow *w){
   click("exactVolumeButton");QTest::qWait(250);auto percent=findItem(w->contentItem(),"volumePercent");check(percent&&percent->isVisible(),"exact volume input opens");if(percent){percent->setProperty("text","37");}click("volumeApply");check(qAbs(b->volume()-.37)<.001,"exact volume applies 37 percent");click("exactVolumeButton");QTest::qWait(250);percent=findItem(w->contentItem(),"volumePercent");if(percent)percent->setProperty("text","101");auto apply=findItem(w->contentItem(),"volumeApply");check(apply&&!apply->isEnabled(),"out of range volume cannot apply");if(percent)percent->setProperty("text","37");shot("03-exact-volume");click("volumeMute");check(b->volume()==0,"volume popover mutes");QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(150);
   b->library("local-albums");QTest::qWait(250);auto layout=w->findChild<QObject*>("viewLayoutDialog");check(layout,"view layout dialog exists");if(layout)QMetaObject::invokeMethod(layout,"open");QTest::qWait(450);click("viewDensityCompact");click("viewModeList");check(b->viewCompactDensity()&&b->viewMode()=="list","album view accepts compact list layout");shot("04-view-layout");if(layout)QMetaObject::invokeMethod(layout,"close");QTest::qWait(250);auto groups=findItem(w->contentItem(),"localGroups"),tracks=findItem(w->contentItem(),"tracksView");check(groups&&!groups->isVisible()&&tracks&&tracks->isVisible(),"album list replaces grid");shot("04b-album-list");
   b->library("files");check(b->viewDensity()==-1,"songs have no density override");check(!b->viewCompactDensity(),"songs keep their independent comfortable layout");b->library("local-albums");check(b->viewCompactDensity()&&b->viewMode()=="list","returning restores album layout");
-  const auto playlist=b->createPlaylist("Quiet collection");b->addItemsToPlaylist(playlist,b->queue()->rows);b->library("playlists");b->setViewMode("grid");QTest::qWait(350);auto grid=findItem(w->contentItem(),"playlistGrid");check(grid&&grid->isVisible()&&grid->property("count").toInt()>0,"playlists support grid presentation");shot("05-playlist-grid");click("openCollectionCard");check(b->libraryId()==playlist,"playlist grid opens the selected playlist");
+  const auto playlist=b->createPlaylist("Quiet collection");b->addItemsToPlaylist(playlist,b->queue()->rows);b->library("playlists");b->setViewMode("grid");QTest::qWait(350);auto grid=findItem(w->contentItem(),"playlistGrid");check(grid&&grid->isVisible()&&grid->property("count").toInt()>0,"playlists support grid presentation");shot("05-playlist-grid");click("openCollectionCard");check(until([&]{return b->libraryId()==playlist;}),"playlist grid opens the selected playlist");
   w->resize(800,600);QTest::qWait(200);click("exactVolumeButton");QTest::qWait(250);auto narrowPercent=findItem(w->contentItem(),"volumePercent");check(narrowPercent&&narrowPercent->isVisible(),"exact volume remains available in narrow player");shot("06-narrow-volume");QTest::keyClick(w,Qt::Key_Escape);
   std::function<QQuickItem*(QQuickItem*,const QString&)> visibleItem=[&](QQuickItem *root,const QString &name)->QQuickItem*{if(!root->isVisible())return nullptr;if(root->objectName()==name)return root;for(auto child:root->childItems())if(auto found=visibleItem(child,name))return found;return nullptr;};
   auto tapItem=[&](QQuickWindow *target,QQuickItem *item){if(item)QTest::mouseClick(target,Qt::LeftButton,Qt::NoModifier,item->mapToScene(QPointF(item->width()/2,item->height()/2)).toPoint());QTest::qWait(250);};

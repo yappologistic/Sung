@@ -3147,6 +3147,12 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
   QQuickItem *artworkRow = nullptr;
   c.check(c.until([&] { artworkRow = findArtworkRow(w->contentItem()); return artworkRow != nullptr; }),
           "Settings search finds Current artwork");
+  auto settingsScroll = w->findChild<QQuickItem *>("settingsScroll");
+  c.check(c.until([&] { artworkRow = findArtworkRow(w->contentItem());
+                       return artworkRow && settingsScroll &&
+                           settingsScroll->mapRectToScene(settingsScroll->boundingRect()).contains(
+                               artworkRow->mapToScene(artworkRow->boundingRect().center())); }),
+          "Current artwork settles inside the Settings viewport");
   if (artworkRow) {
     const auto point = artworkRow->mapToScene(artworkRow->boundingRect().center()).toPoint();
     QTest::mouseMove(w, point);
@@ -3746,9 +3752,10 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
 
   // --- The app bar keeps its actions reachable ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
-  QTest::qWait(500);
-  auto appBar = shownItem(w->contentItem(), "collectionActions");
-  c.check(appBar, "the collection header is an app bar row");
+  QQuickItem *appBar = nullptr;
+  c.check(c.until([&] { appBar = shownItem(w->contentItem(), "collectionFolderActions");
+                       return appBar != nullptr; }),
+          "the local files actions use an app bar row");
   if (appBar) {
     const int live = appBar->property("live").toList().size();
     c.check(!appBar->property("overflowing").toBool(),
@@ -5729,6 +5736,12 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
                 .arg(fab->mapToScene(QPointF(0, 0)).y(), 0, 'f', 0));
     c.shot("04-snackbar-above-fab");
   }
+  auto destinationMotion = w->findChild<QObject *>("destinationTransition");
+  auto tabMotion = w->findChild<QObject *>("tabTransition");
+  c.check(c.until([&] { return destinationMotion && tabMotion &&
+                             !destinationMotion->property("running").toBool() &&
+                             !tabMotion->property("running").toBool(); }),
+          "playlist navigation settles before opening a collection");
 
   // --- A pinned row is a feed, so nothing draws an empty state over it ---
   // The catalogue's own sections and the feed are not the same list: the feed
@@ -5743,8 +5756,12 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
             "which can be opened");
     b->togglePin(b->collectionItem());
     c.check(c.until([&] { return !b->pins().isEmpty(); }), "and pinned");
-    b->home();
-    QTest::qWait(900);
+    c.click("navBar_home");
+    c.check(c.until([&] { return b->page() == "home" && !b->busy() &&
+                             c.evaluate("window.destination").toString() == "home"; }),
+            "Home settles before checking its pinned feed");
+    c.check(c.until([&] { return c.evaluate("window.homeSections.length").toInt() > b->sections().size(); }),
+            "the pinned feed finishes composing");
     c.check(c.evaluate("window.homeSections.length").toInt() > b->sections().size(),
             "the feed carries a row the catalogue does not");
     c.check(c.evaluate("window.feedShowing").toBool(), "so the feed is what the page shows");

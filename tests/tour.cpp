@@ -61,6 +61,11 @@ struct Tour {
       QTest::qWait(25);
     return predicate();
   }
+  bool insideSettingsScroll(QQuickItem *row) {
+    auto scroll = shownItem(window->contentItem(), "settingsScroll");
+    return row && scroll && scroll->mapRectToScene(scroll->boundingRect()).contains(
+        row->mapToScene(row->boundingRect().center()));
+  }
   // Every stop names the section it expects to find before it photographs it.
   void shot(const QString &name, const QString &expect = {}, QQuickWindow *target = nullptr) {
     if (!target)
@@ -349,9 +354,11 @@ void runGuidedTour(Backend *b, QQuickWindow *w, const TourCapture &capture,
   // Search puts the two appearance rows on screen before each real click.
   c.click("settingsSearch");
   c.type("Current view layout");
-  c.check(c.until([&] { return shownItem(w->contentItem(), "viewLayoutButton") != nullptr; }),
+  QQuickItem *viewLayoutRow = nullptr;
+  c.check(c.until([&] { viewLayoutRow = shownItem(w->contentItem(), "viewLayoutButton");
+                       return c.insideSettingsScroll(viewLayoutRow); }),
           "settings search finds Current view layout");
-  c.click("viewLayoutButton");
+  c.click(viewLayoutRow, "viewLayoutButton");
   auto viewLayout = w->findChild<QObject *>("viewLayoutDialog");
   c.check(viewLayout && viewLayout->property("visible").toBool(), "the view layout dialog opens from Settings");
   c.shot("view-layout");
@@ -361,8 +368,10 @@ void runGuidedTour(Backend *b, QQuickWindow *w, const TourCapture &capture,
   c.click("settingsSearch");
   QTest::keyClick(w, Qt::Key_A, Qt::ControlModifier);
   c.type("Current artwork");
-  auto artworkRow = shownButtonWithText(w->contentItem(), "Current artwork");
-  c.check(artworkRow, "settings search finds Current artwork");
+  QQuickItem *artworkRow = nullptr;
+  c.check(c.until([&] { artworkRow = shownButtonWithText(w->contentItem(), "Current artwork");
+                       return c.insideSettingsScroll(artworkRow); }),
+          "settings search finds Current artwork");
   c.click(artworkRow, "Current artwork");
   auto artwork = w->findChild<QObject *>("artworkControls");
   c.check(artwork && artwork->property("visible").toBool(), "the artwork dialog opens from Settings");

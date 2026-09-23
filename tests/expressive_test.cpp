@@ -260,8 +260,8 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   c.check(sheet && sheet->property("visible").toBool(),
           "Show all opens the full queue, the carousel's non-scrolling alternative");
   QTest::keyClick(w, Qt::Key_Escape);
-  QTest::qWait(300);
-  c.check(sheet && !sheet->property("visible").toBool() && w->property("immersive").toBool(),
+  c.check(c.until([&] { return sheet && !sheet->property("visible").toBool(); }, 3000) &&
+              w->property("immersive").toBool(),
           "closing the queue keeps the immersive player");
 
   w->setProperty("immersive", false);
