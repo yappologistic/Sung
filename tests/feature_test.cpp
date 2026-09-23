@@ -1555,6 +1555,22 @@ void runListeningStatsTests(Backend *b, QQuickWindow *w) {
   auto bars = shownItem(w->contentItem(), "statsDailyBars");
   c.check(bars && bars->height() >= 56,
           QString("the day bars keep their height (%1px)").arg(bars ? bars->height() : 0));
+  b->setMotion(true);
+  const int fastSpatialMs=c.evaluate("Theme.springFastSpatialMs").toInt();
+  const auto fastSpatialCurve=c.evaluate("Theme.springFastSpatial").toList();
+  auto barMotion=bars?anyItem(bars,"statsBar"):nullptr;
+  auto barBehavior=barMotion?barMotion->findChild<QObject*>():nullptr;
+  auto barAnimation=motionObject(barBehavior,"animation");
+  c.check(barAnimation&&barAnimation->property("duration").toInt()==fastSpatialMs&&
+              QQmlProperty(barAnimation,"easing.bezierCurve").read().toList()==fastSpatialCurve,
+          "a daily bar's height uses one FastSpatial duration and curve");
+  auto enter=motionObject(stats,"enter");
+  auto scaleAnimation=motionAt(enter,{0,1});
+  c.check(scaleAnimation&&scaleAnimation->property("property").toString()=="scale"&&
+              scaleAnimation->property("duration").toInt()==fastSpatialMs&&
+              QQmlProperty(scaleAnimation,"easing.bezierCurve").read().toList()==fastSpatialCurve,
+          "the dialog entrance scales with one FastSpatial duration and curve");
+  b->setMotion(false);
   auto figure = shownItem(w->contentItem(), "statsTime");
   c.check(figure && figure->height() >= 72,
           QString("and the headline figures keep theirs (%1px)").arg(figure ? figure->height() : 0));

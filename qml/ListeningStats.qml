@@ -130,7 +130,9 @@ MDialog {
                                 height: Math.max(3, parent.height*modelData.seconds/parent.parent.peak)
                                 radius: Theme.shapeSmall
                                 color: modelData.seconds > 0 ? Theme.primary : Theme.outlineVariant
-                                Behavior on height { enabled: app.motion; NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.curve } }
+                                // MotionSchemeKeyTokens.kt:25 FastSpatial moves this
+                                // short bar by one spring pair as its height changes.
+                                Behavior on height { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
                             }
                         }
                         SungText {
