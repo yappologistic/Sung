@@ -6,12 +6,14 @@
 #include "backend.h"
 #include <QColor>
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QImage>
 #include <QPainter>
 #include <QProcess>
 #include <QQuickItem>
 #include <QQuickWindow>
+#include <QSignalSpy>
 #include <QTest>
 #include <qpa/qwindowsysteminterface.h>
 #include <functional>
@@ -369,10 +371,42 @@ void runGuidedTour(Backend *b, QQuickWindow *w, const TourCapture &capture,
   QTest::keyClick(w, Qt::Key_A, Qt::ControlModifier);
   c.type("Current artwork");
   QQuickItem *artworkRow = nullptr;
-  c.check(c.until([&] { artworkRow = shownButtonWithText(w->contentItem(), "Current artwork");
-                       return c.insideSettingsScroll(artworkRow); }),
-          "settings search finds Current artwork");
-  c.click(artworkRow, "Current artwork");
+  QQuickItem *lastArtworkRow = nullptr;
+  QPointF lastArtworkCenter;
+  QElapsedTimer artworkPositionStill;
+  // QQuickItem::updatePolish can move a filtered row after it first becomes
+  // visible. Aim only after the opened dialog keeps its row centre steady.
+  // https://doc.qt.io/qt-6/qquickitem.html#updatePolish
+  c.check(c.until([&] {
+            artworkRow = shownButtonWithText(w->contentItem(), "Current artwork");
+            if (!artworkRow || !settings || !settings->property("opened").toBool() ||
+                !c.insideSettingsScroll(artworkRow)) {
+              lastArtworkRow = nullptr;
+              artworkPositionStill.invalidate();
+              return false;
+            }
+            const auto centre = artworkRow->mapToScene(artworkRow->boundingRect().center());
+            if (artworkRow != lastArtworkRow ||
+                qAbs(centre.x() - lastArtworkCenter.x()) > 1 ||
+                qAbs(centre.y() - lastArtworkCenter.y()) > 1) {
+              lastArtworkRow = artworkRow;
+              lastArtworkCenter = centre;
+              artworkPositionStill.start();
+              return false;
+            }
+            return artworkPositionStill.elapsed() >= 120;
+          }), "Current artwork settles inside the opened Settings viewport");
+  if (artworkRow) {
+    QSignalSpy rowClicks(artworkRow, SIGNAL(clicked()));
+    const auto hoverPoint = artworkRow->mapToScene(artworkRow->boundingRect().center()).toPoint();
+    QTest::mouseMove(w, hoverPoint);
+    QTest::qWait(60);
+    const auto point = artworkRow->mapToScene(artworkRow->boundingRect().center()).toPoint();
+    QTest::mouseMove(w, point);
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    c.check(rowClicks.size() == 1, "Current artwork receives the real mouse click");
+    QTest::qWait(320);
+  }
   auto artwork = w->findChild<QObject *>("artworkControls");
   c.check(artwork && artwork->property("visible").toBool(), "the artwork dialog opens from Settings");
   c.shot("artwork-controls");
