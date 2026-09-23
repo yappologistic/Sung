@@ -71,7 +71,12 @@ AbstractButton {
     // container that sets a different one, such as an app bar's trailing
     // side, says so here.
     property color ambientInk: Theme.text
-    property color ink: dimmed ? Theme.muted
+    // Disabled, a labelled button dims the variant ink and an icon button
+    // the surface ink (FilledButtonTokens.DisabledLabelTextColor,
+    // IconButtonTokens.DisabledColor), both at 38% below. The tonal button is
+    // the labelled exception: Compose reads FilledTonalButtonTokens for it,
+    // which dim onSurface over a 12% container (Button.kt).
+    property color ink: dimmed ? (text.length && !tonal ? Theme.muted : Theme.text)
                       : filled ? Theme.primaryText
                       : elevated ? Theme.primary
                       : outlined ? Theme.muted
@@ -140,7 +145,9 @@ AbstractButton {
                              : control.toggle && control.selected ? control.sizedSquare
                              : Theme.shapeFull(Math.min(width, height))
         color: control.dimmed
-                 ? (control.hasContainer ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContainerOpacity) : "transparent")
+                 ? (control.hasContainer ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,
+                                                   control.tonal && control.text.length ? Theme.disabledSurfaceOpacity : Theme.disabledContainerOpacity)
+                                         : "transparent")
              : control.filled ? Theme.primary
              : control.elevated ? Theme.surfaceLow
              : control.tonal ? (control.toggle && control.selected ? Theme.secondary : Theme.secondaryContainer)
@@ -149,8 +156,10 @@ AbstractButton {
                     : control.outlined ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContainerOpacity)
                     : "transparent"
         border.width: control.outlined ? control.sizedOutline : 2
-        // An elevated button is the one variant Material lifts off the page.
-        MElevation { anchors.fill: parent; radius: parent.radius; level: control.elevated && !control.dimmed ? 1 : 0 }
+        // An elevated button is the one variant Material lifts off the page,
+        // one level at rest and two under the pointer
+        // (ElevatedButtonTokens.ContainerElevation, HoveredContainerElevation).
+        MElevation { anchors.fill: parent; radius: parent.radius; level: control.elevated && !control.dimmed ? (control.hovered && !control.down ? 2 : 1) : 0 }
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         // Material morphs the container squarer while it is held, and says
         // outright that this one takes the effects spring "to prevent any

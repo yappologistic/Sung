@@ -4059,8 +4059,29 @@ void runMaterialGrainTests(Backend *b, QQuickWindow *w) {
             QString("its container drops to a tenth of onSurface (alpha %1)").arg(fill.alphaF(), 0, 'f', 2));
     c.check(content && qAbs(content->opacity() - 0.38) < 0.01,
             QString("and its content to 38%% (%1)").arg(content ? content->opacity() : 0, 0, 'f', 2));
-    c.check(play->property("ink").value<QColor>() == c.themeColor("muted"),
-            "in the onSurfaceVariant role Material gives it");
+    // An icon button, filled or not, dims onSurface (IconButtonDefaults.kt
+    // reads FilledIconButtonTokens.DisabledColor); onSurfaceVariant is the
+    // disabled ink of a labelled button.
+    c.check(play->property("ink").value<QColor>() == c.themeColor("text"),
+            "in the onSurface role Material gives a disabled icon button");
+    // The tonal button is the labelled exception: Compose reads
+    // FilledTonalButtonTokens for it, onSurface over a 12% container, where
+    // the other labelled buttons dim onSurfaceVariant over 10% (Button.kt).
+    QQmlComponent tonalSource(qmlEngine(w), QUrl("qrc:/qml/MButton.qml"));
+    QScopedPointer<QObject> tonalObject(tonalSource.create(qmlContext(w)));
+    if (auto tonal = qobject_cast<QQuickItem *>(tonalObject.data())) {
+      tonal->setParentItem(w->contentItem());
+      tonal->setProperty("text", QString("Clean up"));
+      tonal->setProperty("tonal", true);
+      tonal->setProperty("enabled", false);
+      QTest::qWait(100);
+      auto tonalFill = tonal->property("background").value<QQuickItem *>()->property("color").value<QColor>();
+      c.check(tonal->property("ink").value<QColor>() == c.themeColor("text") && qAbs(tonalFill.alphaF() - 0.12) < 0.01,
+              QString("a disabled tonal button dims onSurface over a 12% container (alpha %1)").arg(tonalFill.alphaF(), 0, 'f', 2));
+      tonal->setParentItem(nullptr);
+    } else {
+      c.check(false, "a tonal button can be built to measure");
+    }
     c.shot("02-disabled");
   }
   Q_UNUSED(previous)
