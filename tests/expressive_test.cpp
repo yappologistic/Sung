@@ -379,9 +379,15 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
     if (!name || !name->text(QAccessible::Name).startsWith("Actions for ") || focusedRow != 5)
       continue;
     reachedClippedAction = true;
-    const auto action = focused->mapRectToScene(focused->boundingRect());
-    const auto viewport = queueView->mapRectToScene(queueView->boundingRect());
-    actionInView = action.top() >= viewport.top() - 1 && action.bottom() <= viewport.bottom() + 1;
+    // The window reveals focus once the focus change settles (Qt.callLater),
+    // so wait for the real position rather than reading it mid-change.
+    QPointer<QQuickItem> action = focused;
+    actionInView = c.until([&] {
+      if (!action) return false;
+      const auto rect = action->mapRectToScene(action->boundingRect());
+      const auto viewport = queueView->mapRectToScene(queueView->boundingRect());
+      return rect.top() >= viewport.top() - 1 && rect.bottom() <= viewport.bottom() + 1;
+    }, 1000);
   }
   c.check(reachedClippedAction, "Tab reaches the last queue row action");
   c.check(actionInView, "Tab scrolls the focused queue action fully into view");

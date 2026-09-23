@@ -8,9 +8,11 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPointer>
 #include <QQuickItem>
 #include <QQuickWindow>
 #include <QSet>
+#include <QStringList>
 #include <QTest>
 #include <algorithm>
 
@@ -124,12 +126,35 @@ bool insideFlickableContent(QQuickItem *item) {
 QRectF bounds(QQuickItem *item, QQuickWindow *window) {
   QRectF limit(QPointF(0, 0), QSizeF(window->width(), window->height()));
   for (auto parent = item->parentItem(); parent; parent = parent->parentItem()) {
-    if (parent->clip()) {
+    if (parent->clip())
       limit = limit.intersected(parent->mapRectToScene(parent->boundingRect()));
-      break;
-    }
   }
   return limit;
+}
+
+// Which ancestors clip an item, and where the nearest scroller stands, so a
+// focus failure says what hides the control rather than only that it is hidden.
+QString clipChain(QQuickItem *item) {
+  QStringList parts;
+  bool scroller = false;
+  for (auto parent = item->parentItem(); parent; parent = parent->parentItem()) {
+    const auto name = parent->objectName().isEmpty() ? QString(parent->metaObject()->className())
+                                                     : parent->objectName();
+    if (!scroller && parent->property("contentHeight").isValid() &&
+        parent->property("contentY").isValid() && parent->property("flicking").isValid()) {
+      scroller = true;
+      parts << QString("view %1 y=%2 content=%3 height=%4")
+                   .arg(name).arg(parent->property("contentY").toDouble(), 0, 'f', 0)
+                   .arg(parent->property("contentHeight").toDouble(), 0, 'f', 0)
+                   .arg(parent->height(), 0, 'f', 0);
+    }
+    if (parent->clip()) {
+      const auto r = parent->mapRectToScene(parent->boundingRect());
+      parts << QString("clip %1 [%2,%3 %4x%5]").arg(name).arg(r.x(), 0, 'f', 0).arg(r.y(), 0, 'f', 0)
+                   .arg(r.width(), 0, 'f', 0).arg(r.height(), 0, 'f', 0);
+    }
+  }
+  return parts.join("; ");
 }
 
 bool outside(const QRectF &rect, const QRectF &limit) {
@@ -300,29 +325,54 @@ struct Audit {
           ++truncated;
         }
 
-        QSet<QQuickItem *> visited;
+        // Main.qml's revealFocus scrolls lists as Tab moves, so a delegate
+        // seen early in the walk can be destroyed by the time it is compared.
+        // Guarded pointers let the audit skip those rather than read freed
+        // memory.
+        QList<QPointer<QQuickItem>> tabGuards(tabItems.cbegin(), tabItems.cend());
+        QList<QPointer<QQuickItem>> visited;
         if (scope == window->contentItem())
           scope->forceActiveFocus(Qt::TabFocusReason);
         const int cap = std::min(600, std::max(60, int(tabItems.size()) * 3));
         for (int step = 0; step < cap; ++step) {
           QTest::keyClick(window, Qt::Key_Tab);
+          // Main.qml's revealFocus runs through Qt.callLater once the focus
+          // change has settled; let it finish, as the next frame would for a
+          // person, before judging what is on screen.
+          QCoreApplication::processEvents();
           auto current = window->activeFocusItem();
-          if (!current || visited.contains(current))
+          if (!current || std::any_of(visited.cbegin(), visited.cend(),
+                                      [current](const auto &seen) { return seen == current; }))
             break;
-          visited.insert(current);
-          const auto detail = QString("%1 %2 %3")
-                                  .arg(label(current), typeName(current),
-                                       rectangle(current->mapRectToScene(current->boundingRect())));
+          visited.append(current);
+          // A reveal that repositions a ListView can finish on the view's
+          // next layout pass. Give a control that starts out hidden up to
+          // 200 ms to arrive, and judge and report where it settles.
+          QPointer<QQuickItem> settling = current;
+          for (int wait = 0; wait < 12 && settling &&
+                             outside(settling->mapRectToScene(settling->boundingRect()), bounds(settling, window));
+               ++wait)
+            QTest::qWait(16);
+          if (!settling)
+            continue;
+          const auto focusRect = current->mapRectToScene(current->boundingRect());
+          const auto detail = QString("%1 %2 %3").arg(label(current), typeName(current), rectangle(focusRect));
           focusRows.append(detail);
-          if (!current->isVisible() || current->width() <= 0 || current->height() <= 0) {
-            failure("focus", context + " " + detail);
+          const auto shownRect = bounds(current, window);
+          if (!current->isVisible() || current->width() <= 0 || current->height() <= 0 ||
+              outside(focusRect, shownRect)) {
+            failure("focus", context + " " + detail + " shown " + rectangle(shownRect) +
+                                 " (" + clipChain(current) + ")");
             ++focus;
           }
         }
-        for (auto item : tabItems) {
+        for (const auto &guard : tabGuards) {
+          auto item = guard.data();
+          if (!item)
+            continue;
           bool reached = false;
-          for (auto focusItem : visited)
-            if (focusCovers(focusItem, item)) {
+          for (const auto &focusItem : visited)
+            if (focusItem && focusCovers(focusItem, item)) {
               reached = true;
               break;
             }

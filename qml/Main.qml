@@ -371,6 +371,77 @@ ApplicationWindow {
         searchField.forceActiveFocus();searchField.selectAll();
         Qt.callLater(()=>{if(!searchField.activeFocus){searchField.forceActiveFocus();searchField.selectAll();}});
     }
+    // WCAG 2.2 2.4.11 (Focus Not Obscured): a control reached from the
+    // keyboard must not sit hidden inside its scroller. Compose brings a
+    // focused child into view in its scroll container; Qt Quick's Flickable
+    // does not, and Qt documents no ensure-visible for it, so every list,
+    // grid, pane and dialog gets the same rule here. Each Flickable around the
+    // newly focused control scrolls the least distance that shows it, inner
+    // scrollers first, at once, as browsers and QScrollArea do for focus.
+    // Keyboard and programmatic focus both count (a row can hand focus to its
+    // own action); focus from a click does not, so the view never moves what
+    // is under the pointer. Controls, TextField and TextArea report the reason.
+    // Only Tab stops are revealed: a list that takes focus hands it on to its
+    // current item, and the list positions that item itself (the lyrics keep
+    // their keyboard line, not the playing one).
+    function revealFocus(item) {
+        if(!item || !item.activeFocusOnTab || item.focusReason===Qt.MouseFocusReason)return;
+        // MButton's focus ring sits 3px outside the control; keep it in view.
+        const ring=4;
+        // What the window really shows of a scroller: its own rectangle cut by
+        // every clipping ancestor and by the window. A list can run on under
+        // a pane's edge or a sheet's foot, so its own height is not enough.
+        function shown(target) {
+            const r=target.mapToItem(null,0,0,target.width,target.height);
+            let left=Math.max(0,r.x),top=Math.max(0,r.y);
+            let right=Math.min(window.width,r.x+r.width),bottom=Math.min(window.height,r.y+r.height);
+            for(let a=target.parent;a;a=a.parent) {
+                if(!a.clip)continue;
+                const c=a.mapToItem(null,0,0,a.width,a.height);
+                left=Math.max(left,c.x);top=Math.max(top,c.y);
+                right=Math.min(right,c.x+c.width);bottom=Math.min(bottom,c.y+c.height);
+            }
+            return {left:left,top:top,right:right,bottom:bottom};
+        }
+        for(let view=item.parent;view;view=view.parent) {
+            if(view.contentY===undefined || view.contentHeight===undefined || view.flicking===undefined)continue;
+            const area=shown(view);
+            if(area.right<=area.left || area.bottom<=area.top)continue;
+            // A ListView or GridView sizes its content from delegates it has
+            // made so far, so a row is placed with the view's own
+            // positionViewAtIndex(Contain) rather than a raw contentY.
+            if(typeof view.positionViewAtIndex==="function" && view.contentItem) {
+                let row=item;
+                while(row && row.parent!==view.contentItem)row=row.parent;
+                // A delegate's required index is exact; indexAt only finds
+                // rows inside the visible area, not those in the cache buffer.
+                const index=!row ? -1 : typeof row.index==="number" && row.index>=0 ? row.index
+                                   : view.indexAt(row.x+row.width/2,row.y+row.height/2);
+                if(index>=0)view.positionViewAtIndex(index,ListView.Contain);
+            }
+            const r=item.mapToItem(null,0,0,item.width,item.height);
+            if(view.contentHeight>view.height) {
+                let d=0;
+                if(r.y+r.height+ring>area.bottom)d=r.y+r.height+ring-area.bottom;
+                if(r.y-ring-d<area.top)d=r.y-ring-area.top;
+                const top=view.originY-view.topMargin;
+                const bottom=Math.max(top,view.originY+view.contentHeight+view.bottomMargin-view.height);
+                view.contentY=Math.max(top,Math.min(bottom,view.contentY+d));
+            }
+            if(view.contentWidth>view.width) {
+                let d=0;
+                if(r.x+r.width+ring>area.right)d=r.x+r.width+ring-area.right;
+                if(r.x-ring-d<area.left)d=r.x-ring-area.left;
+                const left=view.originX-view.leftMargin;
+                const right=Math.max(left,view.originX+view.contentWidth+view.rightMargin-view.width);
+                view.contentX=Math.max(left,Math.min(right,view.contentX+d));
+            }
+        }
+    }
+    // Once as focus arrives, and again after the focus change has finished:
+    // a row that hands focus on, or a view that lays out late, is only
+    // settled by then.
+    Connections { target: window; function onActiveFocusItemChanged(){window.revealFocus(window.activeFocusItem);Qt.callLater(window.revealFocus,window.activeFocusItem);} }
     // Material 3 navigation motion. Rail destinations fade through; the library
     // tabs are peers on one line, so they share the X axis in the direction of
     // travel through them.
@@ -1740,20 +1811,8 @@ ApplicationWindow {
     Component {
         id: queuePanel
         ColumnLayout {
-            // Qt Quick ListView keeps cached delegates alive beyond its clip.
-            // positionViewAtIndex(..., Contain) is Qt's documented way to
-            // show the whole row when Tab enters it or its action.
-            function revealFocusedRow() {
-                let item=window.activeFocusItem;
-                while(item && item!==queueList && item!==recentList) {
-                    if(item.selectionIndex>=0 && (item.listOwner===queueList || item.listOwner===recentList)) {
-                        item.listOwner.positionViewAtIndex(item.selectionIndex,ListView.Contain);
-                        return;
-                    }
-                    item=item.parent;
-                }
-            }
-            Connections { target: window; function onActiveFocusItemChanged(){if(immersiveQueue.visible)revealFocusedRow();} }
+            // Tab into a row or its action is kept in view by the window's
+            // revealFocus, as in every other scroller.
             function revealCurrent() {
                 window.revealPending=false;
                 queueList.currentIndex=app.currentIndex;
