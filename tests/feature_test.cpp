@@ -1203,7 +1203,7 @@ void runQueueHistoryTests(Backend *b, QQuickWindow *w) {
   c.check(shownItem(w->contentItem(), "queueView"), "the queue is the one on screen");
   {
     auto title = shownItem(w->contentItem(), "sidePanelTitle");
-    c.check(title && title->property("text").toString() == "Up next", "and the panel says so");
+    c.check(title && title->property("text").toString() == "Queue", "the panel keeps one name across its segments");
   }
   c.check(!shownItem(w->contentItem(), "recentlyPlayedView"), "the look-back is not");
   c.shot("01-queue-up-next");
@@ -1245,8 +1245,8 @@ void runQueueHistoryTests(Backend *b, QQuickWindow *w) {
   auto count = shownItem(w->contentItem(), "recentlyPlayedCount");
   c.check(count && count->property("text").toString().contains("2"), "and says how many");
   auto title = shownItem(w->contentItem(), "sidePanelTitle");
-  c.check(title && title->property("text").toString() == "Recently played",
-          "the panel says which of the two it is showing");
+  c.check(title && title->property("text").toString() == "Queue",
+          "the History segment does not rename the panel");
   c.check(!shownItem(w->contentItem(), "revealPlayingButton"),
           "and drops the shortcut that only makes sense for the queue");
   c.shot("03-queue-history-filled");
