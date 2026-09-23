@@ -1719,6 +1719,23 @@ void runLibraryPolishTests(Backend *b,QQuickWindow *w) {
       findItem(w->contentItem(),"localFacetTabs")->isVisible(),"Back restores the root tabs");
   b->library("local-artists");check(b->results()->count()==1,"artist grid groups imports");b->open(b->results()->get(0));check(b->results()->count()==4,"artist opens songs");
   const auto id=b->createPlaylist("After hours");b->addItemsToPlaylist(id,songs);b->openPlaylist(id);
+  QTest::qWait(250);
+  auto mosaic=findItem(w->contentItem(),"collectionPlaylistCover");
+  auto summary=findItem(w->contentItem(),"albumSummary");
+  check(mosaic&&mosaic->isVisible()&&mosaic->property("artworks").toList().size()>0,
+        "playlist detail reuses the grid mosaic");
+  check(summary&&summary->isVisible()&&summary->property("text").toString().startsWith("2 tracks · "),
+        "playlist detail shows its count and length in the album summary line");
+  check(!findItem(w->contentItem(),"libraryTabs")->isVisible(),"playlist detail sits below the tab level");
+  shot("playlist-detail-mosaic");
+  w->resize(480,620);QTest::qWait(300);
+  auto firstPlaylistTrack=findItem(w->contentItem(),"trackRow_0");
+  auto playlistTracks=findItem(w->contentItem(),"tracksView");
+  check(firstPlaylistTrack&&playlistTracks&&firstPlaylistTrack->isVisible()&&
+        firstPlaylistTrack->mapRectToScene(firstPlaylistTrack->boundingRect()).top()<
+            playlistTracks->mapRectToScene(playlistTracks->boundingRect()).bottom(),
+        "compact playlist keeps a track in the viewport below its header");
+  shot("playlist-detail-compact");w->resize(1280,850);QTest::qWait(250);
   auto dialog=w->findChild<QObject*>("playlistCoverDialog");check(dialog!=nullptr,"cover dialog exists");
   if(dialog){dialog->setProperty("playlistId",id);dialog->setProperty("preview",b->preparePlaylistCover(QUrl::fromLocalFile(art)));QMetaObject::invokeMethod(dialog,"open");QTest::qWait(400);shot("playlist-cover-crop");
     auto save=findItem(w->contentItem(),"savePlaylistCover");check(save&&save->isVisible()&&save->isEnabled(),"cover save visible and enabled");

@@ -713,7 +713,9 @@ ApplicationWindow {
                     Accessible.name: window.title || "Content"
                     readonly property real headerCollapse: tracks.visible ? Math.max(0,Math.min(1,(tracks.contentY-tracks.originY)/160)) : 0
                     readonly property bool compactHeader: headerCollapse>0.7
-                    property real headerExtent: (app.albumInfo.summary?Math.min(156,window.height*0.19):76)*(1-headerCollapse)+40*headerCollapse
+                    // A compact playlist keeps its cover at the existing
+                    // small header size so Play and a track remain in view.
+                    property real headerExtent: (app.page==="local" && !window.atLeastMedium ? 76 : (app.albumInfo.summary || app.page==="local")?Math.min(156,window.height*0.19):76)*(1-headerCollapse)+40*headerCollapse
                     // PaneMotion.kt:150-177 uses DefaultSpatial for pane size.
                     Behavior on headerExtent {enabled:app.motion && !tracks.moving;NumberAnimation {objectName:"mainHeaderExtentMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
                     visible: true
@@ -786,6 +788,10 @@ ApplicationWindow {
                         RowLayout {
                             visible: !window.artistPage
                             Layout.fillWidth: true; spacing: 16
+                            readonly property var playlistData: app.page==="local" ? (app.playlists.find(p => p.id===app.libraryId) || ({})) : ({})
+                            // ArtCard.qml uses PlaylistCover for the grid mosaic;
+                            // a playlist detail uses that same component and art.
+                            PlaylistCover { objectName:"collectionPlaylistCover"; visible:app.page==="local" && !app.cover; artworks:parent.playlistData.artworks || []; radius:Theme.shapeExtraLarge; Layout.preferredWidth:content.headerExtent; Layout.preferredHeight:content.headerExtent }
                             Artwork { id:collectionArtwork;objectName:"collectionArtwork";opacity:window.albumFlying?0:1;visible: !!app.cover; url: app.cover; Layout.preferredWidth: content.headerExtent; Layout.preferredHeight: content.headerExtent; radius: (app.page==="artist" || app.page==="local-artist") ? width/2 : app.albumInfo.summary?24:12; shape: (app.page==="artist" || app.page==="local-artist") ? "cookie9Sided" : ""; pixels: app.albumInfo.summary?384:180
                                 AbstractButton {anchors.fill:parent;objectName:"inspectCollectionArtwork";Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:artworkViewer.inspect(app.cover)
                                     background:Rectangle {color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.visualFocus?2:0;border.color:Theme.primary}
@@ -804,7 +810,17 @@ ApplicationWindow {
                                 }
                             SungText {heading: true; visible: !pageSearchHost.visible; text: window.serverDisconnected ? "Music server" : window.destination==="library"&&window.libraryTab==="playlists"&&!window.localPlaylist ? "Playlists" : app.title; objectName: "collectionHeaderTitle"; emphasized: true; scaled: true; font.pixelSize: app.page==="home"?Theme.displaySmall:Theme.headlineMedium-(Theme.headlineMedium-Theme.titleLarge)*content.headerCollapse; Behavior on font.pixelSize { NumberAnimation { duration: app.motion?Theme.normal:0; easing.type: Easing.OutCubic } } Layout.fillWidth: true; wrapMode: Text.Wrap; maximumLineCount: 2 }
                                 SungText { objectName: "albumArtist"; visible: !!app.albumInfo.artist;opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true; text: app.albumInfo.artist || ""; font.pixelSize: Theme.bodyLarge; color: Theme.muted; maximumLineCount: 2; wrapMode: Text.Wrap }
-                                SungText { objectName: "albumSummary"; visible: !!app.albumInfo.summary;opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true; text: app.albumInfo.summary || ""; font.pixelSize: Theme.appBarSubtitle.medium; color: Theme.muted; wrapMode: Text.Wrap }
+                                SungText { objectName: "albumSummary"; visible: !!app.albumInfo.summary || app.page==="local";opacity:1-content.headerCollapse;Layout.maximumHeight:implicitHeight*(1-content.headerCollapse);clip:true; Layout.fillWidth: true
+                                    text: {
+                                        if(app.page!=="local")return app.albumInfo.summary || ""
+                                        // Entries exposes get(), not its C++ rows field. A
+                                        // playlist heading counts the full source, even filtered.
+                                        app.playlists
+                                        let seconds=0
+                                        for(let i=0;i<app.results.count;++i)seconds+=Number(app.results.get(i).seconds)||0
+                                        return window.countText(app.results.count)+" · "+app.formatTime(seconds*1000)
+                                    }
+                                    font.pixelSize: Theme.appBarSubtitle.medium; color: Theme.muted; wrapMode: Text.Wrap }
                             }
                             // The app bar's own actions. Material measures them
                             // against the room the title leaves and folds the
