@@ -110,7 +110,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   QPainter paint(&cover);paint.setPen(QPen(QColor("#d9f1dd"),5));
   for(int i=0;i<8;++i)paint.drawEllipse(QPoint(320,320),30+i*32,30+i*32);
   paint.end();cover.save(dir+"/music/cover.png");
-  QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","180","-metadata","album=Still Water","-metadata","artist=Example Artist",dir+"/music/01.flac"});
+  QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","anullsrc=r=8000:cl=mono","-t","180","-metadata","title=Coming ashore","-metadata","album=Still Water","-metadata","artist=Example Artist",dir+"/music/01.flac"});
   check(encode.waitForFinished(30000)&&encode.exitCode()==0,"generate silent local audio");
   QFile::copy(dir+"/music/01.flac",dir+"/music/02.flac");QFile::copy(dir+"/music/01.flac",dir+"/music/03.flac");
   b->importMusicFolder(QUrl::fromLocalFile(dir+"/music"));check(waitFor([&]{return !b->importingLocal();}),"import local fixture");
@@ -513,6 +513,10 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
             "reduced motion centres the previous cover immediately");
     }
   }
+  auto title=visibleItem(w->contentItem(),"immersiveTitle");
+  check(title&&title->property("lineCount").toInt()==1&&!title->property("truncated").toBool(),
+        "480px coverflow title uses the column width and stays on one line");
+  shot("coverflow-480");
   auto waveMotion=w->findChild<QObject*>("seekWaveMotion");
   check(waveMotion&&waveMotion->property("duration").toInt()==1000,
         "the 28px seek wave advances one wavelength per second");
