@@ -1026,6 +1026,9 @@ ApplicationWindow {
                             Column {
                                 objectName: "serverEmptyState"; anchors.centerIn: parent; spacing: 16
                                 visible: window.serverDisconnected
+                                // The empty TrackList is a later full-page sibling.
+                                // Keep this action above its transparent hit area.
+                                z: 1
                                 SungText { anchors.horizontalCenter: parent.horizontalCenter; text: "Connect your music library"; font.pixelSize: Theme.titleLarge }
                                 MButton { objectName: "serverEmptyConnect"; anchors.horizontalCenter: parent.horizontalCenter; text: "Connect server"; filled: true; onClicked: serverConnection.open() }
                             }
