@@ -79,9 +79,12 @@ Item {
     }
     function wake() { controlsShown=true;idle.restart(); }
     function showLyricsSearch() {
-        if(preferredLayout==="artwork")layoutRequested("lyrics");
+        if(preferredLayout==="artwork" || preferredLayout==="singalong")layoutRequested("lyrics");
         immersiveLyrics.openSearch();wake();
     }
+    // A layout fade can reveal Lyrics after openSearch's first focus request.
+    // Repeat the request when its pane enters the visible layout.
+    onDisplayedLayoutChanged: if(displayedLayout==="lyrics" && immersiveLyrics.searchOpen)immersiveLyrics.openSearch()
     onHideBlockedChanged: wake()
     onEffectiveLayoutChanged: {
         layoutChange.stop();
@@ -131,7 +134,7 @@ Item {
             // already wore the overflow glyph while opening a layout menu, so
             // the icon that means "more actions" did not. There is one now,
             // and it means it.
-            MButton { objectName: "immersiveLyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; enabled: player.hasLyrics && player.displayedLayout!=="singalong"; Accessible.ignored: topControls.opacity===0; onClicked: player.showLyricsSearch() }
+            MButton { objectName: "immersiveLyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; enabled: player.hasLyrics; Accessible.ignored: topControls.opacity===0; onClicked: player.showLyricsSearch() }
             MButton { symbol: "heart"; selected: app.liked; tip: app.liked?"Unlike":"Like"; enabled: app.currentIndex>=0; Accessible.ignored: topControls.opacity===0; onClicked: app.toggleLike(app.current) }
             MButton {id:layoutButton;objectName:"immersiveLayoutButton";symbol:"more";tip:"More actions";selected:layoutMenu.visible;Accessible.ignored: topControls.opacity===0;onClicked:layoutMenu.popup(layoutButton,width-layoutMenu.width,height+4)}
         }

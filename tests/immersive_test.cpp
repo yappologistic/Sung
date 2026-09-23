@@ -471,6 +471,21 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     check(previousCleared,"reduced motion clears the completed fill immediately");
     b->setMotion(true);
   }
+  auto singSearch=visibleItem(w->contentItem(),"immersiveLyricSearchButton");
+  check(singSearch&&singSearch->isEnabled(),"Find in lyrics is available in Sing along");
+  if(singSearch){
+    click("immersiveLyricSearchButton");
+    check(waitFor([&]{auto field=visibleItem(w->contentItem(),"lyricSearchField");
+                     return player->property("preferredLayout")=="lyrics"&&
+                            player->property("displayedLayout")=="lyrics"&&field&&field->hasActiveFocus();}),
+          "clicking Find in Sing along opens Lyrics and focuses search");
+    if(visibleItem(w->contentItem(),"lyricSearchField")){
+      shot("singalong-search");
+      QTest::keyClick(w,Qt::Key_Escape);
+      check(waitFor([&]{return !visibleItem(w->contentItem(),"lyricSearchField");}),
+            "Escape returns from the lyric search field");
+    }
+  }
   choose("split");
   const auto playingId=b->current().value("id");
   click("immersiveAlbumButton");
