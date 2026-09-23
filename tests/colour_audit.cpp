@@ -437,8 +437,23 @@ struct Audit {
       // Reject attenuated differences too: a translucent overlay or an
       // antialiased edge must not be treated as a full-strength ink pixel.
       const int step = item.category == "icon" || rect.height() < 28 ? 2 : 4;
+      // SingAlong's fill is a sibling drawn over the same glyphs, so the
+      // body is only visible ink outside it. Inside, the ink-free frame still
+      // holds the fill, and its antialiased edges read as a light background
+      // under the body; measure the unsung part alone.
+      QRectF coveredByFill;
+      if (item.item->objectName() == "singAlongCurrent" && item.item->parentItem())
+        for (auto sibling : item.item->parentItem()->childItems())
+          if (sibling->objectName() == "singAlongFill" && sibling->isVisible() && sibling->opacity() > 0)
+            coveredByFill = sibling->mapRectToScene(sibling->boundingRect());
       for (int y = y0; y < y1; y += step)
         for (int x = x0; x < x1; x += step) {
+          if (!coveredByFill.isEmpty() &&
+              coveredByFill.contains(QPointF((x + 0.5) * window->width() / background.width(),
+                                             (y + 0.5) * window->height() / background.height()))) {
+            ++maskedNonInkPixels;
+            continue;
+          }
           const QRgb bg = background.pixel(x, y);
           const QRgb visible = image.pixel(x, y);
           if (visible == bg) {
@@ -505,7 +520,12 @@ struct Audit {
           break;
         }
       }
-      if (!expectedRole.isEmpty() && role != expectedRole)
+      // Two roles can resolve to one RGB: at high contrast over a dark surface
+      // MCU drives onSurface and onSurfaceVariant both to T100, and the lookup
+      // names whichever it met first. The ink passes when it is the expected
+      // role's colour.
+      if (!expectedRole.isEmpty() && role != expectedRole &&
+          themeColor(window, expectedRole).rgb() != item.color.rgb())
         fail("lyric-role", context, identity + " role=" + role + " expected=" + expectedRole);
     }
     QJsonArray boundaryChecks;
