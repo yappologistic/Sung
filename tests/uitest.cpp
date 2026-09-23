@@ -1141,7 +1141,19 @@ void runServerTests(Backend *b,QQuickWindow *w) {
   QMetaObject::invokeMethod(w,"openServerConnection");QTest::qWait(400);shot("compact-connection");
   if(auto dialog=w->findChild<QObject*>("serverConnectionDialog"))check(dialog->property("height").toReal()<=w->height()-48,"connection dialog fits compact window");
   QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(350);
-  b->pause();b->server()->disconnectServer();b->browseServer();check(until([&]{return !b->busy();})&&!b->error().isEmpty(),"disconnected view reports actionable error");
+  b->pause();b->server()->disconnectServer();b->browseServer();
+  auto emptyState=findItem(w->contentItem(),"serverEmptyState");
+  auto emptyError=findItem(w->contentItem(),"errorBar");
+  check(until([&]{return !b->busy();})&&b->error().isEmpty()&&emptyState&&emptyState->isVisible()&&emptyError&&!emptyError->isVisible(),
+        "unconfigured server shows its empty state without an error bar");
+  click("serverEmptyConnect");
+  if(address&&user&&password){address->setProperty("text","http://127.0.0.1:1");user->setProperty("text","audit");password->setProperty("text","audit");}
+  click("connectServerButton");
+  check(until([&]{return !b->server()->connecting()&&!b->server()->error().isEmpty();})&&!b->error().isEmpty(),
+        "a failed connection attempt still reports its error");
+  QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(250);
+  auto errorBar=findItem(w->contentItem(),"errorBar");
+  check(errorBar&&errorBar->isVisible(),"the failed attempt reaches the page error bar");
   shot("disconnected");fprintf(stdout,"RESULT %d failures\n",failures);QCoreApplication::exit(failures?1:0);
 }
 

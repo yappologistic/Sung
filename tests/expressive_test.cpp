@@ -1526,6 +1526,52 @@ void runInterfaceAuditTests(Backend *b, QQuickWindow *w) {
   b->setWatchMusicFolders(false);
   b->setOnlineArtwork(false);
 
+  // A server account that has not been entered is an empty page, not a
+  // request failure. Test the dialog with an actual failed local connection.
+  w->resize(600, 800);
+  b->browseServer();
+  c.check(c.until([&] { return !b->busy(); }), "the disconnected server page settles");
+  c.check(shownItem(w->contentItem(), "serverEmptyState"),
+          "the unconfigured server page explains how to connect");
+  c.check(!shownItem(w->contentItem(), "errorBar"),
+          "an unconfigured account does not raise an error bar");
+  c.shot("00-server-empty");
+  c.click("serverEmptyConnect");
+  auto connection = w->findChild<QObject *>("serverConnectionDialog");
+  c.check(c.until([&] { return connection && connection->property("visible").toBool(); }),
+          "the empty state's Connect button opens the connection dialog");
+  QQuickItem *address = nullptr, *username = nullptr, *password = nullptr;
+  c.check(c.until([&] {
+    if (!connection || !connection->property("visible").toBool()) return false;
+    address = connection->findChild<QQuickItem *>("serverAddress");
+    username = connection->findChild<QQuickItem *>("serverUsername");
+    password = connection->findChild<QQuickItem *>("serverPassword");
+    return address && username && password && address->isVisible() &&
+           username->isVisible() && password->isVisible();
+  }), "the open connection dialog offers its fields");
+  if (address && username && password) {
+    address->setProperty("text", "http://127.0.0.1:1");
+    username->setProperty("text", "audit");
+    password->setProperty("text", "audit");
+    c.click("connectServerButton");
+    c.check(c.until([&] { return !b->server()->connecting() && !b->server()->error().isEmpty(); }),
+            "a failed connection reports its error");
+    c.check(!shownItem(w->contentItem(), "errorBar"),
+            "the error bar stays behind the open connection dialog");
+    c.shot("00-server-error-dialog");
+    QTest::keyClick(w, Qt::Key_Escape);
+    c.check(c.until([&] { return shownItem(w->contentItem(), "errorBar") != nullptr; }),
+            "the failed attempt appears on the page after the dialog closes");
+    c.shot("00-server-error-page");
+    c.click("serverEmptyConnect");
+    c.check(!shownItem(w->contentItem(), "errorBar"),
+            "opening a dialog hides an error that is standing");
+    QTest::keyClick(w, Qt::Key_Escape);
+  }
+  b->server()->disconnectServer();
+  b->dismissError();
+  b->home();
+
   auto settings = w->findChild<QObject *>("settingsDialog");
   c.check(settings, "the settings dialog exists");
   if (!settings)

@@ -55,6 +55,13 @@ void Backend::setupServer() {
   });
 
   connect(&m_server, &MusicServer::changed, this, &Backend::libraryChanged);
+  connect(&m_server, &MusicServer::changed, this, [this] {
+    // A failed connection attempt outlives its dialog. The dialog shows the
+    // server's own error while it is open; the page bar carries it afterward.
+    if (!m_server.connecting() && !m_server.error().isEmpty() &&
+        m_error != m_server.error())
+      notifyError(m_server.error(), "catalog");
+  });
   connect(&m_server, &MusicServer::message, this, &Backend::toast);
   connect(&m_server, &MusicServer::accountChanged, this, [this] {
     if (isServerSource(current().value("source")))
@@ -144,6 +151,15 @@ void Backend::serverBrowseRequest(QVariantMap req, bool push, bool append) {
   if (!append)
     m_results.assign({});
   emit catalogChanged();
+  // A disconnected account is the page's empty state. Keep a failed login's
+  // actual error, and do not turn a missing account into a request failure.
+  if (!m_server.connected()) {
+    m_busy = false;
+    if (!m_server.error().isEmpty())
+      notifyError(m_server.error(), "catalog");
+    emit catalogChanged();
+    return;
+  }
   m_server.browse(
       req, [this, append](const QVariantMap &data, const QString &error) {
         m_busy = false;

@@ -2234,7 +2234,7 @@ ApplicationWindow {
         // Material has a pair of roles for this and nothing else in the app
         // wears them: an error is the one thing on screen that should not look
         // like everything else.
-        radius: Theme.shapeLarge; color: Theme.errorContainer; visible: !!app.error; z: 50
+        radius: Theme.shapeLarge; color: Theme.errorContainer; visible: !!app.error && !window.modalOpen; z: 50
         SungText { id: errorText; anchors.fill: parent; anchors.margins: 16; anchors.rightMargin: app.canRetry?140:58; text: app.error; wrapMode: Text.Wrap; elide: Text.ElideRight; maximumLineCount: 5; color: Theme.errorContainerText; font.pixelSize: Theme.bodyMedium }
         MButton { anchors.right: parent.right; anchors.rightMargin: 48; anchors.verticalCenter: parent.verticalCenter; text: "Retry"; visible: app.canRetry; ink: Theme.errorContainerText; onClicked: app.retry() }
         MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; symbol: "close"; ink: Theme.errorContainerText; tip: "Dismiss error"; onClicked: app.dismissError() }
