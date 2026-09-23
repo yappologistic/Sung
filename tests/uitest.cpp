@@ -1861,6 +1861,10 @@ void runVisualRefinementTests(Backend *b,QQuickWindow *w){
   check(denseRow&&denseLead&&qAbs(denseRow->height()-56)<1&&qAbs(denseLead->width()-40)<1,
         "compact album rows use a 56dp body and 40dp leading slot");
   b->playCollection(0);check(until([&]{return b->playing();}),"playback starts");
+  auto outputControl=findItem(w->contentItem(),"playerOutputButton");
+  check(outputControl&&outputControl->property("symbol")=="speaker"&&outputControl->property("iconWidth")=="uniform",
+        "audio output uses the uniform speaker icon button");
+  check(validIconSizes(w->contentItem()),"speaker icon keeps its optical size");
   click("playerOutputButton");auto picker=w->findChild<QObject*>("outputPicker");check(picker&&picker->property("visible").toBool(),"output picker opens beside player");QTest::qWait(180);
   // The visible row owns radio semantics; the disabled indicator is decorative.
   auto defaultChoice=findItem(w->contentItem(),"outputChoice_0");
@@ -1884,7 +1888,7 @@ void runVisualRefinementTests(Backend *b,QQuickWindow *w){
   check(more&&more->isVisible(),"player overflow is available in narrow window");
   if(more)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,more->mapToScene(more->boundingRect().center()).toPoint());
   check(folders&&!folders->property("visible").toBool(),"player overflow does not open Music folders");
-  QTest::qWait(150);click("appBarMenuAction_output");check(picker&&picker->property("visible").toBool(),"output accessible in narrow window");QTest::qWait(180);check(picker&&picker->property("y").toReal()+picker->property("height").toReal()<w->height(),"output popup remains inside narrow window");shot("08-narrow-output");if(picker)QMetaObject::invokeMethod(picker,"close");
+  QTest::qWait(150);click("appBarMenuAction_output");check(picker&&picker->property("visible").toBool(),"output accessible in narrow window");QTest::qWait(180);check(picker&&picker->property("y").toReal()+picker->property("height").toReal()<w->height(),"output popup remains inside narrow window");check(validIconSizes(w->contentItem()),"folded speaker icon keeps its optical size");shot("08-narrow-output");if(picker)QMetaObject::invokeMethod(picker,"close");
   b->setMotion(false);b->library("local-albums");QTest::qWait(200);click("openCollectionCard");check(!w->property("albumFlying").toBool(),"reduced motion skips album flight");
   check(b->playing(),"navigation and customization preserve playback");b->togglePin(pin);b->setStartPage("home");b->setCompactDensity(false);b->setMotion(true);b->resetHomeLayout();b->stop();b->clearQueue();
   fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);

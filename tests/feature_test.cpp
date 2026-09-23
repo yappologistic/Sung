@@ -3851,13 +3851,16 @@ void runMaterialExpressiveTests(Backend *b, QQuickWindow *w) {
               "the 800px player keeps volume directly reachable");
       auto overflow = anyItem(w->contentItem(), "playerOverflow");
       QStringList folded;
+      bool speakerOutput = false;
       if (overflow)
         for (const auto &action : overflow->property("live").toList()) {
           const auto row = action.toMap();
           folded << row.value("key").toString();
+          if (row.value("key") == "output") speakerOutput = row.value("symbol") == "speaker";
         }
       c.check(folded.contains("like") && folded.contains("output") && !folded.contains("volume"),
               "the 800px player folds like and output before volume");
+      c.check(speakerOutput, "folded audio output keeps its speaker glyph");
     }
     if (width == 1440 || width == 1024 || width == 840 || width == 600) {
       for (const QString &mode : {QStringLiteral("dark"), QStringLiteral("light")}) {

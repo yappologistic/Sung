@@ -1391,13 +1391,15 @@ ApplicationWindow {
                                      label:app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song",
                                      toggle:true, checked:app.repeat>0, visible:window.width<980,
                                      trigger:function(){app.repeat=(app.repeat+1)%3}},
-                                    {key:"output", label:"Audio output", visible:!playerLayout.showOutput,
+                                    {key:"output", symbol:"speaker", label:"Audio output", visible:!playerLayout.showOutput,
                                      trigger:function(){outputPicker.showAt(playerOverflow)}},
                                     {key:"volume", symbol:app.volume>0?"volume":"mute", label:"Volume",
                                      visible:!playerLayout.showVolume, trigger:function(){volumeControl.openFrom(playerOverflow)}}
                                 ]
                             }
-                            MButton {id:outputButton;objectName:"playerOutputButton";symbol:"chevron";iconWidth:"narrow";tip:"Audio output · "+app.audioDeviceName;selected:outputPicker.visible;visible:playerLayout.showOutput;onClicked:outputPicker.showAt(outputButton)}
+                            // Material Symbols Rounded speaker names audio routing
+                            // at the same optical size as the adjacent icon buttons.
+                            MButton {id:outputButton;objectName:"playerOutputButton";symbol:"speaker";tip:"Audio output · "+app.audioDeviceName;selected:outputPicker.visible;visible:playerLayout.showOutput;onClicked:outputPicker.showAt(outputButton)}
                             VolumeControl {id:volumeControl;showSlider:window.width>=1160;visible:playerLayout.showVolume}
                         }
                     }
