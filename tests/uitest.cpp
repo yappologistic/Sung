@@ -1200,6 +1200,39 @@ void runQolTests(Backend *b,QQuickWindow *w) {
   if(tracks){tracks->forceActiveFocus();}
   QTest::keyClick(w,Qt::Key_Question);QTest::qWait(300);check(help&&help->property("visible").toBool(),"question mark opens help outside text fields");
   QTest::keyClick(w,Qt::Key_Escape);QTest::qWait(200);
+  auto sessions=w->findChild<QObject*>("sessionsDialog");
+  if(sessions)QMetaObject::invokeMethod(sessions,"open");
+  QTest::qWait(650);
+  auto sessionField=findItem(w->contentItem(),"sessionName");
+  auto sessionEmpty=findItem(w->contentItem(),"sessionsEmpty");
+  const auto fieldBottom=sessionField?sessionField->mapToScene(QPointF(0,sessionField->height())).y():0;
+  const auto emptyTop=sessionEmpty?sessionEmpty->mapToScene(QPointF()).y():0;
+  check(sessions&&sessionEmpty&&sessionEmpty->isVisible()&&
+            sessions->property("height").toReal()<350&&emptyTop>=fieldBottom&&emptyTop-fieldBottom<=24,
+        "empty sessions dialog hugs its field and places guidance directly below it");
+  const auto emptySessionHeight=sessions?sessions->property("height").toReal():0;
+  shot("02b-empty-sessions");
+  for(const QSize size:{QSize(480,620),QSize(600,800),QSize(840,800),QSize(1024,768),QSize(1440,900)})
+    for(const QString &theme:{QStringLiteral("dark"),QStringLiteral("light")}){
+      w->resize(size);b->setTheme(theme);QTest::qWait(180);
+      const auto height=sessions?sessions->property("height").toReal():0;
+      const auto width=sessions?sessions->property("width").toReal():0;
+      const auto button=findItem(w->contentItem(),"saveSessionButton");
+      const auto field=findItem(w->contentItem(),"sessionName");
+      const auto fieldEnd=field?field->mapToScene(QPointF(0,field->height())).y():0;
+      const auto emptyStart=sessionEmpty?sessionEmpty->mapToScene(QPointF()).y():0;
+      const auto buttonRight=button?button->mapToScene(QPointF(button->width(),0)).x():w->width()+1;
+      check(sessions&&sessionEmpty&&sessionEmpty->isVisible()&&button&&buttonRight<=w->width()&&
+                emptyStart>=fieldEnd&&emptyStart-fieldEnd<=24&&
+                (size.width()<600 ? qAbs(width-size.width())<1&&qAbs(height-size.height())<1
+                                  : width<=560&&height<=size.height()-48&&height<350),
+            "empty sessions layout fits this width and theme");
+      QTest::mouseMove(w,QPoint(w->width()-4,w->height()-4));
+      shot(qPrintable(QString("02d-sessions-%1-%2").arg(size.width()).arg(theme)));
+    }
+  w->resize(1180,800);b->setTheme("dark");QTest::qWait(250);
+  if(sessions)QMetaObject::invokeMethod(sessions,"close");
+  QTest::qWait(200);
   const QVariantMap one{{"id","qol00000001"},{"videoId","qol00000001"},{"title","First song"},{"kind","song"}};
   const QVariantMap two{{"id","qol00000002"},{"videoId","qol00000002"},{"title","Second song"},{"kind","song"}};
   const auto id=b->createPlaylist("QOL playlist");b->addToPlaylist(id,one);
@@ -1209,11 +1242,45 @@ void runQolTests(Backend *b,QQuickWindow *w) {
   QTest::qWait(200);b->openPlaylist(id);check(b->results()->count()==1,"cancel does not add songs");
   w->setProperty("batchItems",QVariantList{one,two});QMetaObject::invokeMethod(w,"addPlaylistSelection",Q_ARG(QVariant,id));QTest::qWait(200);if(duplicate)QMetaObject::invokeMethod(duplicate,"accept");QTest::qWait(250);
   check(b->results()->count()==2&&b->undoMessage().contains("skipped 1"),"Skip duplicates adds only new songs and reports count");b->undo();check(b->results()->count()==1,"playlist addition remains undoable");
-  qputenv("SUNG_BUFFER_FIXTURE","1");b->clearQueue();QVariantList queue;for(int i=0;i<40;++i)queue.append(one);b->enqueueItems(queue,false,-1);b->playAt(32);
+  qputenv("SUNG_BUFFER_FIXTURE","1");b->clearQueue();QVariantList queue;for(int i=0;i<40;++i)queue.append(one);b->enqueueItems(queue,false,-1);
+  b->playAt(32);
   check(until([&]{return b->playing();}),"fixture playback starts");
   QTest::keyClick(w,Qt::Key_J,Qt::ControlModifier);QTest::qWait(500);
   auto q=findItem(w->contentItem(),"queueView");check(q&&q->property("currentIndex").toInt()==32&&q->hasActiveFocus(),"Ctrl+J focuses exact playing queue occurrence");
   auto row=findItem(w->contentItem(),"queueRow_32");check(row&&q&&row->mapToItem(q,QPointF()).y()>=0&&row->mapToItem(q,QPointF()).y()+row->height()<=q->height()+1,"playing queue occurrence is visible");shot("04-playing-song");
+  if(sessions)QMetaObject::invokeMethod(sessions,"open");
+  QTest::qWait(650);
+  sessionField=findItem(w->contentItem(),"sessionName");
+  if(sessionField){sessionField->forceActiveFocus();for(const QChar letter:QStringLiteral("QOL session"))QTest::keyClick(w,letter.toLatin1());}
+  auto saveSession=findItem(w->contentItem(),"saveSessionButton");
+  if(saveSession)QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,
+                                  saveSession->mapToScene(QPointF(saveSession->width()/2,saveSession->height()/2)).toPoint());
+  QTest::qWait(650);
+  check(sessions&&saveSession&&b->sessions().size()==1&&
+            sessions->property("height").toReal()>emptySessionHeight+60&&
+            sessions->property("height").toReal()<=w->height()-48,
+        "saving through the inline action grows sessions dialog to its list within the window cap");
+  shot("02c-saved-session");
+  for(int i=1;i<9;++i)b->saveSession(QString("QOL session %1").arg(i));
+  QTest::qWait(250);
+  auto sessionList=findItem(w->contentItem(),"sessionsList");
+  auto sessionFooter=sessions?sessions->property("footer").value<QQuickItem*>():nullptr;
+  auto sessionDivider=sessionFooter?findItem(sessionFooter,"dialogScrollDivider"):nullptr;
+  check(sessions&&sessionList&&sessionList->property("count").toInt()==9&&
+            sessions->property("height").toReal()<=w->height()-48&&
+            sessionList->property("contentHeight").toReal()>sessionList->height()&&
+            sessionDivider&&sessionDivider->isVisible(),
+        "a long session list scrolls inside the window-capped dialog");
+  shot("02e-long-sessions");
+  w->resize(480,620);QTest::qWait(400);
+  check(sessions&&sessionList&&qAbs(sessions->property("height").toReal()-w->height())<1&&
+            sessionList->property("contentHeight").toReal()>sessionList->height(),
+        "the long session list scrolls in a compact full-screen dialog");
+  shot("02f-compact-long-sessions");
+  w->resize(1180,800);QTest::qWait(200);
+  if(sessions)QMetaObject::invokeMethod(sessions,"close");
+  for(const auto &savedSession:b->sessions())b->deleteSession(savedSession.toMap().value("id").toString());
+  QTest::qWait(200);
   w->resize(780,580);QTest::qWait(300);QMetaObject::invokeMethod(w,"revealPlaying");QTest::qWait(250);shot("05-compact-queue");
   QTest::keyClick(w,Qt::Key_F1);QTest::qWait(300);shot("06-compact-shortcuts");
   b->stop();b->deletePlaylist(id);b->clearQueue();qunsetenv("SUNG_BUFFER_FIXTURE");
