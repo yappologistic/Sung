@@ -585,16 +585,22 @@ void runPersonalizationTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(150);
   c.check(c.evaluate("Theme.useArtwork").toBool() && !c.evaluate("Theme.useAccent").toBool(),
           "artwork accent takes priority over the chosen color");
-  b->setArtworkAccent(false);
   c.evaluate("Theme.artworkSeed=Qt.rgba(0,0,0,0)");
   QTest::qWait(150);
-  c.check(c.evaluate("Theme.useAccent").toBool(), "the chosen color returns when artwork accent is off");
+  c.check(!c.evaluate("Theme.useArtwork").toBool() && c.evaluate("Theme.useAccent").toBool() &&
+              c.evaluate("Theme.activeKind").toString() == "accent" &&
+              c.evaluate("Theme.primary").value<QColor>() == themed,
+          "a coverless artwork source reveals the chosen accent while the setting stays on");
+  b->setArtworkAccent(false);
+  c.check(c.evaluate("Theme.useAccent").toBool(), "the chosen accent remains after the setting is turned off");
   const auto stored = b->accentColor();
   b->setAccentColor("not a color");
   c.check(b->accentColor() == stored, "an unreadable value never replaces the stored color");
   b->setAccentColor("");
   QTest::qWait(150);
-  c.check(!c.evaluate("Theme.useSource").toBool() && c.evaluate("Theme.primary").value<QColor>() == defaultPrimary,
+  c.check(!c.evaluate("Theme.useSource").toBool() &&
+              c.evaluate("Theme.activeKind").toString() == "default" &&
+              c.evaluate("Theme.primary").value<QColor>() == defaultPrimary,
           "clearing the color restores the built-in palette");
 
   // --- Volume normalization ---
@@ -1050,9 +1056,13 @@ void runOnboardingTests(Backend *b, QQuickWindow *w) {
   c.click("onboardTheme_dark");
   c.check(b->theme() == "dark", "and can be changed again");
   c.check(b->accentColor().isEmpty(), "no accent is chosen yet");
+  const auto defaultPrimary = c.evaluate("Theme.primary").value<QColor>();
   c.click("accentSeed_386a20");
   c.check(b->accentColor() == "#386a20", "the accent picker works inside the flow");
-  c.check(c.evaluate("Theme.useAccent").toBool(), "the chosen accent themes the app behind the flow");
+  c.check(c.evaluate("Theme.useAccent").toBool() &&
+              c.evaluate("Theme.activeKind").toString() == "accent" &&
+              c.evaluate("Theme.primary").value<QColor>() != defaultPrimary,
+          "the chosen accent paints the app behind the flow");
   c.shot("01-onboarding-appearance");
 
   c.click("onboardingBack");

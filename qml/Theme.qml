@@ -1,24 +1,90 @@
 pragma Singleton
 import QtQuick
 QtObject {
+    id: theme
     property color artworkSeed: "transparent"
-    Behavior on artworkSeed {enabled:app.motion && app.artworkAccent;ColorAnimation {duration:springEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:springEffects}}
-    readonly property bool useArtwork: app.artworkAccent && artworkSeed.a > 0
+    readonly property bool useArtwork: activeKind === "artwork"
     // A hand-picked Material source color, used when no cover is driving the theme.
     property color accentSeed: app.accentColor ? app.accentColor : "transparent"
-    Behavior on accentSeed {enabled:app.motion;ColorAnimation {duration:springEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:springEffects}}
-    readonly property bool useAccent: !useArtwork && accentSeed.a > 0
+    readonly property bool useAccent: activeKind === "accent"
     readonly property bool useSource: useArtwork || useAccent
-    readonly property color sourceColor: useArtwork ? artworkSeed : accentSeed
-    // The warm default source runs through MCU's role resolver. Its standard
-    // Tonal Spot roles retain the original palette, while contrast and variant
-    // alternatives take the published curves (color_spec_2021.ts:130-739).
+    // The source is picked from the same warm family as the hand-tuned
+    // original palette. Its standard Tonal Spot role overrides below preserve
+    // that palette exactly while every other variant and contrast level goes
+    // through MCU's role resolver (color_spec_2021.ts:130-739).
     readonly property color defaultSeed: "#b75f38"
-    readonly property bool desktopPalette: followDesktop && !useSource
+    property string activeKind: "default"
+    property var seedSteps: []
+    property var schemeSteps: []
+    property real seedProgress: 1
+    readonly property int seedIndex: Math.min(seedSteps.length - 1, Math.max(0, Math.round(seedProgress * (seedSteps.length - 1))))
+    readonly property color effectiveSeed: seedSteps.length ? pathColor(seedSteps,seedProgress) : defaultSeed
+    readonly property bool desktopPalette: followDesktop && activeKind === "desktop"
     // The KDE anchors describe Noctalia's standard look. MCU
     // color_spec_2021.ts:130-739 supplies the alternate variant and contrast
     // tones for every role, including anchors the desktop file supplied.
     readonly property bool desktopStandard: desktopPalette && app.colorVariant === "tonalSpot" && app.colorContrast === 0
+    readonly property string schemeKey: dark + "/" + app.colorVariant + "/" + app.colorContrast
+    readonly property string modeKey: app.artworkAccent + "/" + app.accentColor + "/" + followDesktop
+    // MotionScheme.kt:155-159 reads StandardMotionTokens.kt:22-23 for the
+    // DefaultEffects spring that carries colour changes. Oklch seed
+    // samples and their schemes are made once per accepted source; each frame
+    // only interpolates cached colours. Oklch's published D65
+    // matrices come from bottosson.github.io/posts/oklab/#converting-from-linear-srgb-to-oklab.
+    property NumberAnimation seedMotion: NumberAnimation {
+        target: theme; property: "seedProgress"
+        // Qt NumberAnimation.to is required for a standalone animation;
+        // otherwise start() has no requested endpoint.
+        from: 0; to: 1
+        duration: springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: springEffects
+    }
+    function validSeed(c) { return c.a >= 0.999 && isFinite(c.r) && isFinite(c.g) && isFinite(c.b) }
+    function oklch(c) {
+        function linear(v) { return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) }
+        const r = linear(c.r), g = linear(c.g), b = linear(c.b)
+        const l = Math.cbrt(0.4122214708*r + 0.5363325363*g + 0.0514459929*b)
+        const m = Math.cbrt(0.2119034982*r + 0.6806995451*g + 0.1073969566*b)
+        const s = Math.cbrt(0.0883024619*r + 0.2817188376*g + 0.6299787005*b)
+        const a = 1.9779984951*l - 2.4285922050*m + 0.4505937099*s
+        const bb = 0.0259040371*l + 0.7827717662*m - 0.8086757660*s
+        return [0.2104542553*l + 0.7936177850*m - 0.0040720468*s, Math.hypot(a,bb), Math.atan2(bb,a)]
+    }
+    function fromOklch(l,c,h) {
+        const a = c*Math.cos(h), b = c*Math.sin(h)
+        const ll = Math.pow(l + 0.3963377774*a + 0.2158037573*b, 3)
+        const mm = Math.pow(l - 0.1055613458*a - 0.0638541728*b, 3)
+        const ss = Math.pow(l - 0.0894841775*a - 1.2914855480*b, 3)
+        function rgb(v) { v = Math.max(0, Math.min(1,v)); return v <= 0.0031308 ? 12.92*v : 1.055*Math.pow(v,1/2.4)-0.055 }
+        return Qt.rgba(rgb(4.0767416621*ll-3.3077115913*mm+0.2309699292*ss),
+                       rgb(-1.2684380046*ll+2.6097574011*mm-0.3413193965*ss),
+                       rgb(-0.0041960863*ll-0.7034186147*mm+1.7076147010*ss),1)
+    }
+    function perceptualColor(from,to,t) {
+        if(t<=0)return from
+        if(t>=1)return to
+        const a=oklch(from), b=oklch(to)
+        if(a[1]<0.01)a[2]=b[2]
+        if(b[1]<0.01)b[2]=a[2]
+        let arc=b[2]-a[2]
+        while(arc>Math.PI)arc-=2*Math.PI
+        while(arc<-Math.PI)arc+=2*Math.PI
+        return fromOklch(a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+arc*t)
+    }
+    function pathColor(path,progress) {
+        if(path.length===1)return path[0]
+        const position=Math.max(0,Math.min(path.length-1,progress*(path.length-1)))
+        const first=Math.floor(position),last=Math.min(path.length-1,first+1)
+        return perceptualColor(path[first],path[last],position-first)
+    }
+    function perceptualSteps(from,to) {
+        const out=[]
+        // A local probe measured 136ms for thirteen uncached Content schemes
+        // and 16ms for three. Role colours interpolate in Oklch between them.
+        const segments=app.colorVariant==="content"?2:12
+        for(let i=0;i<=segments;++i)
+            out.push(perceptualColor(from,to,i/segments))
+        return out
+    }
     function standardDefaultRoles(generated) {
         // These are the existing standard palette, kept pixel-for-pixel for
         // the no-source Tonal Spot state. Contrast and variant alternatives
@@ -32,15 +98,56 @@ QtObject {
         old.outline=blend(old.outlineVariant,old.onSurfaceVariant,0.5)
         return Object.assign({},generated,old)
     }
-    // QML must read these settings here even with artwork active: an
-    // invokable's internal C++ reads do not create binding dependencies.
-    readonly property var roles: {
-        const variant=app.colorVariant, contrast=app.colorContrast
-        const map=app.colorScheme(desktopPalette?desktopTheme.colors.primary:(useSource?sourceColor:defaultSeed),dark)
-        return !useSource && !desktopPalette && variant==="tonalSpot" && contrast===0
-               ? standardDefaultRoles(map) : map
+    function refreshSchemes() {
+        if(!seedSteps.length)return
+        const maps=[]
+        for(let i=0;i<seedSteps.length;++i) {
+            let map=app.colorScheme(seedSteps[i],dark)
+            if(i===seedSteps.length-1 && activeKind==="default" && app.colorVariant==="tonalSpot" && app.colorContrast===0)
+                map=standardDefaultRoles(map)
+            maps.push(map)
+        }
+        schemeSteps=maps
     }
-    function role(name,fallback) {const c=roles[name];return c===undefined?fallback:c;}
+    function acceptSeed(seed,kind) {
+        if(!validSeed(seed))return
+        if(seedSteps.length && seed.toString()===seedSteps[seedSteps.length-1].toString() && activeKind===kind)return
+        const from=seedSteps.length?effectiveSeed:seed
+        seedMotion.stop()
+        activeKind=kind
+        seedSteps=app.motion && seedSteps.length ? perceptualSteps(from,seed) : [seed]
+        seedProgress=app.motion && seedSteps.length>1 ? 0 : 1
+        refreshSchemes()
+        if(app.motion && seedSteps.length>1)seedMotion.start()
+    }
+    function acceptMode() {
+        // Main.qml's accentSample holds its old seed during decode and sends
+        // transparent only when the artwork source is absent. Follow the
+        // chosen accent, desktop, then built-in default in that case.
+        if(app.artworkAccent && validSeed(artworkSeed))acceptSeed(artworkSeed,"artwork")
+        else if(validSeed(accentSeed))acceptSeed(accentSeed,"accent")
+        else if(followDesktop)acceptSeed(desktopTheme.colors.primary,"desktop")
+        else acceptSeed(defaultSeed,"default")
+    }
+    onArtworkSeedChanged: if(app.artworkAccent)acceptMode()
+    onAccentSeedChanged: acceptMode()
+    onModeKeyChanged: acceptMode()
+    onSchemeKeyChanged: refreshSchemes()
+    property Connections desktopConnection: Connections {
+        target: desktopTheme
+        function onChanged() { theme.acceptMode() }
+    }
+    Component.onCompleted: acceptMode()
+    readonly property var roles: schemeSteps.length ? schemeSteps[Math.min(seedIndex,schemeSteps.length-1)] : ({})
+    function role(name,fallback) {
+        if(!schemeSteps.length)return fallback
+        if(schemeSteps.length===1)return schemeSteps[0][name]===undefined?fallback:schemeSteps[0][name]
+        const position=Math.max(0,Math.min(schemeSteps.length-1,seedProgress*(schemeSteps.length-1)))
+        const first=Math.floor(position),last=Math.min(schemeSteps.length-1,first+1)
+        const a=schemeSteps[first][name],b=schemeSteps[last][name]
+        if(a===undefined||b===undefined)return fallback
+        return perceptualColor(a,b,position-first)
+    }
     function blend(a,b,t) {return Qt.rgba(a.r+(b.r-a.r)*t,a.g+(b.g-a.g)*t,a.b+(b.b-a.b)*t,1);}
     function luminance(c) {
         function linear(v) {return v<=0.04045?v/12.92:Math.pow((v+0.055)/1.055,2.4);}

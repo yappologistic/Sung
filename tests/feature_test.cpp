@@ -32,6 +32,7 @@
 #include <qpa/qwindowsysteminterface.h>
 #include <algorithm>
 #include <functional>
+#include <numbers>
 #include <tuple>
 
 namespace {
@@ -471,14 +472,92 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
   floors("cool cover");
   c.shot("05-artwork-source-cool");
 
+  // Oklch interpolation keeps chroma while hue takes the shorter arc. The
+  // DefaultEffects spring moves through precomputed schemes, not a new HCT
+  // solve for every rendered frame.
+  QTest::qWait(4500); // Let the queue confirmation leave the capture.
+  b->setMotion(true);
+  c.evaluate("Theme.artworkSeed=Qt.rgba(1,0,0,1)");
+  QTest::qWait(300);
+  c.evaluate("Theme.artworkSeed=Qt.rgba(0,1,1,1)");
+  QTest::qWait(70);
+  const auto middleSeed = c.evaluate("Theme.effectiveSeed").value<QColor>();
+  c.check(middleSeed.isValid() && m3::measure(middleSeed).chroma > 8,
+          QString("the red-to-cyan midpoint keeps colour (%1 chroma)")
+              .arg(m3::measure(middleSeed).chroma, 0, 'f', 1));
+  const double redHue = c.evaluate("Theme.oklch(Qt.rgba(1,0,0,1))[2]").toDouble();
+  const double cyanHue = c.evaluate("Theme.oklch(Qt.rgba(0,1,1,1))[2]").toDouble();
+  const double middleHue = c.evaluate("Theme.oklch(Theme.effectiveSeed)[2]").toDouble();
+  const double arc = std::remainder(cyanHue-redHue, 2*std::numbers::pi);
+  const double traveled = std::remainder(middleHue-redHue, 2*std::numbers::pi);
+  c.check(arc*traveled > 0 && std::abs(traveled) < std::abs(arc) && std::abs(arc) <= std::numbers::pi,
+          "the seed takes the shorter perceptual hue arc");
+  c.check(c.evaluate("Theme.seedSteps.length").toInt() <= 13,
+          "the transition holds at most thirteen precomputed scheme steps");
+  c.shotNow("05-perceptual-midpoint");
+  QTest::qWait(300);
+
   // --- Turning it off restores the built-in palette exactly ---
   b->setArtworkAccent(false);
+  QTest::qWait(70);
+  const auto releasing = c.themeColor("primary");
+  c.check(releasing.isValid() && m3::measure(releasing).chroma > 10,
+          "returning to the warm default keeps a chromatic accent in flight");
+  c.check(c.evaluate("Theme.seedProgress").toDouble() > 0 &&
+              c.evaluate("Theme.seedProgress").toDouble() < 1,
+          "the return to default keeps the DefaultEffects spring");
+  c.shotNow("05-release-midpoint");
+  QTest::qWait(300);
+  b->setMotion(false);
   c.evaluate("Theme.artworkSeed=Qt.rgba(0,0,0,0)");
   QTest::qWait(300);
   c.check(!c.evaluate("Theme.useSource").toBool(), "the scheme is released");
   c.check(c.themeColor("background") == plainBackground && c.themeColor("surface") == plainSurface,
           "the built-in palette returns untouched");
   c.shot("06-released");
+
+  // A coverless next track makes accentSample send a transparent seed. The
+  // previous cover must not colour the whole coverless track.
+  b->setMotion(true);
+  b->setArtworkAccent(true);
+  c.evaluate("Theme.artworkSeed=Qt.rgba(0,1,1,1)");
+  QTest::qWait(350);
+  c.check(c.evaluate("Theme.useArtwork").toBool(), "the artwork scheme returns before the next track");
+  b->setAccentColor("#386a20");
+  QDir().mkpath(c.directory + "/music/No Cover");
+  if (!encodeTrack(c, c.directory + "/music/No Cover/02.flac", "Plain without art",
+                   "No Cover", "Rill", 2))
+    return c.finish();
+  b->importMusicFolder(QUrl::fromLocalFile(c.directory + "/music"));
+  c.check(c.until([&] { return !b->importingLocal(); }, 40000), "import the coverless next track");
+  QVariantMap noCover;
+  for (const auto &item : b->results()->rows)
+    if (item.toMap().value("title") == "Plain without art") noCover = item.toMap();
+  c.check(!noCover.isEmpty(), "the next track is available to the queue");
+  if (!noCover.isEmpty()) {
+    b->enqueueItems(QVariantList{noCover});
+    b->playAt(1);
+    c.check(c.until([&] { return b->current().value("title") == "Plain without art"; }),
+            "the coverless track becomes current through playback");
+    c.check(c.until([&] { return c.evaluate("Theme.artworkSeed").value<QColor>().alpha() == 0; }),
+            "accentSample sends a transparent seed for the coverless track");
+    c.check(c.until([&] { return c.evaluate("Theme.activeKind").toString() == "accent"; }),
+            "the chosen accent replaces the previous artwork scheme");
+    c.check(!c.evaluate("Theme.useArtwork").toBool() && c.evaluate("Theme.useAccent").toBool() &&
+                c.evaluate("Theme.useSource").toBool(),
+            "source flags describe the accent actually painted");
+    QTest::qWait(400); // Let the new track's metadata settle in the capture.
+    c.shot("06-no-cover-accent");
+    b->setAccentColor("");
+    c.check(c.until([&] { return c.evaluate("Theme.activeKind").toString() == "default"; }),
+            "without a chosen accent the coverless track returns to default");
+    QTest::qWait(300);
+    c.check(!c.evaluate("Theme.useArtwork").toBool() && !c.evaluate("Theme.useAccent").toBool() &&
+                !c.evaluate("Theme.useSource").toBool() && c.themeColor("background") == plainBackground,
+            "the coverless track keeps the default scheme on screen");
+    c.shot("06-no-cover-default");
+  }
+  b->setMotion(false);
 
   // Noctalia's KDE file has only eleven anchors. Material's missing roles
   // must come from its green source rather than Sung's warm default palette.
@@ -534,6 +613,12 @@ void runDynamicColorTests(Backend *b, QQuickWindow *w) {
             "artwork accent takes the whole surface ladder in system mode");
     floors("desktop with artwork");
     c.shot("08-desktop-with-artwork");
+    c.evaluate("Theme.artworkSeed=Qt.rgba(0,0,0,0)");
+    c.check(c.until([&] { return c.evaluate("Theme.activeKind").toString() == "desktop"; }),
+            "transparent artwork returns to the desktop source in system mode");
+    c.check(!c.evaluate("Theme.useArtwork").toBool() && !c.evaluate("Theme.useSource").toBool(),
+            "desktop mode reports the palette actually painted");
+    c.shot("08-desktop-after-no-cover");
     b->setArtworkAccent(false);
     QFile lightDesktop(desktopPath);
     c.check(lightDesktop.open(QIODevice::WriteOnly | QIODevice::Truncate),

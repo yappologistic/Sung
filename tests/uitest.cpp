@@ -2134,15 +2134,24 @@ void runLibraryPolishTests(Backend *b,QQuickWindow *w) {
   b->setRepeat(1);check(b->queueEnd().isEmpty(),"repeat hides finish estimate");b->setRepeat(0);b->setAutoplay(true);check(b->queueEnd().isEmpty(),"autoplay hides finish estimate");b->setAutoplay(false);
   b->setTheme("light");QTest::qWait(400);shot("light-accent");
   const auto evaluate=[&](const QString &code){QQmlExpression expr(qmlContext(w),w,code);const auto value=expr.evaluate();check(!expr.hasError(),"palette expression valid");return value;};
+  const bool previousMotion=b->motion();b->setMotion(false);
   for(const auto &mode:{QString("dark"),QString("light")}){
-    b->setTheme(mode);const auto surface=evaluate("Theme.surface");
+    b->setTheme(mode);
     for(int hue=0;hue<360;hue+=30){evaluate(QString("Theme.artworkSeed=Qt.hsla(%1,0.75,0.5,1)").arg(hue/360.0));
       check(evaluate("[Theme.background,Theme.surface,Theme.container,Theme.high].every(c=>Theme.contrast(Theme.primary,c)>=4.5)").toBool(),"accent text meets contrast on all surfaces");
       check(evaluate("Theme.contrast(Theme.primary,Theme.primaryText)>=4.5 && Theme.contrast(Theme.primaryContainer,Theme.containerText)>=4.5").toBool(),"accent role pairs meet contrast");
-      check(evaluate("Theme.surface")==surface,"artwork accent preserves surfaces");
+      // MCU's neutral palette follows the source hue. With motion disabled,
+      // the displayed surface must be the role generated from that seed.
+      check(evaluate("Theme.surface")==evaluate("app.colorScheme(Theme.artworkSeed,Theme.dark)['surface']"),
+            "artwork accent retints the surface from its seed");
     }
   }
-  evaluate("Theme.artworkSeed=Qt.rgba(0,0,0,0)");QTest::qWait(300);check(!evaluate("Theme.useArtwork").toBool(),"monochrome cover falls back to theme");
+  evaluate("Theme.artworkSeed=Qt.rgba(0,0,0,0)");QTest::qWait(300);
+  check(!evaluate("Theme.useArtwork").toBool()&&!evaluate("Theme.useSource").toBool()&&
+            evaluate("Theme.activeKind").toString()=="default"&&
+            evaluate("Theme.surface").value<QColor>()==QColor("#fff8f6"),
+        "a coverless source returns the light default scheme");
+  b->setMotion(previousMotion);
   b->setArtworkAccent(false);QTest::qWait(200);check(sampler&&sampler->property("source").toUrl().isEmpty(),"disabled accent releases sample");
   w->setProperty("side","");w->resize(800,600);b->library("local-albums");shot("narrow-albums");
   b->togglePin(QVariantMap{{"kind","album"},{"id","home_restore_fixture"},{"title","Home fixture"}});
@@ -2190,8 +2199,8 @@ void runPlaybackPolishTests(Backend *b,QQuickWindow *w){
   auto controls=w->findChild<QObject*>("artworkControls");QMetaObject::invokeMethod(controls,"open");QTest::qWait(300);click("artworkFit");check(b->currentArtworkFit(),"fit saved through control");shot("fit-controls");QMetaObject::invokeMethod(controls,"close");QTest::qWait(300);
   w->setProperty("immersive",true);QTest::qWait(600);auto immersive=findItem(w->contentItem(),"immersiveArtwork");check(immersive&&immersive->property("fit").toBool(),"immersive cover uses fit");check(immersive&&immersive->property("highResolution").toBool(),"immersive cover requests display resolution");shot("immersive-fit");
   b->setCurrentArtworkFit(false);QTest::qWait(250);check(immersive&&!immersive->property("fit").toBool(),"fill updates without restarting playback");shot("immersive-fill");w->setProperty("immersive",false);QTest::qWait(400);
-  b->setArtworkAccent(true);QTest::qWait(500);QQmlExpression start(qmlContext(w),w,"Theme.artworkSeed");const auto initial=start.evaluate().value<QColor>();QQmlExpression change(qmlContext(w),w,"Theme.artworkSeed=Qt.rgba(0.1,0.8,0.3,1)");change.evaluate();QTest::qWait(70);const auto middle=start.evaluate().value<QColor>();QTest::qWait(300);const auto end=start.evaluate().value<QColor>();check(initial!=middle&&middle!=end,"accent transitions through intermediate colors");
-  b->setMotion(false);QQmlExpression immediate(qmlContext(w),w,"Theme.artworkSeed=Qt.rgba(0.8,0.2,0.4,1)");immediate.evaluate();QTest::qWait(10);check(qAbs(start.evaluate().value<QColor>().redF()-0.8)<0.01,"reduced motion applies color immediately");b->setMotion(true);
+  b->setArtworkAccent(true);QTest::qWait(500);QQmlExpression animated(qmlContext(w),w,"Theme.effectiveSeed");const auto initial=animated.evaluate().value<QColor>();QQmlExpression change(qmlContext(w),w,"Theme.artworkSeed=Qt.rgba(0.1,0.8,0.3,1)");change.evaluate();QTest::qWait(70);const auto middle=animated.evaluate().value<QColor>();QTest::qWait(300);const auto end=animated.evaluate().value<QColor>();check(initial!=middle&&middle!=end,"the painted seed transitions through intermediate colors");
+  b->setMotion(false);QQmlExpression immediate(qmlContext(w),w,"Theme.artworkSeed=Qt.rgba(0.8,0.2,0.4,1)");immediate.evaluate();QTest::qWait(10);check(qAbs(animated.evaluate().value<QColor>().redF()-0.8)<0.01,"reduced motion applies the painted seed immediately");b->setMotion(true);
   auto details=w->findChild<QObject*>("trackDetailsDialog");QMetaObject::invokeMethod(details,"inspect",Q_ARG(QVariant,QVariant(song)));QTest::qWait(300);const auto rows=b->trackDetails(song);bool sample=false;for(const auto &v:rows)if(v.toMap().value("label")=="Decoded sample rate")sample=true;check(sample,"actual decoded sample rate shown");auto scroll=findItem(w->contentItem(),"detailsScroll");if(scroll){auto content=scroll->property("contentItem").value<QObject*>();if(content)content->setProperty("contentY",content->property("contentHeight").toDouble()-scroll->height());}shot("quality-details");QMetaObject::invokeMethod(details,"close");
   check(b->playing()&&b->error().isEmpty(),"controls preserve playback");b->setArtworkAccent(false);b->stop();fprintf(stdout,"RESULT %d failures\n",failures);fflush(stdout);QCoreApplication::exit(failures?1:0);
 }
