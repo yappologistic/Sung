@@ -59,13 +59,15 @@ Item {
         MElevation { anchors.fill: parent; radius: Theme.shapeExtraLarge; level: 1 }
 
         // Material's own drag handle for a sheet: wider and flatter than the
-        // one that splits panes, and centred on the leading edge.
+        // one that splits panes, and centred on the leading edge. Compose pads
+        // the 4dp bar 22dp above and below (SheetDefaults.kt,
+        // DragHandleVerticalPadding), so the handle is a 48dp strip.
         Item {
             id: handle
             objectName: "bottomSheetHandle"
             anchors.horizontalCenter: parent.horizontalCenter
             anchors.top: parent.top
-            width: 48; height: 22
+            width: 48; height: 48
             Rectangle {
                 anchors.centerIn: parent
                 width: 32; height: 4
