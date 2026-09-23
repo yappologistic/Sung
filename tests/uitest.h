@@ -62,6 +62,7 @@ void runInterfaceAuditTests(Backend*,QQuickWindow*);
 
 void runTourCapture(Backend*,QQuickWindow*);
 void runLayoutAuditTests(Backend*,QQuickWindow*);
+void runColourAuditTests(Backend*,QQuickWindow*);
 void runDynamicColorTests(Backend*,QQuickWindow*);
 void runNavigationMotionTests(Backend*,QQuickWindow*);
 void runArtistHeroTests(Backend*,QQuickWindow*);

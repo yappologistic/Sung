@@ -401,6 +401,7 @@ int main(int argc, char **argv) {
   if(args.contains("--dynamic-color-test")){QTimer::singleShot(0,&app,[&]{runDynamicColorTests(&backend,window);});return app.exec();}
   if(args.contains("--tour")){QTimer::singleShot(0,&app,[&]{runTourCapture(&backend,window);});return app.exec();}
   if(args.contains("--layout-audit-test")){QTimer::singleShot(0,&app,[&]{runLayoutAuditTests(&backend,window);});return app.exec();}
+  if(args.contains("--colour-audit-test")){QTimer::singleShot(0,&app,[&]{runColourAuditTests(&backend,window);});return app.exec();}
   if(args.contains("--interface-audit-test")){QTimer::singleShot(0,&app,[&]{runInterfaceAuditTests(&backend,window);});return app.exec();}
   if(args.contains("--playback-memory-test")){QTimer::singleShot(0,&app,[&]{runPlaybackMemoryTests(&backend,window);});return app.exec();}
   if(args.contains("--footprint-test")){QTimer::singleShot(0,&app,[&]{runFootprintTests(&backend,window);});return app.exec();}
