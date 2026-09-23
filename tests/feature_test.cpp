@@ -6,11 +6,15 @@
 #include "backend.h"
 #include "m3color.h"
 #include "rowselection.h"
+#include <QAccessible>
+#include <QAccessibleActionInterface>
 #include <QColor>
+#include <QCursor>
 #include <QDir>
 #include <QFile>
 #include <QImage>
 #include <QPainter>
+#include <QPointer>
 #include <QProcess>
 #include <QQmlContext>
 #include <QQmlEngine>
@@ -4976,6 +4980,10 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
   b->playAt(0);
   c.check(c.until([&] { return b->playing() && b->duration() > 0; }, 20000), "a song is playing");
   QTest::qWait(400);
+  const auto pointerBeforeControls = QCursor::pos();
+  QPointer<QQuickItem> focusBeforeControls = w->activeFocusItem();
+  const bool collectionToolsBefore = w->property("collectionTools").toBool();
+  const QString sortBefore = b->collection()->sortKey();
 
   // --- The slider Material redrew ---
   // The old slider was a rule with a dot on it. The expressive one is a track
@@ -5044,6 +5052,62 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
     }
   }
 
+  // The plain popup is a single expressive group (Menu.kt:176-300), and the
+  // action is exposed on the same field that receives keyboard focus.
+  w->setProperty("collectionTools", true);
+  QTest::qWait(250);
+  if (auto sort = shownItem(w->contentItem(), "collectionSortControl")) {
+    auto field = anyItem(sort, "collectionSortButton");
+    auto accessible = field ? QAccessible::queryAccessibleInterface(field) : nullptr;
+    c.check(accessible && accessible->role() == QAccessible::ComboBox,
+            "the focusable dropdown field reports the combo box role");
+    c.check(accessible && accessible->text(QAccessible::Name) == "Sort" &&
+                accessible->text(QAccessible::Description) == "Original order",
+            "the field reports its name and current value");
+    if (field) {
+      field->forceActiveFocus(Qt::TabFocusReason);
+      QTest::qWait(100);
+      auto ring = anyItem(sort, "dropdownFocusRing");
+      auto border = field->property("background").value<QQuickItem *>();
+      c.check(ring && ring->isVisible() && qAbs(ring->width()-field->width()-6) < 0.1 &&
+                  QQmlProperty::read(ring, "border.width", qmlContext(ring)).toInt() == 2 &&
+                  border && QQmlProperty::read(border, "border.width", qmlContext(border)).toInt() == 2,
+              "keyboard focus keeps the outside ring and the field border");
+      auto action = accessible ? accessible->actionInterface() : nullptr;
+      c.check(action && action->actionNames().contains(QAccessibleActionInterface::pressAction()),
+              "the combo box exposes the accessibility press action");
+      if (action) action->doAction(QAccessibleActionInterface::pressAction());
+      QTest::qWait(100);
+      c.check(sort->property("menuOpen").toBool(),
+              "an accessibility press opens the dropdown menu");
+      auto menu = sort->findChild<QObject *>("dropdownMenu");
+      if (menu) {
+        auto frame = menu->property("background").value<QQuickItem *>();
+        c.check(frame && frame->property("color").value<QColor>() == c.themeColor("surfaceLow") &&
+                    qAbs(frame->property("radius").toDouble()-16) < 0.5,
+                "the plain menu is a 16dp standalone group on surfaceContainerLow");
+        auto list = menu->property("contentItem").value<QQuickItem *>();
+        auto container = list ? anyItem(list, "menuItemContainer") : nullptr;
+        const auto inset = container && frame ? container->mapToItem(frame, QPointF(0, 0)).x() : 0;
+        c.check(list && qAbs(list->property("spacing").toDouble()) < 0.1 && inset >= 3.5,
+                "its items have no inter-item gap and a 4dp Surface inset");
+      }
+      c.click("sort_title");
+      c.check(accessible && accessible->text(QAccessible::Description) == "Title" &&
+                  field->property("text").toString() == "Title",
+              "the accessible value follows the chosen sort");
+    }
+  } else {
+    c.check(false, "the collection sort dropdown is present for the accessibility check");
+  }
+  // The sort-menu click moves the pointer. When the side sheet opens, that
+  // same scene point can hover its last queue row and morph its corner to 12dp.
+  b->collection()->setSortKey(sortBefore);
+  w->setProperty("collectionTools", collectionToolsBefore);
+  if (focusBeforeControls) focusBeforeControls->forceActiveFocus();
+  QTest::mouseMove(w, w->mapFromGlobal(pointerBeforeControls));
+  QTest::qWait(120);
+
   // --- A list item answers the pointer with its shape ---
   c.check(c.evaluate("Theme.listRest").toInt() == 4 &&
               c.evaluate("Theme.listHovered").toInt() == 12 &&
@@ -5087,8 +5151,15 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
             "an item inside the run is nearly square where the one above it stops");
     c.check(middle && qAbs(middle->property("bottomLeftRadius").toDouble() - 4) < 0.5,
             "and where the one below it starts");
-    c.check(last && qAbs(last->property("bottomLeftRadius").toDouble() - 16) < 0.5,
-            "the run is round where it ends");
+    const auto lastRadius = last ? last->property("bottomLeftRadius").toDouble() : -1;
+    c.check(last && qAbs(lastRadius - 16) < 0.5,
+            QString("the run is round where it ends (radius=%1, hovered=%2, pointerOver=%3, "
+                    "keyboardCurrent=%4, lastInRun=%5, stateCorner=%6)")
+                .arg(lastRadius).arg(lastRow->property("hovered").toBool())
+                .arg(lastRow->property("pointerOver").toBool())
+                .arg(lastRow->property("keyboardCurrent").toBool())
+                .arg(lastRow->property("lastInRun").toBool())
+                .arg(last ? last->property("stateCorner").toInt() : -1));
     c.check(middle && qAbs(middleRow->height() - middle->height() - 2) < 0.5,
             "and the items are set apart rather than divided by a rule");
     // The song playing takes the shape Material gives a picked out item.

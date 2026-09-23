@@ -6,6 +6,7 @@
 #include <QQmlContext>
 #include "rowselection.h"
 #include "roundedart.h"
+#include <QAccessible>
 #include <QDir>
 #include <QDataStream>
 #include <QJsonDocument>
@@ -1745,7 +1746,16 @@ void runVisualRefinementTests(Backend *b,QQuickWindow *w){
   check(b->compactDensity(),"compact density applies");shot("05-compact-list");
   if(tracks){QMetaObject::invokeMethod(tracks,"positionViewAtBeginning");}QTest::qWait(350);check(album&&album->width()>100,"header expands at list beginning");auto denseRow=findItem(w->contentItem(),"trackRow_0");check(denseRow&&qAbs(denseRow->height()-56)<1,"compact rows use 56px height");
   b->playCollection(0);check(until([&]{return b->playing();}),"playback starts");
-  click("playerOutputButton");auto picker=w->findChild<QObject*>("outputPicker");check(picker&&picker->property("visible").toBool(),"output picker opens beside player");QTest::qWait(180);shot("06-output-picker");click("outputChoice_0");check(b->audioDeviceId().isEmpty()&&b->playing(),"default output keeps playback");
+  click("playerOutputButton");auto picker=w->findChild<QObject*>("outputPicker");check(picker&&picker->property("visible").toBool(),"output picker opens beside player");QTest::qWait(180);
+  // The visible row owns radio semantics; the disabled indicator is decorative.
+  auto defaultChoice=findItem(w->contentItem(),"outputChoice_0");
+  auto defaultAccessible=defaultChoice?QAccessible::queryAccessibleInterface(defaultChoice):nullptr;
+  check(defaultAccessible && defaultAccessible->role()==QAccessible::RadioButton &&
+            QQmlProperty::read(defaultChoice,"Accessible.checkable",qmlContext(defaultChoice)).toBool() &&
+            QQmlProperty::read(defaultChoice,"Accessible.checked",qmlContext(defaultChoice)).toBool() &&
+            defaultAccessible->state().checked,
+        "system default output reports a checked radio choice");
+  shot("06-output-picker");click("outputChoice_0");check(b->audioDeviceId().isEmpty()&&b->playing(),"default output keeps playback");
   const QVariantMap pin{{"kind","album"},{"browseId","presentation_fixture"},{"id","presentation_fixture"},{"title","Blue Hour"},{"art",QUrl::fromLocalFile(dir+"/music/cover.jpg").toString()}};
   b->togglePin(pin);b->home();check(until([&]{return !b->busy();}),"Home loads");QTest::qWait(300);click("editHomeButton");auto editor=w->findChild<QObject*>("homeEditor");check(editor&&editor->property("visible").toBool(),"Home editor opens");QTest::qWait(400);auto homeList=findItem(w->contentItem(),"homeEditorList"),secondUp=findItem(w->contentItem(),"homeUp_1");check(homeList&&secondUp&&secondUp->mapToItem(homeList,QPointF(secondUp->width()/2,secondUp->height()/2)).y()<homeList->height(),"Home section controls fit editor viewport");
   const auto sections=b->homeSections(true);check(sections.size()>1,"multiple Home sections available");if(sections.size()>1){const auto second=sections[1].toMap().value("title").toString();click("homeUp_1");check(b->homeSections(true)[0].toMap().value("title").toString()==second,"Home sections reorder through UI");click("homeVisible_0");check(!b->homeSections(true)[0].toMap().value("shown").toBool(),"Home section hides through UI");}

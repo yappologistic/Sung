@@ -28,10 +28,6 @@ Item {
 
     implicitWidth: Math.max(160, metrics.advanceWidth(currentLabel) + 88)
     implicitHeight: 56
-    Accessible.role: Accessible.ComboBox
-    Accessible.name: label
-    Accessible.description: currentLabel
-
     FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge }
 
     AbstractButton {
@@ -40,7 +36,13 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus
-        Accessible.ignored: true
+        // Qt Quick Accessible puts the combo role and its press action on the
+        // focusable button; its text reports the current value to assistive tools.
+        text: control.currentLabel
+        Accessible.role: Accessible.ComboBox
+        Accessible.name: control.label
+        Accessible.description: control.currentLabel
+        Accessible.onPressAction: field.clicked()
         onClicked: menu.opened ? menu.close() : menu.popup(control, 0, control.height + 4)
 
         background: Rectangle {
@@ -67,6 +69,15 @@ Item {
                 rotation: control.open ? 270 : 90
                 Behavior on rotation { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
             }
+        }
+        Rectangle {
+            objectName: "dropdownFocusRing"
+            anchors.fill: field; anchors.margins: -3
+            // MButton's keyboard ring sits 3px outside at 2px, while the
+            // field's own focused primary border stays on its boundary.
+            radius: Theme.shapeInside(Theme.shapeExtraSmall, -3)
+            color: "transparent"; border.width: 2; border.color: Theme.focusRing
+            visible: field.visualFocus
         }
     }
 

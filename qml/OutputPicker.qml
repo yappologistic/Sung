@@ -24,6 +24,11 @@ Popup {
                 objectName:"outputChoice_"+index;width:devices.width-8;height:48
                 text:modelData.name;leftAligned:true;contentInset:44
                 selected:app.audioDeviceId===modelData.id;tip:modelData.name
+                // The radio indicator is presentational; the focusable row
+                // reports RadioButton, checked and press as Qt Accessible expects.
+                Accessible.role:Accessible.RadioButton
+                Accessible.checkable:true;Accessible.checked:selected
+                Accessible.onPressAction:clicked()
                 onClicked:{app.audioDeviceId=modelData.id;popup.close();}
                 MRadioButton {
                     objectName:"outputRadio_"+parent.index
