@@ -156,8 +156,13 @@ Item {
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsMeasure
                     Layout.alignment: Qt.AlignHCenter
-                    font.pixelSize: player.width<900?22:30
-                    font.weight: Font.DemiBold
+                    // Typography.kt:115-133 reads the TypeScaleTokens roles.
+                    // TypeScaleTokens.kt:117-127,343-353 gives headline-large
+                    // 32sp/40sp with medium emphasis, nearest the old 30px;
+                    // :207-217,433-443 gives narrow title-large 22sp/28sp.
+                    typeRole: player.width<900?"titleLarge":"headlineLarge"
+                    emphasized: true
+                    font.pixelSize: player.width<900?Theme.titleLarge:Theme.headlineLarge
 
                     // Qt Text.WordWrap keeps whole words; ElideRight marks the
                     // last line when the two-line limit omits the rest.

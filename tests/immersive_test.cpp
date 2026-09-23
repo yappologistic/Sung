@@ -6,6 +6,7 @@
 #include <QAccessible>
 #include <QDir>
 #include <QFile>
+#include <QFont>
 #include <QImage>
 #include <QPainter>
 #include <QQmlContext>
@@ -748,10 +749,17 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   check(albumLink&&w->activeFocusItem()==albumLink,
         "Tab reaches the album after the artist in artwork details");
   shot("focus-ring-480");
+  check(title&&title->property("typeRole")=="titleLarge"&&title->property("emphasized").toBool()&&
+        title->property("font").value<QFont>().pixelSize()==22,
+        "narrow title uses emphasized 22sp title-large");
   auto waveMotion=w->findChild<QObject*>("seekWaveMotion");
   check(waveMotion&&waveMotion->property("duration").toInt()==1000,
         "the 28px seek wave advances one wavelength per second");
   resizeTo(1180,800);
+  title=visibleItem(w->contentItem(),"immersiveTitle");
+  check(title&&title->property("typeRole")=="headlineLarge"&&title->property("emphasized").toBool()&&
+        title->property("font").value<QFont>().pixelSize()==32,
+        "wide title uses emphasized 32sp headline-large");
   b->setMotion(true);
   b->setTheme("light");shot("light");b->setMotion(false);
   choose("artwork");check(player->property("displayedLayout")=="artwork","reduced motion applies layout immediately");
