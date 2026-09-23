@@ -343,12 +343,16 @@ void runGuidedTour(Backend *b, QQuickWindow *w, const TourCapture &capture,
 
   // --- Settings, one capture per category ---
   auto settings = c.dialog("settingsDialog");
-  const QStringList categories{"appearance", "playback", "library", "connections", "privacy"};
+  // Match Settings' six actual destinations. The layout audit reuses this
+  // tour, so each capture name must identify the category on screen.
+  const QStringList categories{"appearance", "playback", "library", "keyboard",
+                               "connections", "privacy"};
   for (int i = 0; i < categories.size(); ++i) {
     if (settings)
       settings->setProperty("category", i);
     QTest::qWait(400);
-    c.check(shownItem(w->contentItem(), "settingsCategory_" + QString::number(i)) != nullptr,
+    auto categoryButton = shownItem(w->contentItem(), "settingsCategory_" + QString::number(i));
+    c.check(categoryButton && categoryButton->property("text").toString().toLower().startsWith(categories[i]),
             "settings offers the " + categories[i] + " category");
     c.shot("settings-" + categories[i], "settingsOptions");
   }
