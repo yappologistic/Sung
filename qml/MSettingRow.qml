@@ -11,7 +11,10 @@ MButton {
     trailingSymbol: opens ? "chevron" : ""
     leftAligned: true
     contentInset: 0
+    // A list item's headline is body large (ListTokens.ItemLabelTextFont),
+    // with body large's tracking and regular weight, not a button label's.
     labelSize: Theme.bodyLarge
+    labelTypeRole: "bodyLarge"
     Layout.fillWidth: true
     Layout.minimumWidth: 0
 }

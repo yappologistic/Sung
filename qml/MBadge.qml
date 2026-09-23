@@ -45,7 +45,10 @@ Item {
         anchors.centerIn: parent
         visible: badge.labelled
         text: badge.display
+        // BadgeTokens.LargeLabelTextFont: label small, whose tracking and
+        // weight come with the role rather than the size alone.
         font.pixelSize: Theme.labelSmall
+        labelRole: true
         color: Theme.errorText
     }
 }

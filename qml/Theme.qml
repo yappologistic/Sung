@@ -97,6 +97,10 @@ QtObject {
     // A boundary thickens with the size it draws around.
     readonly property var buttonOutline: ({xsmall:1, small:1, medium:1, large:2})
     readonly property var buttonLabel: ({xsmall:labelLarge, small:labelLarge, medium:titleMedium, large:headlineSmall})
+    // The role the label is set in, which a size alone cannot name: 16 is
+    // title medium on a medium button but body large on a list row. Compose
+    // picks it by height and never emphasizes it (ButtonDefaults.textStyleFor).
+    readonly property var buttonLabelRole: ({xsmall:"labelLarge", small:"labelLarge", medium:"titleMedium", large:"headlineSmall"})
     // Material's optical centering: content inside an asymmetric shape is
     // nudged by this much of the difference between its two corner radii, so it
     // looks centred rather than measuring centred.

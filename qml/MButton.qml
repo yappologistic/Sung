@@ -29,6 +29,7 @@ AbstractButton {
     property real contentInset: Theme.buttonInset[size] || 16
     // M3 button labels are label-large; list rows built from a button use body-large.
     property real labelSize: Theme.buttonLabel[size] || Theme.labelLarge
+    property string labelTypeRole: Theme.buttonLabelRole[size] || "labelLarge"
     // M3: a trailing icon communicates an action, such as opening something.
     property string trailingSymbol: ""
     property bool leftAligned: false
@@ -192,7 +193,7 @@ AbstractButton {
                     sourceComponent: MLoadingIndicator { objectName: "buttonSpinner"; running: control.busy; ink: control.ink; trackColor: "transparent"; label: "Loading"; Accessible.ignored: true }
                 }
             }
-            SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; font.pixelSize: control.labelSize; labelRole: true; emphasized: control.size==="large"; width: control.leftAligned ? Math.max(0,control.width-control.alignedLeadRoom-control.alignedTrailRoom) : implicitWidth; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
+            SungText { id: buttonLabel; visible: control.text.length > 0; text: control.text; color: control.ink; font.pixelSize: control.labelSize; labelRole: true; typeRole: control.labelTypeRole; width: control.leftAligned ? Math.max(0,control.width-control.alignedLeadRoom-control.alignedTrailRoom) : implicitWidth; elide: Text.ElideRight; anchors.verticalCenter: parent.verticalCenter }
         }
         // Most buttons carry no trailing symbol, and a button is built more
         // often than anything else in the window, so the glyph waits until one
