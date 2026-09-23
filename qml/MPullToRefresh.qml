@@ -16,7 +16,8 @@ Item {
     property bool enabled: true
     signal triggered()
 
-    readonly property real threshold: 72
+    // PullToRefreshDefaults.PositionalThreshold; the component has no tokens.
+    readonly property real threshold: 80
     // How far past the top the list has been dragged.
     readonly property real pulled: target && enabled ? Math.max(0, -(target.contentY - target.originY) - target.topMargin) : 0
     readonly property real progress: Math.max(0, Math.min(1, pulled/threshold))
