@@ -1090,7 +1090,13 @@ ApplicationWindow {
                                 SungText {text:"Home sections are hidden";color:Theme.muted;anchors.horizontalCenter:parent.horizontalCenter}
                                 MButton {objectName:"restoreHomeSections";text:"Restore sections";tonal:true;anchors.horizontalCenter:parent.horizontalCenter;onClicked:app.resetHomeLayout()}
                             }
-                            CatalogSkeleton { anchors.fill: parent; loading: app.busy && app.results.count===0 && window.homeSections.length===0; cards: app.page==="home" || app.page==="artist" }
+                            CatalogSkeleton {
+                                anchors.fill: parent
+                                // contentBody starts below the header. Empty rows and
+                                // shelves leave this pane for their placeholders.
+                                loading: app.busy && app.results.count===0 && window.homeSections.length===0
+                                cards: app.page==="home" || app.page==="artist"
+                            }
                             ListView {
                                 id: shelves; objectName: "homeShelves"; anchors.fill: parent
                                 visible: window.homeSections.length>0 && !(window.destination==="library"&&window.libraryTab==="playlists")

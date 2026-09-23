@@ -1444,7 +1444,31 @@ void runVisualDelightTests(Backend *b,QQuickWindow *w) {
   QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(110);check(w->property("coverFlying").toBool(),"artwork expansion starts");shot("05-artwork-expanding");QTest::qWait(450);check(!w->property("coverFlying").toBool()&&w->property("immersive").toBool(),"artwork expansion completes");shot("06-immersive");
   QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(110);shot("07-artwork-returning");QTest::qWait(450);auto flight=findItem(w->contentItem(),"flyingArtwork");check(flight&&!flight->isVisible()&&flight->property("url").toString().isEmpty(),"transition artwork released after closing");
   b->setMotion(false);QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(100);check(!w->property("coverFlying").toBool(),"reduced motion skips expansion");QMetaObject::invokeMethod(w,"toggleImmersive");QTest::qWait(150);
-  QQmlComponent c(qmlEngine(w),QUrl("qrc:/qml/CatalogSkeleton.qml"));auto skeleton=qobject_cast<QQuickItem*>(c.create());check(skeleton,"skeleton component loads");if(skeleton){skeleton->setParentItem(w->contentItem());skeleton->setWidth(640);skeleton->setHeight(350);skeleton->setX(130);skeleton->setY(180);skeleton->setProperty("loading",true);QTest::qWait(200);check(skeleton->isVisible()&&!skeleton->property("animating").toBool(),"loading placeholders respect reduced motion");skeleton->setProperty("cards",true);shot("08-loading-placeholders");b->setMotion(true);QTest::qWait(50);check(skeleton->property("animating").toBool(),"visible placeholders pulse with motion enabled");skeleton->setProperty("loading",false);check(!skeleton->isVisible()&&!skeleton->property("animating").toBool(),"loading animation stops after loading");delete skeleton;}
+  // A real delayed search starts with no rows. Its placeholders live inside
+  // the result pane, below the readable search field, and leave when rows arrive.
+  w->setProperty("side","");QTest::qWait(200);
+  b->search("empty","songs");check(until([&]{return !b->busy();}),"empty search settles before loading capture");
+  b->search("slow","songs");QTest::qWait(220);
+  auto skeleton=findItem(w->contentItem(),"catalogSkeleton"),searchBar=findItem(w->contentItem(),"searchBar");
+  check(skeleton&&skeleton->isVisible()&&b->collection()->count()==0,"placeholders stand in for an empty result collection");
+  check(skeleton&&searchBar&&skeleton->mapToScene(QPointF()).y()>=searchBar->mapToScene(QPointF(0,searchBar->height())).y(),"loading blocks begin below readable search controls");
+  b->setMotion(false);QTest::qWait(50);check(skeleton&&!skeleton->property("animating").toBool(),"reduced motion stops loading shimmer");shot("08-loading-placeholders");
+  b->setMotion(true);QTest::qWait(50);check(skeleton&&skeleton->property("animating").toBool(),"visible placeholders pulse with motion enabled");
+  check(until([&]{return !b->busy();}),"delayed result search completes");
+  check(skeleton&&!skeleton->isVisible()&&!skeleton->property("animating").toBool(),"placeholders leave when live rows arrive");
+  // The same real loading pane is captured across the audit widths and both
+  // themes. Each request starts empty so no retained row can sit below it.
+  for(const auto &theme:{"light","dark"})for(const int width:{480,600,840,1024,1440}){
+    b->setTheme(theme);w->resize(width,width<=600?620:800);QTest::qWait(100);
+    b->search("empty","songs");check(until([&]{return !b->busy();}),"loading capture starts with empty results");
+    b->search("slow","songs");QTest::qWait(230);
+    check(skeleton&&skeleton->isVisible()&&b->collection()->count()==0,"loading pane has no live rows at audit width");
+    const auto name=QString("loading-%1-%2").arg(width).arg(theme);
+    check(w->grabWindow().save(dir+"/"+name+".png"),qPrintable("capture "+name));
+    check(until([&]{return !b->busy();}),"loading capture request completes");
+  }
+  b->setTheme("dark");w->resize(1180,800);
+  b->openPlaylist(id);QTest::qWait(250);
   QQmlComponent buttonComponent(qmlEngine(w),QUrl("qrc:/qml/MButton.qml"));auto button=qobject_cast<QQuickItem*>(buttonComponent.create());if(button){button->setParentItem(w->contentItem());QMetaObject::invokeMethod(button,"confirm");check(button->property("confirmed").toBool(),"inline confirmation appears");QTest::qWait(1200);check(!button->property("confirmed").toBool(),"inline confirmation clears");delete button;}else check(false,"confirmation component loads");
   bool rapidSettled=true;
   for(int attempt=0;attempt<3;++attempt){
