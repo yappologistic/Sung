@@ -156,7 +156,11 @@ private slots:
   void schemeCarriesEverySpring() {
     for (bool expressive : {true, false}) {
       const auto scheme = m3::motionScheme(expressive);
-      QCOMPARE(scheme.size(), 6);
+      QCOMPARE(scheme.size(), 7);
+      QVERIFY(!scheme.value("fastSpatial").toMap().contains("loadingMorph"));
+      const auto morph = m3::loadingMorphSpring();
+      QCOMPARE(scheme.value("loadingMorph").toMap().value("ms").toInt(), morph.durationMs);
+      QCOMPARE(scheme.value("loadingMorph").toMap().value("curve").toList(), morph.curve);
       for (const auto &key : scheme.keys()) {
         const auto entry = scheme.value(key).toMap();
         QVERIFY2(entry.value("ms").toInt() > 0, qPrintable(key));

@@ -126,16 +126,13 @@ QVariantMap motionScheme(bool expressive) {
   for (int i = 0; i < 6; ++i) {
     const auto s = spring(set[i].damping, set[i].stiffness);
     QVariantMap entry{{"ms", s.durationMs}, {"curve", s.curve}};
-    if (i == 0) {
-      // Keep the six scheme keys intact. The loading component's dedicated
-      // spring travels in the same backend map under FastSpatial.
-      const auto morph = loadingMorphSpring();
-      entry.insert(QStringLiteral("loadingMorph"),
-                   QVariantMap{{"ms", morph.durationMs}, {"curve", morph.curve}});
-    }
     out.insert(QString::fromLatin1(kNames[i]),
                entry);
   }
+  // LoadingIndicator.kt:400-419 defines this spring for the morph alone.
+  const auto morph = loadingMorphSpring();
+  out.insert(QStringLiteral("loadingMorph"),
+             QVariantMap{{"ms", morph.durationMs}, {"curve", morph.curve}});
   return out;
 }
 

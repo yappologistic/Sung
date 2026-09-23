@@ -52,9 +52,8 @@ Spring spring(double damping, double stiffness);
 // shape morph finishes within the next 650ms slot.
 Spring loadingMorphSpring();
 
-// The six springs of a scheme, keyed fastSpatial, defaultSpatial, slowSpatial,
-// fastEffects, defaultEffects, slowEffects. Each value has "ms" and "curve";
-// fastSpatial also carries LoadingIndicator's dedicated "loadingMorph" pair.
+// The six scheme springs and LoadingIndicator's separate loadingMorph spring.
+// Each value has "ms" and "curve".
 QVariantMap motionScheme(bool expressive);
 SpringTokens springTokens(bool expressive, const QString &name);
 
