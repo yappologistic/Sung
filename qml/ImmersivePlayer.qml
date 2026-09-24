@@ -281,25 +281,41 @@ Item {
                 sourceComponent: ImmersiveCoverflow { onShowAllRequested: player.queueRequested() }
             }
         }
-        // Material replaced the bottom app bar with docked and floating
-        // toolbars. The transport floats over the artwork rather than being
-        // anchored into it, which is what a floating toolbar is for. It keeps
-        // the standard colour style: a vibrant bar over an arbitrary cover
-        // would fight whatever colour the artwork happens to be.
-        MFloatingToolbar {
+        // Material's own music player, from the icon button guidelines (Size
+        // and width): the main action is the most visually prominent, "like
+        // playing and pausing a song". Previous and next are narrow tonal
+        // buttons and play is a wide filled one, all one size in one standard
+        // button group, so a press in one makes the others give way. Play is
+        // the square shape and turns round while the song plays, the swap the
+        // button group guidelines ask of a selected button. Each button brings
+        // its own container, which is what holds it apart from the cover
+        // behind ("use icons with a background to make them easy to see on any
+        // surface"), so there is no toolbar under them.
+        // Shuffle and repeat are toggles outside the group, one size and one
+        // gap on either side of it, so the group is what sits on the centre
+        // line and a press inside it never moves them.
+        RowLayout {
             id: transport
-            objectName: "immersiveToolbar"
+            objectName: "immersiveTransport"
+            // Button groups, Adaptive design: larger, wider buttons in large and
+            // extra-large windows (1200dp and wider), smaller ones below. The
+            // height floor is this view's own: under 800dp, 96dp of transport
+            // takes the room the cover needs.
+            readonly property string buttonSize: player.width>=1200 && player.height>=800 ? "large" : "medium"
             Layout.alignment: Qt.AlignHCenter
+            spacing: transportGroup.spacing
             opacity: player.controlsShown?1:0
             enabled: opacity>0; Accessible.ignored: opacity===0
             Behavior on opacity {NumberAnimation {duration:Theme.normal;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.effectsCurve}}
-            content: [
-            MButton { symbol: "shuffle"; toggle: true; selected: app.shuffle; tip: app.shuffle?"Shuffle on":"Shuffle off"; Accessible.ignored: transport.opacity===0; onClicked: app.shuffle=!app.shuffle },
-            MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.previous() },
-            MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; implicitWidth: 80; implicitHeight: 56; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.toggle() },
-            MButton { objectName: "immersiveNextButton"; symbol: "next"; tip: "Next"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.next() },
-            MButton { symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; Accessible.ignored: transport.opacity===0; onClicked: app.repeat=(app.repeat+1)%3 }
-            ]
+            MButton { objectName: "immersiveShuffleButton"; symbol: "shuffle"; toggle: true; selected: app.shuffle; tip: app.shuffle?"Shuffle on":"Shuffle off"; Accessible.ignored: transport.opacity===0; onClicked: app.shuffle=!app.shuffle }
+            MButtonGroup {
+                id: transportGroup
+                objectName: "immersiveTransportGroup"
+                MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: "Previous"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.previous() }
+                MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; square: true; toggle: true; selected: app.playing||app.resolving; size: transport.buttonSize; iconWidth: "wide"; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.toggle() }
+                MButton { objectName: "immersiveNextButton"; symbol: "next"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: "Next"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.next() }
+            }
+            MButton { objectName: "immersiveRepeatButton"; symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; Accessible.ignored: transport.opacity===0; onClicked: app.repeat=(app.repeat+1)%3 }
         }
         // The bar itself is what sits on the window's centre line, not the row
         // carrying it. Hanging the queue and volume actions off one end pushed

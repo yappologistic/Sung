@@ -50,6 +50,22 @@ AbstractButton {
     // has it morph as well as recolour: a round icon button is full cornered
     // while it is off, medium once it is on, and small under the finger.
     property bool toggle: false
+    // Material's two icon button shapes. A round one is fully rounded; a
+    // square one takes the size's square corner (MediumIconButtonTokens.
+    // ContainerShapeSquare is CornerLarge, the large size CornerExtraLarge).
+    // A toggle that comes on swaps to the other one, so a square button turns
+    // round: "a selected button should change shape from round to square, or
+    // square to round" (button group guidelines, Behavior).
+    property bool square: false
+    // What a standard button group adds to or takes from this button's width
+    // while a press is under way. MButtonGroup owns both; a button outside a
+    // group keeps them at zero.
+    property real groupPress: 0
+    property real groupExpansion: 0
+    // In a group the press is shown by width, so the shrink every other
+    // button makes under the finger would pull against it. Compose scales
+    // neither (IconButton.kt, ButtonGroup.kt).
+    property bool grouped: false
     property bool morphPlayback:false
     property bool busy: false
     property bool confirmed: false
@@ -113,9 +129,10 @@ AbstractButton {
     // or a row sized to its own label elides it ("Reset layo…").
     readonly property real alignedLeadRoom: (symbol.length || busy ? sizedIcon + sizedGap + 8 : 0) + contentInset
     readonly property real alignedTrailRoom: trailingSymbol.length ? 36 : 18
-    implicitWidth: text.length ? buttonLabel.implicitWidth + (leftAligned ? alignedLeadRoom + alignedTrailRoom
-                                                                         : (symbol.length || busy ? control.sizedIcon+control.sizedGap : 0) + control.contentInset*2)
-                               : Math.max(control.touchTarget, Math.round(control.sizedSquareWidth))
+    implicitWidth: (text.length ? buttonLabel.implicitWidth + (leftAligned ? alignedLeadRoom + alignedTrailRoom
+                                                                          : (symbol.length || busy ? control.sizedIcon+control.sizedGap : 0) + control.contentInset*2)
+                                : Math.max(control.touchTarget, Math.round(control.sizedSquareWidth)))
+                   + groupExpansion
     implicitHeight: control.touchTarget
     hoverEnabled: true
     focusPolicy: Qt.StrongFocus
@@ -141,7 +158,7 @@ AbstractButton {
     }
     background: Rectangle {
         // The container sits inside the touch target rather than filling it.
-        width: control.text.length ? control.width : Math.min(control.width, Math.round(control.sizedSquareWidth))
+        width: control.text.length ? control.width : Math.min(control.width, Math.round(control.sizedSquareWidth)+control.groupExpansion)
         height: Math.min(control.height, control.sizedHeight)
         x: (control.width-width)/2
         y: (control.height-height)/2
@@ -151,9 +168,10 @@ AbstractButton {
         // squarer step, which is the shape morph the specification asks for on
         // interaction states. Every button presses to the size's pressed step
         // (ButtonSmallTokens.PressedContainerShape is the small corner); the
-        // square step is for a toggle that is on.
+        // square step is for a square button at rest and a round toggle that
+        // is on, and a square toggle that comes on turns round.
         radius: control.down ? control.sizedPressed
-                             : control.toggle && control.selected ? control.sizedSquare
+                             : control.square !== (control.toggle && control.selected) ? control.sizedSquare
                              : Theme.shapeFull(Math.min(width, height))
         color: control.dimmed
                  ? (control.hasContainer ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,
@@ -189,7 +207,7 @@ AbstractButton {
         anchors.fill: control.background; anchors.margins: -3
         // The ring sits outside the button, so optical roundness adds the gap
         // between them rather than repeating the button's own radius.
-        radius: Theme.shapeInside(Theme.shapeFull(Math.min(width, height)), -3); color: "transparent"
+        radius: Theme.shapeInside(control.background.radius, -3); color: "transparent"
         border.width: 2; border.color: Theme.focusRing
         visible: control.visualFocus
     }
@@ -209,7 +227,7 @@ AbstractButton {
                     // an outlined form is drawn outlined until the control
                     // reporting it is on.
                     fill: control.selected ? 1 : 0 }
-                Loader {id:playbackGlyph;anchors.centerIn:parent;active:control.morphPlayback && !control.busy && !control.confirmed && (control.symbol==="play" || control.symbol==="pause");sourceComponent:PlaybackGlyph {paused:control.symbol==="pause";ink:control.ink}}
+                Loader {id:playbackGlyph;anchors.centerIn:parent;active:control.morphPlayback && !control.busy && !control.confirmed && (control.symbol==="play" || control.symbol==="pause");sourceComponent:PlaybackGlyph {paused:control.symbol==="pause";ink:control.ink;size:control.sizedIcon}}
                 Loader {
                     anchors.fill: parent; active: control.busy
                     sourceComponent: MLoadingIndicator { objectName: "buttonSpinner"; running: control.busy; ink: control.ink; trackColor: "transparent"; label: "Loading"; Accessible.ignored: true }
@@ -230,6 +248,6 @@ AbstractButton {
             }
         }
     }
-    scale: down ? 0.96 : 1
+    scale: down && !grouped ? 0.96 : 1
     Behavior on scale { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
 }

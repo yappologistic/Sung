@@ -210,6 +210,13 @@ void collectInk(QQuickItem *root, QQuickWindow *window, QList<Ink> &out,
                 int &skippedDisabled) {
   if (!root || !root->isVisible() || opacityOf(root) < 0.03)
     return;
+  // LyricsView fades a line that crosses the viewport's edge (edgeOpacity) so
+  // no glyph is ever cut in half: that line is leaving view, not being read.
+  // The immersive stage's own contrast check takes resting lines only when
+  // they are fully opaque, and this audit does the same. Where a line lands
+  // in that band depends on the height the controls below leave the list.
+  if (root->objectName() == "lyricLine" && root->property("edgeOpacity").toDouble() < 0.99)
+    return;
   const bool text = root->inherits("QQuickText");
   const bool icon = QString::fromLatin1(root->metaObject()->className()).contains("Icon_QMLTYPE") ||
                     root->objectName() == "materialIcon" || root->objectName() == "menuItemLeading";

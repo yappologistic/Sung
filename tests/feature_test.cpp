@@ -3324,7 +3324,7 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
           "turning the setting off returns the top bar arrangement");
   c.check(shownItem(w->contentItem(), "navigationBar"), "with the capsule back");
 
-  // --- Floating toolbar in the immersive player ---
+  // --- Material's player in the immersive view ---
   QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
   c.check(c.until([&] { return b->page() == "library" && b->libraryId() == "files" &&
                                b->results()->count() == 6; }),
@@ -3333,17 +3333,18 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
   b->playAt(0);
   c.check(c.until([&] { return b->playing(); }), "a song plays");
   w->setProperty("immersive", true);
-  c.check(c.until([&] { return shownItem(w->contentItem(), "immersiveToolbar") != nullptr; }, 4000),
-          "the immersive transport sits on a floating toolbar");
-  auto toolbar = shownItem(w->contentItem(), "immersiveToolbar");
-  if (toolbar) {
-    c.check(toolbar->property("radius").toReal() > 20,
-            "which floats as a rounded bar rather than being anchored into the surface");
-    c.check(shownItem(toolbar, "immersivePlayButton"), "and holds the transport controls");
+  c.check(c.until([&] { return shownItem(w->contentItem(), "immersiveTransportGroup") != nullptr; }, 4000),
+          "the immersive transport is a standard button group");
+  auto transportGroup = shownItem(w->contentItem(), "immersiveTransportGroup");
+  if (transportGroup) {
+    auto play = shownItem(transportGroup, "immersivePlayButton");
+    auto previous = shownItem(transportGroup, "immersivePreviousButton");
+    c.check(play && play->property("filled").toBool() && previous && previous->property("tonal").toBool(),
+            "with a filled play between tonal skip buttons, as in Material's own player");
     c.check(!shownItem(w->contentItem(), "navigationBar"),
-            "a toolbar and a navigation bar are never shown together");
+            "the navigation bar stays out of the immersive view");
   }
-  c.shot("08-floating-toolbar");
+  c.shot("08-immersive-player");
   w->setProperty("immersive", false);
   QTest::qWait(400);
 

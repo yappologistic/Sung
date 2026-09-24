@@ -21,6 +21,7 @@
 #include <QTest>
 #include <QWheelEvent>
 #include <qpa/qwindowsysteminterface.h>
+#include <algorithm>
 #include <functional>
 #include <atomic>
 
@@ -608,7 +609,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   QTest::qWait(350);
   shot("controls-hidden");
   auto hiddenTop=visibleItem(w->contentItem(),"immersiveTopControls");
-  auto hiddenBar=visibleItem(w->contentItem(),"immersiveToolbar");
+  auto hiddenBar=visibleItem(w->contentItem(),"immersiveTransport");
   auto hiddenSeek=visibleItem(w->contentItem(),"immersiveSeekRow");
   check(hiddenTop&&hiddenBar&&hiddenSeek&&
         !hiddenTop->isEnabled()&&!hiddenBar->isEnabled()&&!hiddenSeek->isEnabled(),
@@ -670,16 +671,29 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   choose("artwork");
   {
     auto top=visibleItem(w->contentItem(),"immersiveTopControls");
-    auto bar=visibleItem(w->contentItem(),"immersiveToolbar");
+    auto bar=visibleItem(w->contentItem(),"immersiveTransport");
     auto art=visibleItem(w->contentItem(),"immersiveArtwork");
     auto row=visibleItem(w->contentItem(),"immersiveSeekRow");
     check(top&&bar&&art&&row,"the immersive view has its four bands on screen");
     if(top&&bar&&art&&row){
-      // Material's floating toolbar is 64dp. The immersive view used to set
-      // its own height and quietly made the component taller than the token.
-      check(qAbs(bar->height()-64)<0.5,
-            qPrintable(QString("the transport is Material's 64dp floating toolbar (%1)")
-                       .arg(bar->height(),0,'f',0)));
+      // Material's own music player (icon button guidelines): previous and
+      // next are narrow tonal buttons, play a wide filled one, one size in one
+      // standard button group. This window is below the large class, so the
+      // size is medium: MediumIconButtonTokens 56dp tall, 12+24+12 narrow,
+      // 24+24+24 wide.
+      auto previous=visibleItem(w->contentItem(),"immersivePreviousButton");
+      auto play=visibleItem(w->contentItem(),"immersivePlayButton");
+      auto next=visibleItem(w->contentItem(),"immersiveNextButton");
+      auto shuffle=visibleItem(w->contentItem(),"immersiveShuffleButton");
+      auto repeat=visibleItem(w->contentItem(),"immersiveRepeatButton");
+      auto container=[](QQuickItem *button){return button?button->property("background").value<QQuickItem*>():nullptr;};
+      auto pc=container(previous),yc=container(play),nc=container(next);
+      check(pc&&yc&&nc&&qAbs(yc->height()-56)<0.5&&qAbs(pc->height()-56)<0.5&&qAbs(pc->width()-48)<0.5&&
+            qAbs(yc->width()-72)<0.5&&qAbs(nc->width()-48)<0.5&&previous->property("tonal").toBool()&&
+            next->property("tonal").toBool()&&play->property("filled").toBool(),
+            qPrintable(QString("the transport is Material's player: tonal %1x%2 skips around a filled %3x%4 play")
+                       .arg(pc?pc->width():0,0,'f',0).arg(pc?pc->height():0,0,'f',0)
+                       .arg(yc?yc->width():0,0,'f',0).arg(yc?yc->height():0,0,'f',0)));
       // Everything stacked down the middle shares one centre line. It did not:
       // the seek row carried the queue and volume buttons on its end, which
       // pushed the bar itself off centre while the row stayed centred.
@@ -698,6 +712,19 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
       const double right=w->width()-(top->mapToScene(QPointF(top->width(),0)).x());
       check(qAbs(left-right)<1.5,
             qPrintable(QString("the page margins match (%1 and %2)").arg(left,0,'f',0).arg(right,0,'f',0)));
+      // Shuffle and repeat stand outside the group at one distance on either
+      // side and on its vertical centre, so the group is what the centre line
+      // runs through.
+      auto group=visibleItem(w->contentItem(),"immersiveTransportGroup");
+      if(group&&shuffle&&repeat){
+        const double gl=group->mapToScene({0,0}).x(),gr=group->mapToScene({group->width(),0}).x();
+        const double sr=shuffle->mapToScene({shuffle->width(),0}).x(),rl=repeat->mapToScene({0,0}).x();
+        const double gy=group->mapToScene({0,group->height()/2}).y();
+        check(qAbs(centreOf(group)-middle)<1&&qAbs((gl-sr)-(rl-gr))<0.5&&qAbs(shuffle->width()-repeat->width())<0.5&&
+              qAbs(shuffle->mapToScene({0,shuffle->height()/2}).y()-gy)<0.5&&qAbs(repeat->mapToScene({0,repeat->height()/2}).y()-gy)<0.5,
+              qPrintable(QString("the group is centred (%1 of %2) with shuffle and repeat %3 and %4 away on its centre line")
+                         .arg(centreOf(group),0,'f',1).arg(middle,0,'f',1).arg(gl-sr,0,'f',1).arg(rl-gr,0,'f',1)));
+      } else check(false,"the transport group, shuffle and repeat are on screen");
     }
     // A taller window has to reach the artwork. It was capped by a constant,
     // so past a certain height the view stopped using the room it was given.
@@ -717,7 +744,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     b->toast("Immersive placement");
     if(waitFor([&]{auto t=visibleItem(w->contentItem(),"toastBar");return t&&t->height()>1;})){
       auto toast=visibleItem(w->contentItem(),"toastBar");
-      auto bar=visibleItem(w->contentItem(),"immersiveToolbar");
+      auto bar=visibleItem(w->contentItem(),"immersiveTransport");
       if(toast&&bar)
         check(toast->mapToScene(QPointF(0,toast->height())).y()<=bar->mapToScene(QPointF(0,0)).y()+0.5,
               qPrintable(QString("the notification clears the transport (ends %1, transport starts %2)")
@@ -775,6 +802,8 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     springCheck("immersiveFadeOutMotion","fastEffects");
     springCheck("immersiveFadeInMotion","fastEffects");
     springCheck("immersiveDetailFadeMotion","fastEffects");
+    // ButtonGroup.kt:138 animates the press on the fast spatial spring.
+    springCheck("buttonGroupPressMotion","fastSpatial");
   }
   // The artwork, transport, and seek bar must share a centre at every width
   // used in the immersive captures, including the compact layout.
@@ -782,7 +811,7 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   for(int width:{480,600,840,1024,1440,2560}){
     resizeTo(width,width<=600?620:900);
     auto artwork=visibleItem(w->contentItem(),"immersiveArtwork");
-    auto toolbar=visibleItem(w->contentItem(),"immersiveToolbar");
+    auto toolbar=visibleItem(w->contentItem(),"immersiveTransport");
     auto seek=visibleItem(w->contentItem(),"immersiveSeek");
     const auto centre=[](QQuickItem *item){return item->mapToScene({item->width()/2,0}).x();};
     check(artwork&&toolbar&&seek,qPrintable(QString("%1px artwork, transport and seek exist").arg(width)));
@@ -817,6 +846,60 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     b->setTheme(theme);shot(QString("high-contrast-%1").arg(theme));
   }
   b->setColorContrast(0);b->setTheme("dark");
+  // A large window takes the large size (LargeIconButtonTokens): 96dp tall,
+  // narrow 16+32+16 and wide 48+32+48. Play is the square shape at rest,
+  // CornerExtraLarge, and turns round while the song plays. A real press on
+  // it grows it by 15% of its width, half taken from each neighbour
+  // (ButtonGroup.kt:474-491), and the group neither widens nor moves.
+  resizeTo(1600,1000);QTest::qWait(200);
+  {
+    auto play=visibleItem(w->contentItem(),"immersivePlayButton");
+    auto previous=visibleItem(w->contentItem(),"immersivePreviousButton");
+    auto next=visibleItem(w->contentItem(),"immersiveNextButton");
+    auto group=visibleItem(w->contentItem(),"immersiveTransportGroup");
+    auto container=[](QQuickItem *button){return button?button->property("background").value<QQuickItem*>():nullptr;};
+    auto yc=container(play),pc=container(previous),nc=container(next);
+    check(yc&&pc&&nc&&group&&qAbs(yc->height()-96)<0.5&&qAbs(yc->width()-128)<0.5&&qAbs(pc->width()-64)<0.5&&qAbs(nc->width()-64)<0.5,
+          qPrintable(QString("a 1600dp window uses the large player: play %1x%2, skips %3 wide")
+                     .arg(yc?yc->width():0,0,'f',1).arg(yc?yc->height():0,0,'f',1).arg(pc?pc->width():0,0,'f',1)));
+    if(yc&&pc&&nc&&group&&play){
+      b->pause();check(waitFor([&]{return !b->playing()&&qAbs(yc->property("radius").toDouble()-28)<0.5;}),
+                       qPrintable(QString("paused, play is the 28dp square (%1)").arg(yc->property("radius").toDouble(),0,'f',1)));
+      b->play();check(waitFor([&]{return b->playing()&&qAbs(yc->property("radius").toDouble()-48)<0.5;}),
+                      qPrintable(QString("playing, it turns round (%1)").arg(yc->property("radius").toDouble(),0,'f',1)));
+      const double groupWidth=group->width(),groupLeft=group->mapToScene({0,0}).x();
+      const QPoint centre=play->mapToScene({play->width()/2,play->height()/2}).toPoint();
+      QTest::mousePress(w,Qt::LeftButton,{},centre);QTest::qWait(60);
+      check(qAbs(yc->width()-(128+19.2))<0.6&&qAbs(pc->width()-(64-9.6))<0.6&&qAbs(nc->width()-(64-9.6))<0.6&&
+            qAbs(yc->property("radius").toDouble()-16)<0.5,
+            qPrintable(QString("pressed, play grows to %1 on the 16dp pressed corner while the skips give up %2 and %3")
+                       .arg(yc->width(),0,'f',1).arg(64-pc->width(),0,'f',1).arg(64-nc->width(),0,'f',1)));
+      check(qAbs(group->width()-groupWidth)<0.6&&qAbs(group->mapToScene({0,0}).x()-groupLeft)<0.6,
+            qPrintable(QString("and the group keeps its width and place (%1 to %2)").arg(groupWidth,0,'f',1).arg(group->width(),0,'f',1)));
+      shot("transport-pressed");
+      QTest::mouseRelease(w,Qt::LeftButton,{},centre);
+      check(waitFor([&]{return qAbs(yc->width()-128)<0.5&&qAbs(pc->width()-64)<0.5&&qAbs(nc->width()-64)<0.5;}),
+            "released, every button returns to its own width");
+      check(waitFor([&]{return !b->playing();}),"and the press was a click that paused the song");
+      // The skips are pressed and then dragged off before release, which
+      // Qt Quick Controls does not count as a click, so the queue stays put
+      // for the checks after this one.
+      const int index=b->currentIndex();
+      auto skip=[&](QQuickItem *button,const char *name){
+        const QPoint at=button->mapToScene({button->width()/2,button->height()/2}).toPoint();
+        QTest::mousePress(w,Qt::LeftButton,{},at);QTest::qWait(60);
+        check(qAbs(container(button)->width()-(64+9.6))<0.6&&qAbs(yc->width()-(128-9.6))<0.6,
+              qPrintable(QString("pressing %1 takes all 9.6dp from play (%2, play %3)").arg(name)
+                         .arg(container(button)->width(),0,'f',1).arg(yc->width(),0,'f',1)));
+        const QPoint away(at.x(),at.y()-240);
+        QTest::mouseMove(w,away);QTest::mouseRelease(w,Qt::LeftButton,{},away);
+        check(waitFor([&]{return qAbs(yc->width()-128)<0.5;}),"and gives it back");
+      };
+      skip(previous,"previous");skip(next,"next");
+      check(b->currentIndex()==index,"dragging off a skip before release changes nothing");
+      b->play();
+    }
+  }
   resizeTo(480,780);
   click("immersiveLayoutButton");
   check(waitFor(menuOpen),"layout menu opens for coverflow");
