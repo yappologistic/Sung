@@ -735,6 +735,16 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
               qAbs(shuffle->mapToScene({0,shuffle->height()/2}).y()-gy)<0.5&&qAbs(repeat->mapToScene({0,repeat->height()/2}).y()-gy)<0.5,
               qPrintable(QString("the group is centred (%1 of %2) with shuffle and repeat %3 and %4 away on its centre line")
                          .arg(centreOf(group),0,'f',1).arg(middle,0,'f',1).arg(gl-sr,0,'f',1).arg(rl-gr,0,'f',1)));
+        // Material asks a selected toggle to change more than its colour.
+        // Shuffle has no filled form, so on it is drawn at semibold.
+        const bool was=b->shuffle();
+        QTest::mouseClick(w,Qt::LeftButton,{},shuffle->mapToScene({shuffle->width()/2,shuffle->height()/2}).toPoint());
+        auto heavy=[&]{auto fill=visibleItem(shuffle,"iconFill");return fill&&fill->property("source").toString().contains("/shuffle_semibold/")&&fill->opacity()>0.99;};
+        check(waitFor([&]{return b->shuffle()!=was&&(b->shuffle()?heavy():!heavy());}),
+              qPrintable(QString("clicking shuffle %1 it, and its glyph is %2").arg(was?"turns off":"turns on").arg(was?"regular again":"semibold")));
+        if(!was)shot("transport-shuffle-on");
+        QTest::mouseClick(w,Qt::LeftButton,{},shuffle->mapToScene({shuffle->width()/2,shuffle->height()/2}).toPoint());
+        check(waitFor([&]{return b->shuffle()==was;}),"clicking again puts shuffle back");
       } else check(false,"the transport group, shuffle and repeat are on screen");
     }
     // A taller window has to reach the artwork. It was capped by a constant,

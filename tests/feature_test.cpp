@@ -6235,6 +6235,32 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
       c.check(outline && outline->isVisible(), "the outlined heart is the one drawn while it is off");
       c.check(outline && outline->property("status").toInt() == 1,
               "and its drawing is one the application ships");
+      // A symbol with one form draws that form. A property whose name read
+      // as a signal handler once left every such icon without a picture.
+      glyph->setProperty("name", QString("previous"));
+      glyph->setProperty("fill", 1.0);
+      auto single = anyItem(glyph, "iconFill");
+      c.check(c.until([&] { return single && single->property("status").toInt() == 1; }) &&
+                  single->property("source").toString().contains("/previous/"),
+              "a symbol with one form draws its own picture");
+      // Shuffle and repeat have no filled form, so a selected toggle takes
+      // Material Symbols' semibold drawing instead (icon button guidelines).
+      for (const auto *name : {"shuffle", "repeat", "repeat_one"}) {
+        glyph->setProperty("name", QString::fromLatin1(name));
+        c.check(glyph->property("hasSemibold").toBool() && !glyph->property("hasOutline").toBool(),
+                QString("%1 has a semibold form instead of a filled one").arg(name));
+      }
+      glyph->setProperty("name", QString("shuffle"));
+      glyph->setProperty("fill", 1.0);
+      auto heavier = anyItem(glyph, "iconFill");
+      c.check(c.until([&] { return heavier && heavier->property("status").toInt() == 1 && qAbs(heavier->opacity() - 1) < 0.01; }) &&
+                  heavier->property("source").toString().contains("/shuffle_semibold/"),
+              "a selected shuffle is drawn at semibold, from a drawing the application ships");
+      glyph->setProperty("fill", 0.0);
+      auto regular = anyItem(glyph, "iconOutline");
+      c.check(c.until([&] { return regular && regular->isVisible() && heavier->opacity() < 0.01; }) &&
+                  regular->property("source").toString().contains("/shuffle/"),
+              "and at the regular weight while it is off");
       glyph->setVisible(false);
       glyph->setParentItem(nullptr);
     }
