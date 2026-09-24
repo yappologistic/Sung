@@ -1486,6 +1486,7 @@ void Backend::setTrackNotifications(bool enabled) {
   emit settingsChanged();
 }
 void Backend::setKeepCompletedLyrics(bool enabled) {m_settings.setValue("keepCompletedLyrics",enabled);emit settingsChanged();}
+void Backend::setPosterLyrics(bool enabled) {if(posterLyrics()==enabled)return;m_settings.setValue("posterLyrics",enabled);emit settingsChanged();}
 void Backend::setVolumeStep(int percent) {
   if(percent!=1&&percent!=2&&percent!=5&&percent!=10)return;
   m_settings.setValue("volumeStep",percent);emit settingsChanged();

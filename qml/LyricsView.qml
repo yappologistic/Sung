@@ -64,6 +64,28 @@ Item {
     readonly property int gapSeconds: {app.position;app.lyricLines;app.lyricOffset;return visible && following && !searchOpen && !app.lyricsBusy ? app.lyricGapSeconds : 0;}
     SungText {id:gapCue;objectName:"lyricGapCue";anchors.horizontalCenter:parent.horizontalCenter;anchors.bottom:parent.bottom;height:visible?36:0;visible:lyricPane.gapSeconds>0;text:"Lyrics in "+lyricPane.gapSeconds+" s";color:Theme.muted;font.pixelSize:Theme.labelLarge;labelRole:true;verticalAlignment:Text.AlignVCenter;Accessible.name:text}
     property bool expanded: false
+    // Poster lyrics measure their words here, with one Text that lives as
+    // long as the view. A Text made with the poster had not finished loading
+    // when the poster first laid out, and measured every word as nothing.
+    // Text lays out again at once when its text changes but waits for the
+    // next polish after a font change alone, so the text is cleared first.
+    // The widths are kept for the song and let go when the lyrics change.
+    Text { id: posterProbe; visible: false; textFormat: Text.PlainText }
+    property var posterWidths: ({})
+    readonly property var lyricSource: app.lyricLines
+    onLyricSourceChanged: posterWidths=({})
+    function posterMeasure(word, pixelSize, letterSpacing, weight, width, round, slant) {
+        const key = [word, pixelSize, letterSpacing, weight, width, round, slant].join("|")
+        const known = posterWidths[key]
+        if (known !== undefined) return known
+        posterProbe.text = ""
+        posterProbe.font = Qt.font({family: Theme.fontFamily, pixelSize: pixelSize, weight: weight, letterSpacing: letterSpacing,
+                                    variableAxes: {"wdth": width, "ROND": round, "slnt": slant}})
+        posterProbe.text = word
+        const measured = posterProbe.implicitWidth
+        posterWidths[key] = measured
+        return measured
+    }
     property bool following: true
     onFollowingChanged: { if(following)liveLyrics.centerCurrent(); }
     onExpandedChanged: liveLyrics.centerCurrent()
@@ -140,7 +162,10 @@ Item {
             id: lyricLine; objectName: "lyricLine"
             required property var modelData
             required property int index
-            width: liveLyrics.width; implicitHeight: lyricLabel.implicitHeight+20
+            width: liveLyrics.width
+            // A poster row set larger than the plain line needs the room.
+            implicitHeight: (posterLoader.item ? posterLoader.item.implicitHeight+lyricLabel.topPadding+lyricLabel.bottomPadding
+                                               : lyricLabel.implicitHeight)+20
             property bool current: index===app.lyricIndex
             property bool completedHidden: !app.keepCompletedLyrics && (modelData.end>0 ? app.position+app.lyricOffset>=modelData.end : app.lyricIndex>index)
             readonly property bool hovered: lineHover.hovered
@@ -184,6 +209,49 @@ Item {
                 // DefaultSpatial changes the size of the focused lyric line.
                 Behavior on scale { id: lyricScaleBehavior; enabled: app.motion; NumberAnimation { objectName: "lyricScaleMotion"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
                 Behavior on color { ColorAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+                // The plain line steps aside while its poster is on screen. It
+                // keeps its layout underneath, and its wrap is where the poster
+                // breaks its rows.
+                opacity: posterLoader.item ? 0 : 1
+            }
+            // Poster lyrics (Settings, Appearance): the line being sung set in
+            // Google Sans Flex's axes, word by word (PosterLine.qml). It shares
+            // the plain line's box and scale, and lingers after the line ends
+            // only until its words have sprung back to the plain ones.
+            // Any character that is not space, punctuation or a note glyph, so
+            // the "…" and "♪" that stand in for instrumental gaps stay plain.
+            // (Qt's JavaScript engine does not support \p{L} property classes.)
+            // A line that has had a poster keeps it until its words are the
+            // plain ones again, then lets it go.
+            property bool posterHeld: false
+            onCurrentChanged: if(current)posterHeld=true
+            Component.onCompleted: posterHeld=current
+            ListView.onReused: posterHeld=current
+            readonly property bool hasLetters: /[^\s.,;:!?'"()\[\]\-–—…*~_♪♫]/.test(modelData.text || "")
+            Loader {
+                id: posterLoader
+                // Placed where the plain text starts and scaled about the same
+                // point the plain line is (its left edge, halfway down), so the
+                // two coincide at every step of the line's own scale spring.
+                // The plain text is centred in its padded box (SungText's
+                // AlignVCenter), so the poster is too.
+                anchors.left: lyricLabel.left; anchors.leftMargin: lyricLabel.leftPadding
+                anchors.verticalCenter: lyricLabel.verticalCenter
+                anchors.verticalCenterOffset: (lyricLabel.topPadding-lyricLabel.bottomPadding)/2
+                transform: Scale { origin.x: -lyricLabel.leftPadding; origin.y: posterLoader.height/2-posterLoader.anchors.verticalCenterOffset; xScale: lyricLabel.scale; yScale: lyricLabel.scale }
+                active: app.posterLyrics && lyricLine.hasLetters && (lyricLine.current || lyricLine.posterHeld)
+                sourceComponent: PosterLine {
+                    width: lyricLabel.width-lyricLabel.leftPadding-lyricLabel.rightPadding
+                    text: lyricLine.modelData.text || ""
+                    pixelSize: lyricLabel.font.pixelSize
+                    rowHeight: lyricLabel.lineHeight
+                    restHeight: lyricLabel.implicitHeight-lyricLabel.topPadding-lyricLabel.bottomPadding
+                    letterSpacing: lyricLabel.font.letterSpacing
+                    restColor: lyricLabel.color
+                    measureWord: lyricPane.posterMeasure
+                    shown: lyricLine.current
+                    onRestored: lyricLine.posterHeld=false
+                }
             }
         }
     }

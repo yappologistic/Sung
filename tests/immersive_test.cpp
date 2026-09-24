@@ -7,6 +7,8 @@
 #include <QDir>
 #include <QFile>
 #include <QFont>
+#include <QMap>
+#include <QSet>
 #include <QImage>
 #include <QLoggingCategory>
 #include <QPainter>
@@ -1158,6 +1160,135 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
   }
   b->setTheme("dark");QTest::qWait(180);shot("side-lyrics-dark");
   lyricContrast(4.5,"dark side pane");
+  // --- Poster-style lyrics ---
+  // Settings, Appearance: the line being sung set in Google Sans Flex's axes,
+  // every word its own weight, width, roundness and slant, each row stretched
+  // along the width axis until it meets the measure. It is off unless chosen,
+  // so it is turned on the way a person turns it on: Settings, a search, a
+  // click. It changes nothing about where anything sits.
+  {
+    b->setMotion(true);b->seek(11000);
+    auto currentLine=[&]()->QQuickItem*{
+      QList<QQuickItem*> lines;collectItems(w->contentItem(),"lyricLine",lines);
+      for(auto line:lines)if(line->isVisible()&&line->property("current").toBool())return line;
+      return nullptr;
+    };
+    check(waitFor([&]{return currentLine()&&currentLine()->property("modelData").toMap().value("text")=="Across the still water";}),
+          "the second line is current before the poster is turned on");
+    const double plainHeight=currentLine()?currentLine()->height():-1;
+    check(!b->posterLyrics()&&!visibleItem(w->contentItem(),"posterLine"),"poster lyrics are off by default");
+    click("settingsButton");
+    auto settings=w->findChild<QObject*>("settingsDialog");
+    check(waitFor([&]{return settings&&settings->property("opened").toBool();}),"Settings opens");
+    click("settingsSearch");for(const char key:QByteArray("poster"))QTest::keyClick(w,key);
+    check(waitFor([&]{return visibleItem(w->contentItem(),"posterLyricsSwitch");}),"searching finds Poster-style lyrics");
+    QTest::qWait(300);
+    click("posterLyricsSwitch");
+    check(waitFor([&]{return b->posterLyrics();}),"its switch turns them on");
+    QTest::keyClick(w,Qt::Key_Escape);
+    check(waitFor([&]{return settings&&!settings->property("visible").toBool();}),"Settings closes");
+    // Every row of a poster fills the measure unless its words have reached
+    // the widest the width axis goes, and there are as many rows as the plain
+    // line wraps to.
+    auto posterFills=[&](QQuickItem *poster,const QString &context){
+      auto line=poster?poster->parentItem():nullptr;
+      while(line&&line->objectName()!="lyricLine")line=line->parentItem();
+      auto label=line?visibleItem(line,"lyricLabel"):nullptr;
+      if(!label)for(auto child:line?line->childItems():QList<QQuickItem*>{})if(child->objectName()=="lyricLabel")label=child;
+      QList<QQuickItem*> words;collectItems(poster,"posterWord",words);
+      // A row that fills ends at the margin to the pixel, its gaps taking up
+      // what the width grid rounded; one that cannot fill (every word at the
+      // widest the axis goes, as large as a poster row may be) ends short of
+      // it. None runs past it.
+      QMap<QQuickItem*,double> rightEdge;QMap<QQuickItem*,bool> widest;
+      // Each word sits in a slot the row lays out, so its row is two up.
+      const auto rowOf=[](QQuickItem *word){return word->parentItem()->parentItem();};
+      for(auto word:words){
+        const double right=word->mapToItem(poster,QPointF(word->width(),0)).x();
+        rightEdge[rowOf(word)]=std::max(rightEdge.value(rowOf(word)),right);
+        widest[rowOf(word)]=!rowOf(word)->property("fills").toBool();
+      }
+      const int rows=poster->property("rows").toList().size();
+      check(label&&rows==label->property("lineCount").toInt(),
+            qPrintable(QString("%1: the poster breaks where the plain line does (%2 rows, %3 lines)")
+                       .arg(context).arg(rows).arg(label?label->property("lineCount").toInt():-1)));
+      bool flush=!rightEdge.isEmpty();QString edges;
+      for(auto row:rightEdge.keys()){
+        edges+=QString(" %1").arg(rightEdge.value(row),0,'f',1);
+        const int count=std::count_if(words.cbegin(),words.cend(),[&](QQuickItem *w){return rowOf(w)==row;});
+        const double slack=count>1?1:poster->width()*0.015;
+        if(rightEdge.value(row)>poster->width()+slack||(!widest.value(row)&&qAbs(rightEdge.value(row)-poster->width())>slack))flush=false;
+      }
+      check(flush,qPrintable(QString("%1: every row meets the %2 measure (%3)").arg(context).arg(poster->width(),0,'f',1).arg(edges)));
+      QSet<QString> styles;
+      for(auto word:words){
+        const auto font=word->property("font").value<QFont>();
+        styles.insert(QString("%1/%2").arg(font.weight()).arg(font.variableAxisValue(QFont::Tag("wdth")),0,'f',0));
+      }
+      check(styles.size()>=std::min<qsizetype>(3,words.size()),
+            qPrintable(QString("%1: the words take different weights and widths (%2 styles)").arg(context).arg(styles.size())));
+      // It starts where the plain text starts and shares its centre line, and
+      // the line is exactly as tall as the poster in it.
+      if(label&&line){
+        const double posterLeft=poster->mapToItem(label,QPointF(0,0)).x();
+        const double posterMiddle=poster->mapToItem(label,QPointF(0,poster->height()/2)).y();
+        check(qAbs(posterLeft-label->property("leftPadding").toDouble())<0.5&&qAbs(posterMiddle-label->height()/2)<0.5&&
+              qAbs(line->height()-(poster->height()+label->property("topPadding").toDouble()+label->property("bottomPadding").toDouble()+20))<0.5,
+              qPrintable(QString("%1: the poster sits where the plain text does (left %2, middle %3 of %4) in a line its own height")
+                         .arg(context).arg(posterLeft,0,'f',1).arg(posterMiddle,0,'f',1).arg(label->height()/2,0,'f',1)));
+      }
+    };
+    auto poster=[&]{return visibleItem(w->contentItem(),"posterLine");};
+    // Measured once the spring has come to rest: DefaultSpatial passes its
+    // target on the way, and the row is only meant to fit at the end.
+    auto settled=[&]{auto p=poster();return p&&p->property("progress").toDouble()==1.0;};
+    check(waitFor(settled),"the current line in the side panel becomes a poster");
+    if(poster())posterFills(poster(),"side panel");
+    check(currentLine()&&currentLine()->height()>=plainHeight-0.5,
+          qPrintable(QString("the line grows only as much as its poster does (%1 from %2)")
+                     .arg(currentLine()?currentLine()->height():-1,0,'f',1).arg(plainHeight,0,'f',1)));
+    {
+      const auto springs=b->motionSprings(b->motionScheme()!="standard");
+      // A list delegate is not a QObject child of the window, so the search
+      // starts at the poster.
+      auto animation=poster()?poster()->findChild<QObject*>("posterLineMotion"):nullptr;
+      const auto pair=springs.value("defaultSpatial").toMap();
+      check(animation&&animation->property("duration").toInt()==pair.value("ms").toInt()&&
+            QQmlProperty::read(animation,"easing.bezierCurve",qmlContext(animation)).toList()==pair.value("curve").toList(),
+            "the words spring into place on DefaultSpatial, the lyric line's own spring");
+    }
+    shot("poster-side-lyrics");
+    // The next line takes the poster over; the last one springs back to the
+    // plain words and then lets its poster go.
+    b->seek(21000);
+    check(waitFor([&]{
+            QList<QQuickItem*> all;collectItems(w->contentItem(),"posterLine",all);
+            int shown=0;for(auto p:all)if(p->isVisible())++shown;
+            auto p=poster();auto line=currentLine();
+            return shown==1&&p&&line&&line->isAncestorOf(p)&&p->property("progress").toDouble()>0.999;
+          }),"the poster moves to the new line and leaves none behind");
+    // Sing along stays as it is.
+    w->setProperty("immersive",true);resizeTo(1440,900);
+    player=visibleItem(w->contentItem(),"immersivePlayer");
+    choose("lyrics");
+    check(waitFor(settled),"immersive lyrics show the poster");
+    if(poster())posterFills(poster(),"immersive lyrics");
+    shot("poster-immersive-lyrics");
+    choose("split");
+    check(waitFor(settled),"so does the split view");
+    if(poster())posterFills(poster(),"immersive split");
+    shot("poster-immersive-split");
+    choose("singalong");QTest::qWait(300);
+    check(!visibleItem(w->contentItem(),"posterLine"),"sing along keeps its own line");
+    choose("split");
+    b->setMotion(false);b->seek(31000);
+    check(waitFor([&]{auto p=poster();return p&&p->property("progress").toDouble()==1;}),
+          "with reduced motion the poster arrives set, without springing");
+    b->setMotion(true);
+    b->setPosterLyrics(false);
+    check(waitFor([&]{return !visibleItem(w->contentItem(),"posterLine");}),"turning it off returns the plain line");
+    w->setProperty("immersive",false);resizeTo(1440,900);
+  }
   QMetaObject::invokeMethod(w,"activateSide",Q_ARG(QString,QString("lyrics")));
   w->setProperty("immersive",false);w->showNormal();w->setMinimumSize({780,580});w->setMaximumSize({780,580});w->resize(780,580);w->setProperty("immersive",true);
   check(waitFor([&]{return visibleItem(w->contentItem(),"immersivePlayer")&&w->width()==780&&w->height()==580;}),

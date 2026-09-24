@@ -28,7 +28,7 @@ A minimal Material 3 player built with C++ and Qt Quick, designed for CachyOS an
 - **Your music**: import FLAC, MP3 and other supported audio files or folders; browse albums and artists, search paths and group songs by folder. Mix local and YouTube songs in the same playlists.
 - **Animated artwork**: local animated covers and automatic online covers for matching YouTube songs, shared across the player, immersive view and mini player; lists use still covers.
 - **Appearance**: light and dark themes, a pickable Material accent color, artwork-derived color, an ambient cover backdrop, density and per-view layouts.
-- **Lyrics**: synchronized lyrics, an immersive view, timing adjustments, LRC import, seek previews and search with jump-to-line playback.
+- **Lyrics**: synchronized lyrics, an immersive view, optional poster-style lines, timing adjustments, LRC import, seek previews and search with jump-to-line playback.
 - **Offline**: songs you have played are kept on disk under a limit you set, so a replay starts at once and needs no network.
 - **Library tools**: likes, listening history, smart mixes, custom smart playlists, M3U playlist import and export, custom playlist covers, playlist cleanup, multi-selection, drag reordering and Undo.
 - **Playback controls**: mini player, queue editing with source headings, an immersive up-next carousel, volume normalization, shuffle, repeat, sleep timer, playback speed and audio-device selection.
@@ -149,6 +149,8 @@ windowrulev2 = pin, title:^(Sung · Mini player)$
 ```
 
 Click the volume icon for a slider and an exact percentage. Enter a value from 0 to 100 and press Enter or Apply. This works in the main, mini and immersive players. In the main and immersive players, **Ctrl+Up / Down** adjusts volume and **M** toggles mute; shortcuts show brief playback feedback.
+
+**Settings → Appearance → Poster-style lyrics** sets the line being sung the way Google Sans Flex sets a poster: each word takes its own weight, width, roundness and slant, and each row is stretched along the width axis until it meets the margin. It applies to the lyrics panel and the immersive Lyrics and Split views, not Sing along, and is off by default.
 
 Timed lyrics show a countdown during intros and explicit gaps of at least five seconds. Sung uses supplied line boundaries or blank timed lines; it does not infer instrumental passages from a long lyric line. Timing adjustments apply to the countdown.
 

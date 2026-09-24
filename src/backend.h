@@ -191,6 +191,9 @@ class Backend : public QObject {
   Q_PROPERTY(bool historyPaused READ historyPaused WRITE setHistoryPaused NOTIFY settingsChanged)
   Q_PROPERTY(bool trackNotifications READ trackNotifications WRITE setTrackNotifications NOTIFY settingsChanged)
   Q_PROPERTY(bool keepCompletedLyrics READ keepCompletedLyrics WRITE setKeepCompletedLyrics NOTIFY settingsChanged)
+  // The current lyric line set as a poster in Google Sans Flex. Off unless
+  // the listener turns it on; not everyone wants the words to move.
+  Q_PROPERTY(bool posterLyrics READ posterLyrics WRITE setPosterLyrics NOTIFY settingsChanged)
   Q_PROPERTY(int volumeStep READ volumeStep WRITE setVolumeStep NOTIFY settingsChanged)
   Q_PROPERTY(QString theme READ theme WRITE setTheme NOTIFY settingsChanged)
   Q_PROPERTY(bool sleepFade READ sleepFade WRITE setSleepFade NOTIFY settingsChanged)
@@ -489,6 +492,8 @@ public:
   void setTrackNotifications(bool enabled);
   bool keepCompletedLyrics() const {return m_settings.value("keepCompletedLyrics",true).toBool();}
   void setKeepCompletedLyrics(bool enabled);
+  bool posterLyrics() const {return m_settings.value("posterLyrics",false).toBool();}
+  void setPosterLyrics(bool enabled);
   int volumeStep() const {const int value=m_settings.value("volumeStep",5).toInt();return value==1||value==2||value==10?value:5;}
   void setVolumeStep(int percent);
   QString theme() const { return m_settings.value("theme", "system").toString(); }
