@@ -7,6 +7,11 @@ report a state: the navigation destinations, the liked song and the pinned
 collection.
 Spun application code is not incorporated into Sung.
 
+src/m3shape.cpp ports the corner rounding of androidx graphics-shapes'
+RoundedPolygon and the shape definitions of Jetpack Compose Material 3's
+MaterialShapes, Copyright The Android Open Source Project, licensed under
+Apache-2.0 (the same license text as licenses/MaterialSymbols-LICENSE.txt).
+
 Visual references: Google Material Design 3 and Spun.
 Architecture reference: https://github.com/amiralibg/unstream.
 No Unstream source code is incorporated.

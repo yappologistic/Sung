@@ -4991,7 +4991,7 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
   // --- The shape library ---
   const auto names = c.evaluate("app.shapeNames()").toStringList();
   c.check(names.contains("circle") && names.contains("cookie9Sided") &&
-              names.contains("softBurst") && names.contains("pill"),
+              names.contains("softBurst") && names.contains("pill") && names.contains("clover4Leaf"),
           QString("the shape library publishes Material's shapes (%1)").arg(names.size()));
   const auto cookie = c.evaluate("app.shapeOutline('cookie9Sided',256)").toList();
   double low = 2, high = 0;
@@ -4999,14 +4999,16 @@ void runMaterialSizingTests(Backend *b, QQuickWindow *w) {
     low = std::min(low, value.toDouble());
     high = std::max(high, value.toDouble());
   }
-  // Material's nine sided cookie is a star with an inner radius of 0.8.
-  c.check(qAbs(high - 1) < 0.001 && qAbs(low - 0.8) < 0.01,
-          QString("a cookie cuts to Material's inner radius (%1 of %2)")
+  // Material's nine sided cookie is a star with an inner radius of 0.8 whose
+  // corners are rounded by half, which fills its valleys in: they end up
+  // shallower than the star's own.
+  c.check(low / high > 0.8 && low / high < 0.95,
+          QString("a cookie is Material's rounded star (%1 of %2)")
               .arg(low, 0, 'f', 3).arg(high, 0, 'f', 3));
   const auto circle = c.evaluate("app.shapeOutline('circle',64)").toList();
   bool round = true;
   for (const auto &value : circle)
-    round = round && qAbs(value.toDouble() - 1) < 0.001;
+    round = round && qAbs(value.toDouble() - circle.first().toDouble()) < 0.001;
   c.check(round, "and a circle does not cut at all");
 
   // A shaped mask really clips: the corner of a masked cover is cut away.
