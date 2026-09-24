@@ -288,26 +288,38 @@ Item {
                 // under the cover, each link hugs its label the way a text
                 // button does; left-aligned beside lyrics, it reaches 12dp into
                 // the margin so its text keeps the title's edge.
+                //
+                // Each link is drawn as an extra-small button's 32dp container
+                // (ButtonXSmallTokens.ContainerHeight) inside a 48dp target
+                // (Accessibility, Target sizes: "touch targets ... extending
+                // beyond the visual bounds", and never overlapping). Centred
+                // in their targets the two labels sat 26dp apart. Instead the
+                // artist's container takes the bottom of its target and the
+                // album's the top of its own, so the containers meet and the
+                // labels read as one pair; the artist's target reaches 8dp up
+                // over the title's last line, which takes no input, and the
+                // title keeps its distance from the artist.
                 Item {
                     Layout.fillWidth: true
                     Layout.maximumWidth: player.detailsWidth
                     Layout.alignment: player.detailsAlignment
                     Layout.leftMargin: player.coverInset
+                    Layout.topMargin: -8
                     implicitHeight: 48
                     AbstractButton {
                         objectName: "immersiveArtistButton"
                         x: player.detailsCentred ? (parent.width-width)/2 : -12
                         width: player.detailsCentred ? Math.min(parent.width+24,implicitContentWidth+24) : parent.width+24
                         height: parent.height
-                        leftPadding: 12; rightPadding: 12
+                        leftPadding: 12; rightPadding: 12; topPadding: 16; bottomPadding: 0
                         enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
                         Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
                         onClicked: player.collectionRequested(player.artistTarget)
                         contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
-                        background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
-                        // MButton's ring sits 3px outside the control and follows
-                        // its shape, with a 2px Theme.focusRing stroke.
-                        Rectangle { objectName: "immersiveArtistFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                        background:Item {Rectangle {y:parent.parent.topPadding;width:parent.width;height:32;color:parent.parent.down?Theme.high:parent.parent.hovered&&parent.parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}}
+                        // MButton's ring sits 3px outside the container and
+                        // follows its shape, with a 2px Theme.focusRing stroke.
+                        Rectangle { objectName: "immersiveArtistFocusRing"; x: -3; y: parent.topPadding-3; width: parent.width+6; height: 38; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
                     }
                 }
                 Item {
@@ -324,13 +336,13 @@ Item {
                         x: player.detailsCentred ? (parent.width-width)/2 : -12
                         width: player.detailsCentred ? Math.min(parent.width+24,implicitContentWidth+24) : parent.width+24
                         height: parent.height
-                        leftPadding: 12; rightPadding: 12
+                        leftPadding: 12; rightPadding: 12; topPadding: 0; bottomPadding: 16
                         enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
                         Accessible.name: "Open album \u00b7 "+(app.current.album || "")
                         onClicked: player.collectionRequested(player.albumTarget)
                         contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
-                        background:Rectangle {color:parent.down?Theme.high:parent.hovered&&parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}
-                        Rectangle { objectName: "immersiveAlbumFocusRing"; anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                        background:Item {Rectangle {y:parent.parent.topPadding;width:parent.width;height:32;color:parent.parent.down?Theme.high:parent.parent.hovered&&parent.parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}}
+                        Rectangle { objectName: "immersiveAlbumFocusRing"; x: -3; y: parent.topPadding-3; width: parent.width+6; height: 38; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
                     }
                 }
             }

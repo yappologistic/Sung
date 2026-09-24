@@ -483,6 +483,30 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     resizeTo(1440,640);QTest::qWait(250);
     level("a short, wide window");
     resizeTo(1180,800);QTest::qWait(250);
+    // The artist and album read as one pair: each an extra-small button's
+    // 32dp container, meeting, inside 48dp targets that neither overlap nor
+    // shrink. Centred in their targets the labels sat 26dp apart.
+    artistLink=visibleItem(w->contentItem(),"immersiveArtistButton");
+    albumLink=visibleItem(w->contentItem(),"immersiveAlbumButton");
+    auto titleText=visibleItem(w->contentItem(),"immersiveTitle");
+    artistInk=artistLink?artistLink->property("contentItem").value<QQuickItem*>():nullptr;
+    albumInk=albumLink?albumLink->property("contentItem").value<QQuickItem*>():nullptr;
+    if(artistLink&&albumLink&&artistInk&&albumInk&&titleText){
+      const auto top=[](QQuickItem *item){return item->mapToScene({0,0}).y();};
+      const auto bottom=[](QQuickItem *item){return item->mapToScene({0,item->height()}).y();};
+      const double lineHeight=artistInk->property("lineHeight").toDouble();
+      const double artistLine=top(artistInk)+(artistInk->height()-artistInk->property("contentHeight").toDouble())/2;
+      const double artistLineEnd=artistLine+artistInk->property("contentHeight").toDouble();
+      const double albumLine=top(albumInk)+(albumInk->height()-albumInk->property("contentHeight").toDouble())/2;
+      const double pair=albumLine-artistLineEnd;
+      const double containerMeet=(top(albumLink)+albumLink->property("topPadding").toDouble())-
+                                 (top(artistLink)+artistLink->property("topPadding").toDouble()+32);
+      check(pair<=10.5&&qAbs(containerMeet)<0.5&&qAbs(bottom(artistLink)-top(albumLink))<0.5&&
+            artistLink->height()>=48&&albumLink->height()>=48&&artistLine-bottom(titleText)>=11.5,
+            qPrintable(QString("artist and album sit %1dp apart in meeting 32dp containers, 48dp targets end to end, %2dp under the title (line %3)")
+                       .arg(pair,0,'f',1).arg(artistLine-bottom(titleText),0,'f',1).arg(lineHeight)));
+      shot("split-details-pair");
+    } else check(false,"the split details are on screen");
   }
   b->seek(11000);
   choose("singalong");QTest::qWait(500);shot("singalong-dark");
