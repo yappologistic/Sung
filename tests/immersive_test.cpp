@@ -433,6 +433,25 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
           qAbs(heading->mapToScene({0,0}).x()-artistInk->mapToScene({0,0}).x())<1&&
           qAbs(heading->mapToScene({0,0}).x()-albumInk->mapToScene({0,0}).x())<1,
           "split view keeps the details left-aligned on one edge");
+    // That edge is the cover's. A short window makes the cover the height it
+    // can have and centres it in a wider column; the details used to stay at
+    // the column's edge and hang off to the cover's left.
+    for(const QSize size:{QSize(1180,800),QSize(1600,1000),QSize(1440,640),QSize(900,560)}){
+      resizeTo(size.width(),size.height());QTest::qWait(150);
+      auto cover=visibleItem(w->contentItem(),"immersiveArtwork");
+      auto title=visibleItem(w->contentItem(),"immersiveTitle");
+      auto artist=visibleItem(w->contentItem(),"immersiveArtistButton");
+      auto ink=artist?artist->property("contentItem").value<QQuickItem*>():nullptr;
+      const double coverLeft=cover?cover->mapToScene({0,0}).x():-1;
+      check(cover&&title&&ink&&qAbs(title->mapToScene({0,0}).x()-coverLeft)<1&&
+            qAbs(ink->mapToScene({0,0}).x()-coverLeft)<1&&
+            title->mapToScene({title->width(),0}).x()<=cover->parentItem()->mapToScene({cover->parentItem()->width(),0}).x()+1,
+            qPrintable(QString("%1x%2 split details start at the cover's left edge (cover %3, title %4, artist %5)")
+                       .arg(size.width()).arg(size.height()).arg(coverLeft,0,'f',1)
+                       .arg(title?title->mapToScene({0,0}).x():-1,0,'f',1).arg(ink?ink->mapToScene({0,0}).x():-1,0,'f',1)));
+    }
+    shot("split-short-window");
+    resizeTo(1180,800);QTest::qWait(150);
   }
   b->seek(11000);
   choose("singalong");QTest::qWait(500);shot("singalong-dark");

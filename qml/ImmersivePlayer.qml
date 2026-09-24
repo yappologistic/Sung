@@ -44,6 +44,13 @@ Item {
     // move with the window while its centre does not. Beside lyrics they stay
     // left-aligned, reading with the lines next to them.
     readonly property bool detailsCentred: displayedLayout==="artwork"
+    // A short window makes the cover the height it can have, so it sits in
+    // the middle of a column wider than itself. Left-aligned details start
+    // where the cover starts, not at the column's edge, or a small cover
+    // leaves them hanging off to its left.
+    readonly property real coverInset: detailsCentred ? 0 : Math.max(0,(coverSlot.width-immersiveArt.width)/2)
+    readonly property real detailsWidth: detailsCentred ? detailsMeasure : Math.min(520,coverColumn.width-coverInset)
+    readonly property int detailsAlignment: detailsCentred ? Qt.AlignHCenter : Qt.AlignLeft
     // The page margin (16dp compact, 24dp beyond) between the cover and the
     // title, so a height-limited cover gives way instead of meeting the text.
     readonly property real coverGap: width<600?Theme.spaceLarge:Theme.spaceExtraLarge
@@ -176,8 +183,9 @@ Item {
                     opacity: presentation.fade*player.detailsOpacity
                     transform: Translate { x: presentation.offset }
                     Layout.fillWidth: true
-                    Layout.maximumWidth: player.detailsMeasure
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: player.detailsWidth
+                    Layout.alignment: player.detailsAlignment
+                    Layout.leftMargin: player.coverInset
                     Layout.topMargin: player.detailsCentred ? player.coverGap : 0
                     // Typography.kt:115-133 reads the TypeScaleTokens roles.
                     // TypeScaleTokens.kt:117-127,343-353 gives headline-large
@@ -201,8 +209,9 @@ Item {
                 // the margin so its text keeps the title's edge.
                 Item {
                     Layout.fillWidth: true
-                    Layout.maximumWidth: player.detailsMeasure
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: player.detailsWidth
+                    Layout.alignment: player.detailsAlignment
+                    Layout.leftMargin: player.coverInset
                     implicitHeight: 48
                     AbstractButton {
                         objectName: "immersiveArtistButton"
@@ -224,8 +233,9 @@ Item {
                     // IconButton.kt:242-249 applies a 48dp minimum hit area.
                     // Zero column spacing keeps the 48dp slots contiguous.
                     Layout.fillWidth: true
-                    Layout.maximumWidth: player.detailsMeasure
-                    Layout.alignment: Qt.AlignHCenter
+                    Layout.maximumWidth: player.detailsWidth
+                    Layout.alignment: player.detailsAlignment
+                    Layout.leftMargin: player.coverInset
                     implicitHeight: 48
                     visible: !!app.current.album
                     AbstractButton {
