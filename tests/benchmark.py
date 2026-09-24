@@ -8,6 +8,8 @@ p.add_argument('--output',type=pathlib.Path,required=True)
 p.add_argument('--modes',default='idle,playback,lyrics,immersive,mini,hidden')
 p.add_argument('--seconds',type=int,default=10)
 p.add_argument('--repeats',type=int,default=3)
+p.add_argument('--audio',choices=('silence','music'),default='silence',help='music plays a kick, a tone and noise, so the play button pulse and the visualizer have sound to follow')
+p.add_argument('--setting',action='append',default=[],metavar='KEY=VALUE',help='written to the run profile before launch, such as posterLyrics=true')
 p.add_argument('--native-workspace',type=int,help='Inactive workspace for native allocation measurements; occluded FPS is not a rendering benchmark')
 a=p.parse_args();out=a.output.resolve();out.mkdir(parents=True,exist_ok=False);out.chmod(0o700)
 if a.seconds<1 or a.repeats<1:p.error('seconds and repeats must be positive')
@@ -19,7 +21,8 @@ if a.native_workspace:
  version=json.loads(subprocess.check_output(['hyprctl','version','-j']))['version']
  if '0.56' not in version:p.error('Native launch currently supports Hyprland 0.56; use invisible software measurements on other versions')
 audio=out/'silence.wav'
-subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i','anullsrc=r=48000:cl=stereo','-t','600','-c:a','pcm_s16le',str(audio)],check=True)
+source='anullsrc=r=48000:cl=stereo' if a.audio=='silence' else "aevalsrc=0.6*sin(2*PI*55*t)*exp(-9*mod(t\\,0.5))+0.12*sin(2*PI*440*t)+0.06*(random(0)-0.5)|0.6*sin(2*PI*55*t)*exp(-9*mod(t\\,0.5))+0.12*sin(2*PI*660*t)+0.06*(random(1)-0.5):s=48000"
+subprocess.run(['ffmpeg','-v','error','-f','lavfi','-i',source,'-t','600','-c:a','pcm_s16le',str(audio)],check=True)
 tracks=[dict(id=f'{i:011d}',videoId=f'{i:011d}',kind='song',title=f'Benchmark track {i}',artist='Sung performance fixture',seconds=600,art=f'https://sung-benchmark.invalid/{i%80}.png') for i in range(200)]
 helper=out/'fixture.py'
 helper.write_text('import json,sys\nr=json.load(sys.stdin)\ntracks='+repr(tracks)+'\nprint(json.dumps({"ok":True,"sections":[{"title":"Benchmark shelf","items":tracks[:20]}],"lyrics":"Benchmark lyrics","lines":[{"start":i*4000,"end":(i+1)*4000,"text":"A quiet line across the evening sky" if i%2 else "The music carries on"} for i in range(150)]}))\n')
@@ -28,11 +31,14 @@ fonts=out/'fonts.conf';fonts.write_text('<?xml version="1.0"?><!DOCTYPE fontconf
 results=[]
 for repeat in range(a.repeats):
  for mode in a.modes.split(','):
-  if mode not in ('idle','playback','lyrics','immersive','mini','hidden'):p.error('Unknown mode: '+mode)
+  if mode not in ('idle','playback','lyrics','immersive','visualizer','mini','hidden'):p.error('Unknown mode: '+mode)
   run=out/f'{repeat}-{mode}';run.mkdir();env=os.environ.copy()
   for key,folder in [('XDG_DATA_HOME','data'),('XDG_CONFIG_HOME','config'),('XDG_CACHE_HOME','cache')]:env[key]=str(run/folder)
   library=run/'data/Sung/sung';library.mkdir(parents=True)
   (library/'library.json').write_text(json.dumps(dict(queue=tracks,index=0,position=60100)))
+  if a.setting:
+   (run/'config/Sung').mkdir(parents=True,exist_ok=True)
+   (run/'config/Sung/sung.conf').write_text('[General]\n'+''.join(f'{s}\n' for s in a.setting))
   env.pop('QT_QUICK_BACKEND',None)
   if not a.native_workspace:env['QSG_RENDER_LOOP']='basic'
   env.update(QT_QPA_PLATFORM='wayland' if a.native_workspace else 'offscreen',QT_QPA_PLATFORMTHEME='generic',FONTCONFIG_FILE=str(fonts),SUNG_HELPER=str(helper),SUNG_PYTHON='python3',SUNG_BENCH_AUDIO=str(audio),SUNG_BENCH_MODE=mode,SUNG_BENCH_MS=str(a.seconds*1000),SUNG_BENCH_OUTPUT=str(run),SUNG_BENCH_ART='1')

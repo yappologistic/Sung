@@ -74,7 +74,14 @@ void runBenchmark(Backend *b,QQuickWindow *w) {
   w->grabWindow();
   QQuickWindow *visible=w;
   if(mode=="lyrics")w->setProperty("side","lyrics");
-  if(mode=="immersive")QMetaObject::invokeMethod(w,"toggleImmersive");
+  if(mode=="immersive"||mode=="visualizer")QMetaObject::invokeMethod(w,"toggleImmersive");
+  if(mode=="visualizer") {
+    QTest::qWait(300);
+    QQuickItem *player=nullptr;
+    const auto find=[&](auto &&self,QQuickItem *item)->void{if(item->objectName()=="immersivePlayer")player=item;for(auto child:item->childItems())if(!player)self(self,child);};
+    find(find,w->contentItem());
+    if(player)QMetaObject::invokeMethod(player,"layoutRequested",Q_ARG(QString,QStringLiteral("visualizer")));
+  }
   if(mode=="mini"){
     QMetaObject::invokeMethod(w,"openMiniPlayer");
     visible=qobject_cast<QQuickWindow*>(w->property("miniPlayer").value<QObject*>());
