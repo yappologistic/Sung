@@ -87,6 +87,11 @@ Item {
         return measured
     }
     property bool following: true
+    // Where the playing line's middle sits, in this view's own coordinates.
+    // Split sets it to the middle of the cover beside the lyrics, so the line
+    // being sung is level with the picture; left at -1, the line keeps to the
+    // band a little above the middle.
+    property real readingY: -1
     onFollowingChanged: { if(following)liveLyrics.centerCurrent(); }
     onExpandedChanged: liveLyrics.centerCurrent()
     property int textSize: app.lyricTextSize
@@ -99,9 +104,17 @@ Item {
         model: app.lyricLines; reuseItems: true; cacheBuffer: 100
         // Half a viewport of scroll room lets the first and last timed lines
         // reach the same reading position as lines in the middle.
-        topMargin: height/2; bottomMargin: height/2
+        topMargin: height/2; bottomMargin: reading ? height-readingCentre : height/2
+        readonly property bool reading: lyricPane.readingY>=0
+        readonly property real readingCentre: lyricPane.readingY-y
+        // ListView.positionViewAtIndex centres the line; a reading position
+        // elsewhere moves the view on by the difference.
+        function showLine(index) {
+            positionViewAtIndex(index,ListView.Center);
+            if(reading)contentY+=height/2-readingCentre;
+        }
         function centerCurrent() {
-            Qt.callLater(function(){if(lyricPane.following && liveLyrics.visible && app.lyricIndex>=0)liveLyrics.positionViewAtIndex(app.lyricIndex,ListView.Center);});
+            Qt.callLater(function(){if(lyricPane.following && liveLyrics.visible && app.lyricIndex>=0)liveLyrics.showLine(app.lyricIndex);});
         }
         Component.onCompleted: centerCurrent()
         onCountChanged: centerCurrent()
@@ -127,7 +140,7 @@ Item {
             if(count<1)return;
             keyboardIndex=Math.max(0,Math.min(count-1,index));
             following=false;resumeFollow.restart();
-            positionViewAtIndex(keyboardIndex,ListView.Center);
+            showLine(keyboardIndex);
         }
         function seekKeyboardLine() {
             const line=keyboardIndex>=0?app.lyricLines[keyboardIndex]:null;
@@ -144,7 +157,11 @@ Item {
             else if(event.key===Qt.Key_End){focusLine(count-1);event.accepted=true;}
             else if(event.key===Qt.Key_Return || event.key===Qt.Key_Enter || event.key===Qt.Key_Space){seekKeyboardLine();event.accepted=true;}
         }
-        preferredHighlightBegin: height*0.35; preferredHighlightEnd: height*0.55
+        // The highlight is the playing line's top edge. At a reading position
+        // the band closes to the one place that puts the line's middle there.
+        readonly property real readingTop: readingCentre-(currentItem ? currentItem.height/2 : 0)
+        preferredHighlightBegin: reading ? readingTop : height*0.35
+        preferredHighlightEnd: reading ? readingTop : height*0.55
         highlightRangeMode: lyricPane.following ? ListView.ApplyRange : ListView.NoHighlightRange
         // Qt ListView's custom highlight moves with DefaultSpatial, which
         // preserves the centred lyric scroll without a duration-only curve.

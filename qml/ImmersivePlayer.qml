@@ -338,7 +338,10 @@ Item {
             // Matching flexible space centres the measure when it fits. On a
             // narrower window, lyrics fill the content width without gutters.
             Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" && body.lyricMeasureFits }
+            // Beside the cover, the line being sung sits level with the
+            // cover's middle, where the eye already is.
             LyricsView { id: immersiveLyrics; expanded: true; visible:!player.coverAlone && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics" || !body.lyricMeasureFits; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
+                readingY: player.displayedLayout==="split" ? coverColumn.y+coverSlot.y+immersiveArt.y+immersiveArt.height/2-y : -1
                 Layout.preferredWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : -1
                 Layout.maximumWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : Infinity
                 Layout.alignment: Qt.AlignHCenter }

@@ -455,6 +455,34 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     }
     shot("split-short-window");
     resizeTo(1180,800);QTest::qWait(150);
+    // The line being sung sits level with the cover's middle, where the eye
+    // already is, rather than in a band set by the lyric column's own height,
+    // which reaches down past the details and put the line well below the
+    // picture. It holds from one line to the next and at another window size.
+    auto lyricList=visibleItem(w->contentItem(),"liveLyrics");
+    const auto level=[&](QString label){
+      auto cover=visibleItem(w->contentItem(),"immersiveArtwork");
+      auto line=lyricList?lyricList->property("currentItem").value<QQuickItem*>():nullptr;
+      double coverMiddle=0,lineMiddle=0;
+      const bool settled=waitFor([&]{
+        line=lyricList?lyricList->property("currentItem").value<QQuickItem*>():nullptr;
+        if(!cover||!line)return false;
+        coverMiddle=cover->mapToScene({0,cover->height()/2}).y();
+        lineMiddle=line->mapToScene({0,line->height()/2}).y();
+        return qAbs(coverMiddle-lineMiddle)<1.5;
+      });
+      check(settled,qPrintable(QString("%1: the sung line's middle is level with the cover's (%2 and %3)")
+                               .arg(label).arg(lineMiddle,0,'f',1).arg(coverMiddle,0,'f',1)));
+    };
+    const int firstLine=b->lyricIndex();
+    level(QString("line %1").arg(firstLine));
+    b->seek(b->lyricLines().value(firstLine+2).toMap().value("start").toLongLong());
+    check(waitFor([&]{return b->lyricIndex()==firstLine+2;}),"a later line takes over");
+    level(QString("line %1").arg(firstLine+2));
+    shot("split-reading-level");
+    resizeTo(1440,640);QTest::qWait(250);
+    level("a short, wide window");
+    resizeTo(1180,800);QTest::qWait(250);
   }
   b->seek(11000);
   choose("singalong");QTest::qWait(500);shot("singalong-dark");
