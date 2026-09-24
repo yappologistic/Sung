@@ -124,10 +124,12 @@ Backend::Backend(QObject *parent) : QObject(parent) {
     if(!m_uiActive || !motion() || !playing())return;
     if(!buffer.isValid()){resetAudioLevels();return;}
     m_levelAnalyzer.process(buffer);
+    if(m_spectrumActive)m_spectrum.process(buffer);
     m_levelIdle.start(qBound(180,int(buffer.duration()/1000/std::max(0.25,playbackRate()))+100,600));
     if(m_levelPublish.isValid() && m_levelPublish.elapsed()<33)return;
     m_levelPublish.restart();const auto levels=m_levelAnalyzer.takeLevels();
     if(levels!=m_audioLevels){m_audioLevels=levels;emit audioLevelsChanged();}
+    if(m_spectrumActive){const auto bands=m_spectrum.take();if(bands!=m_audioSpectrum){m_audioSpectrum=bands;emit audioSpectrumChanged();}}
   });
   eachDeck([this](QMediaPlayer *deck){connect(deck,&QMediaPlayer::sourceChanged,this,[this,deck]{if(isActive(*deck))resetAudioLevels();});});
   connect(this,&Backend::trackChanged,this,&Backend::refreshRecentlyPlayed);
@@ -2463,9 +2465,19 @@ QString Backend::previewLyric(qint64 at) const {
 }
 
 void Backend::resetAudioLevels() {
-  m_levelIdle.stop();m_levelPublish.invalidate();m_levelAnalyzer.reset();
+  m_levelIdle.stop();m_levelPublish.invalidate();m_levelAnalyzer.reset();m_spectrum.reset();
   const QVariantList silence{0.0,0.0,0.0,0.0,0.0};
   if(m_audioLevels!=silence){m_audioLevels=silence;emit audioLevelsChanged();}
+  const QVariantList quiet(m_spectrum.bandCount(),0.0);
+  if(m_audioSpectrum!=quiet){m_audioSpectrum=quiet;emit audioSpectrumChanged();}
+}
+
+void Backend::setSpectrumActive(bool active) {
+  if(m_spectrumActive==active)return;
+  m_spectrumActive=active;m_spectrum.reset();
+  const QVariantList quiet(m_spectrum.bandCount(),0.0);
+  if(m_audioSpectrum!=quiet){m_audioSpectrum=quiet;emit audioSpectrumChanged();}
+  emit spectrumActiveChanged();
 }
 
 

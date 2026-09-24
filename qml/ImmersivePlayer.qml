@@ -14,8 +14,20 @@ Item {
     // Singing along needs to know when each line starts, so it asks for more
     // than the reading layouts do and falls back when a song cannot give it.
     readonly property bool hasTimedLyrics: app.lyricLines.length>0
-    readonly property string effectiveLayout: preferredLayout==="singalong" ? (hasTimedLyrics?"singalong":"artwork")
+    // The visualizer needs nothing from the song but its sound, so it is
+    // always available.
+    readonly property string effectiveLayout: preferredLayout==="visualizer" ? "visualizer"
+        : preferredLayout==="singalong" ? (hasTimedLyrics?"singalong":"artwork")
         : hasLyrics && ["split","lyrics"].indexOf(preferredLayout)>=0 ? preferredLayout : "artwork"
+    // The artwork and the visualizer both give the cover the screen; the
+    // visualizer cuts it to a shape and rings it with the sound.
+    readonly property bool coverAlone: displayedLayout==="artwork" || displayedLayout==="visualizer"
+    readonly property bool visualizing: displayedLayout==="visualizer"
+    // The ring's share of the square the cover would otherwise fill. A third
+    // of the diameter leaves the bars a sixth of it on each side, long enough
+    // to read a kick from across the room and short enough that the cover is
+    // still the thing on screen.
+    readonly property real visualizerScale: 1.5
     property string displayedLayout: effectiveLayout
     property bool ready: false
     property bool autoHideControls: false
@@ -35,7 +47,7 @@ Item {
     // constant guessing at it.
     // The metadata column needs room for ordinary words even when the split
     // view is narrow. The floor is a layout allowance, not an artwork size.
-    readonly property real coverColumnWidth: Math.max(200,width*(displayedLayout==="artwork"?0.55:0.34))
+    readonly property real coverColumnWidth: Math.max(200,width*(coverAlone?0.55:0.34))
     // Material has no now-playing text measure token. 520px caps the title's
     // two lines; the column sets the floor when it is narrower.
     readonly property real detailsMeasure: Math.min(520,coverColumn.width)
@@ -43,7 +55,7 @@ Item {
     // narrowing stack: the cover is the largest square that fits, so its edges
     // move with the window while its centre does not. Beside lyrics they stay
     // left-aligned, reading with the lines next to them.
-    readonly property bool detailsCentred: displayedLayout==="artwork"
+    readonly property bool detailsCentred: coverAlone
     // A short window makes the cover the height it can have, so it sits in
     // the middle of a column wider than itself. Left-aligned details start
     // where the cover starts, not at the column's edge, or a small cover
@@ -85,7 +97,8 @@ Item {
         -topControls.implicitHeight-transport.implicitHeight-seekRow.implicitHeight
         -coverflowReserve-4*shell.spacing-title.implicitHeight-(detailsCentred?coverGap:0)-2*48
     readonly property bool coverflowVisible: coverflow && app.queue.count>0 &&
-        (displayedLayout==="lyrics" || displayedLayout==="singalong" || coverflowCoverBudget>=160)
+        (displayedLayout==="lyrics" || displayedLayout==="singalong" ||
+         coverflowCoverBudget/(visualizing?visualizerScale:1)>=160)
     function hasKeyboardFocus(item) {
         for(let p=item;p && p!==player;p=p.parent)
             if(p.visualFocus===true || p.handlesTextInput===true)return true;
@@ -93,7 +106,7 @@ Item {
     }
     function wake() { controlsShown=true;idle.restart(); }
     function showLyricsSearch() {
-        if(preferredLayout==="artwork" || preferredLayout==="singalong")layoutRequested("lyrics");
+        if(["artwork","singalong","visualizer"].indexOf(preferredLayout)>=0)layoutRequested("lyrics");
         immersiveLyrics.openSearch();wake();
     }
     // A layout fade can reveal Lyrics after openSearch's first focus request.
@@ -158,7 +171,7 @@ Item {
             // shell is anchored to the window, so this decision cannot feed
             // back into the width of the RowLayout it sizes.
             readonly property bool lyricMeasureFits: shell.width >= player.lyricMeasure+2*spacing
-            Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
+            Item {Layout.fillWidth:true;visible:player.coverAlone}
             ColumnLayout {
                 id: coverColumn
                 visible:player.displayedLayout!=="lyrics" && player.displayedLayout!=="singalong"
@@ -170,10 +183,28 @@ Item {
                 Item {
                     id: coverSlot; objectName: "immersiveCoverSlot"
                     Layout.fillWidth: true; Layout.fillHeight: true; Layout.minimumHeight: 0
+                    Loader {
+                        id: spectrumRing
+                        active: player.visualizing
+                        // Centred on the cover itself, and wider than it by an
+                        // even number of pixels, so the two centres round to
+                        // the same pixel and the ring is exactly concentric.
+                        anchors.centerIn: immersiveArt
+                        width: immersiveArt.width+2*Math.floor((Math.min(parent.width,parent.height)-immersiveArt.width)/2); height: width
+                        sourceComponent: SpectrumRing { shape: immersiveArt.shape; coverSize: immersiveArt.width; running: app.playing }
+                    }
                     Artwork { id: immersiveArt; objectName: "immersiveArtwork"; anchors.centerIn: parent
-                        width: Math.max(80,Math.min(parent.width,parent.height)); height: width
+                        width: Math.max(80,Math.min(parent.width,parent.height)/(player.visualizing?player.visualizerScale:1)); height: width
+                        // Material's twelve-sided cookie: close enough to a
+                        // circle to read as a record, and its scallops give the
+                        // ring an edge to follow.
+                        shape: player.visualizing ? "cookie12Sided" : ""
                         url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; opacity: player.coverHidden?0:1; radius: Theme.shapeExtraLarge; pixels: 850; highResolution: true; fit:app.currentArtworkFit
-                        AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested();background:Rectangle {color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.visualFocus?2:0;border.color:Theme.focusRing}}
+                        AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested()
+                            background:Item {
+                                Rectangle {anchors.fill:parent;visible:!immersiveArt.shape;color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.parent.visualFocus?2:0;border.color:Theme.focusRing}
+                                MShape {anchors.fill:parent;visible:!!immersiveArt.shape && parent.parent.visualFocus;shape:immersiveArt.shape||"circle";color:"transparent";strokeColor:Theme.focusRing;strokeWidth:2}
+                            }}
                     }
                 }
                 SungText {
@@ -253,11 +284,11 @@ Item {
                     }
                 }
             }
-            Item {Layout.fillWidth:true;visible:player.displayedLayout==="artwork"}
+            Item {Layout.fillWidth:true;visible:player.coverAlone}
             // Matching flexible space centres the measure when it fits. On a
             // narrower window, lyrics fill the content width without gutters.
             Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" && body.lyricMeasureFits }
-            LyricsView { id: immersiveLyrics; expanded: true; visible:player.displayedLayout!=="artwork" && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics" || !body.lyricMeasureFits; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
+            LyricsView { id: immersiveLyrics; expanded: true; visible:!player.coverAlone && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics" || !body.lyricMeasureFits; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
                 Layout.preferredWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : -1
                 Layout.maximumWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : Infinity
                 Layout.alignment: Qt.AlignHCenter }
@@ -371,7 +402,7 @@ Item {
         id:layoutMenu;objectName:"immersiveLayoutMenu"
         onClosed:{layoutButton.forceActiveFocus(Qt.PopupFocusReason);player.wake();}
         Repeater {
-            model:[{key:"artwork",label:"Artwork"},{key:"lyrics",label:"Lyrics"},{key:"split",label:"Split"},{key:"singalong",label:"Sing along"}]
+            model:[{key:"artwork",label:"Artwork"},{key:"lyrics",label:"Lyrics"},{key:"split",label:"Split"},{key:"singalong",label:"Sing along"},{key:"visualizer",label:"Visualizer"}]
             MMenuItem {required property var modelData;objectName:"immersiveLayout_"+modelData.key;text:modelData.label;checkable:true
                 // Offered only where the song can actually drive it.
                 enabled:modelData.key!=="singalong" || player.hasTimedLyrics

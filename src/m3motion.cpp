@@ -125,7 +125,11 @@ QVariantMap motionScheme(bool expressive) {
   QVariantMap out;
   for (int i = 0; i < 6; ++i) {
     const auto s = spring(set[i].damping, set[i].stiffness);
-    QVariantMap entry{{"ms", s.durationMs}, {"curve", s.curve}};
+    // The constants travel with the curve for motion whose target keeps
+    // moving, such as a meter following audio: a fixed curve can only run
+    // from one rest to the next, so that motion integrates the spring itself.
+    QVariantMap entry{{"ms", s.durationMs}, {"curve", s.curve},
+                      {"damping", set[i].damping}, {"stiffness", set[i].stiffness}};
     out.insert(QString::fromLatin1(kNames[i]),
                entry);
   }

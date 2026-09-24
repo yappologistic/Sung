@@ -168,6 +168,25 @@ private slots:
       }
     }
   }
+
+  // Motion whose target keeps moving integrates the spring itself, so the
+  // six named springs carry Material's constants beside their curves, and
+  // they are the published ones rather than a copy that could drift.
+  void schemeCarriesItsConstants() {
+    for (bool expressive : {true, false}) {
+      const auto scheme = m3::motionScheme(expressive);
+      for (const char *name : {"fastSpatial", "defaultSpatial", "slowSpatial", "fastEffects",
+                               "defaultEffects", "slowEffects"}) {
+        const auto entry = scheme.value(QString::fromLatin1(name)).toMap();
+        const auto tokens = m3::springTokens(expressive, QString::fromLatin1(name));
+        QCOMPARE(entry.value("damping").toDouble(), tokens.damping);
+        QCOMPARE(entry.value("stiffness").toDouble(), tokens.stiffness);
+      }
+    }
+    const auto fast = m3::motionScheme(true).value("fastSpatial").toMap();
+    QCOMPARE(fast.value("damping").toDouble(), 0.6);
+    QCOMPARE(fast.value("stiffness").toDouble(), 800.0);
+  }
 };
 
 QTEST_MAIN(M3MotionTest)

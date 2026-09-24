@@ -22,6 +22,7 @@
 #include <QTest>
 #include <QWheelEvent>
 #include <qpa/qwindowsysteminterface.h>
+#include <algorithm>
 #include <cstdlib>
 #include <functional>
 #include <unistd.h>
@@ -1475,6 +1476,129 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
           "reduced motion stops the reaction as well as the drift");
   c.check(qFuzzyCompare(art->property("scale").toReal(), 1.08), "and the cover returns to its resting size");
   b->setMotion(true);
+
+  // --- The visualizer layout ---
+  // The cover cut to Material's twelve-sided cookie, ringed by bars that
+  // follow the measured spectrum. It is chosen the way a person chooses it,
+  // from the layout menu, and it has to share the screen with the details,
+  // the transport and the optional Up next covers without touching them.
+  {
+    c.click("immersiveLayoutButton");
+    c.click("immersiveLayout_visualizer");
+    c.check(c.until([&] { return player->property("displayedLayout").toString() == "visualizer"; }),
+            "the layout menu offers the visualizer and it applies");
+    auto cover = shownItem(player, "immersiveArtwork");
+    auto ringItem = shownItem(player, "spectrumRing");
+    auto slot = shownItem(player, "immersiveCoverSlot");
+    c.check(cover && ringItem && slot && cover->property("shape").toString() == "cookie12Sided",
+            "the cover is cut to the twelve-sided cookie inside a ring");
+    if (cover && ringItem && slot) {
+      c.check(c.until([&] { return b->spectrumActive(); }), "a playing visualizer asks for the spectrum");
+      // The 110 Hz tone falls in the seventh of the 36 pitch-spaced bands.
+      c.check(c.until([&] { return b->audioSpectrum().value(6).toDouble() > 0.3; }, 10000),
+              QString("the tone lights its band (%1)").arg(b->audioSpectrum().value(6).toDouble(), 0, 'f', 2));
+      const auto heights = [&] { return ringItem->property("heights").toList(); };
+      // Bar 54 points straight up and bar 18 straight down; bass sits at the
+      // top and treble at the bottom, so a low tone lifts the top half.
+      const auto peak = [&](int from, int to) {
+        double best = 0;
+        const auto h = heights();
+        for (int i = from; i <= to && i < h.size(); ++i)
+          best = std::max(best, h[i].toDouble());
+        return best;
+      };
+      c.check(c.until([&] { return heights().size() == 72 && peak(36, 71) > 0.25; }, 6000),
+              QString("the bars in the top half stand out (%1)").arg(peak(36, 71), 0, 'f', 2));
+      c.check(peak(0, 35) < peak(36, 71) / 2,
+              QString("while the bottom half stays low for a pure low tone (%1)").arg(peak(0, 35), 0, 'f', 2));
+      const auto physics = c.evaluate("Theme.springs.fastSpatial").toMap();
+      const auto ringPhysics = ringItem->property("physics").toMap();
+      c.check(ringPhysics.value("damping").toDouble() == physics.value("damping").toDouble() &&
+                  ringPhysics.value("stiffness").toDouble() == physics.value("stiffness").toDouble() &&
+                  physics.value("damping").toDouble() == 0.6,
+              "the bars integrate Material's fast spatial spring, 0.6 and 800");
+      c.shot("07-visualizer-playing");
+    }
+    // Every window the view is used at: the ring is square, centred on the
+    // cover, inside its slot, clear of the details below it, and the details
+    // clear of the transport and of the Up next row when that is on.
+    const auto rectOf = [&](QQuickItem *item) {
+      return item ? item->mapRectToScene(QRectF(0, 0, item->width(), item->height())) : QRectF();
+    };
+    const auto audit = [&](const QString &label) {
+      auto coverNow = shownItem(player, "immersiveArtwork");
+      auto ringNow = shownItem(player, "spectrumRing");
+      auto slotNow = shownItem(player, "immersiveCoverSlot");
+      auto titleNow = shownItem(player, "immersiveTitle");
+      auto transportNow = shownItem(player, "immersiveTransport");
+      auto flow = shownItem(player, "immersiveCoverflow");
+      if (!coverNow || !ringNow || !slotNow || !titleNow || !transportNow) {
+        c.check(false, label + ": visualizer, title and transport are on screen");
+        return;
+      }
+      const QRectF ringRect = rectOf(ringNow), coverRect = rectOf(coverNow), slotRect = rectOf(slotNow);
+      const QRectF titleRect = rectOf(titleNow), transportRect = rectOf(transportNow);
+      c.check(qAbs(ringRect.width() - ringRect.height()) < 0.5 &&
+                  (ringRect.center() - coverRect.center()).manhattanLength() < 1 &&
+                  slotRect.adjusted(-0.5, -0.5, 0.5, 0.5).contains(ringRect) &&
+                  qAbs(ringRect.width() / coverRect.width() - 1.5) < 0.02,
+              label + QString(": the ring is square around the cover and inside its slot (ring %1,%2 %3x%4, cover %5,%6 %7, slot %8,%9 %10x%11)")
+                          .arg(ringRect.x(), 0, 'f', 1).arg(ringRect.y(), 0, 'f', 1).arg(ringRect.width(), 0, 'f', 1).arg(ringRect.height(), 0, 'f', 1)
+                          .arg(coverRect.x(), 0, 'f', 1).arg(coverRect.y(), 0, 'f', 1).arg(coverRect.width(), 0, 'f', 1)
+                          .arg(slotRect.x(), 0, 'f', 1).arg(slotRect.y(), 0, 'f', 1).arg(slotRect.width(), 0, 'f', 1).arg(slotRect.height(), 0, 'f', 1));
+      c.check(titleRect.top() >= ringRect.bottom() - 0.5 && titleRect.bottom() <= transportRect.top() + 0.5,
+              label + ": the title sits between the ring and the transport");
+      if (flow) {
+        const QRectF flowRect = rectOf(flow);
+        c.check(flowRect.top() >= ringRect.bottom() && coverRect.width() >= 159.5 &&
+                    !flowRect.intersects(transportRect.adjusted(0, 1, 0, 0)),
+                label + QString(": Up next keeps clear of the ring and transport, with a %1 cover")
+                            .arg(coverRect.width(), 0, 'f', 0));
+      }
+    };
+    for (const QSize size : {QSize(1180, 820), QSize(1600, 1000), QSize(900, 640), QSize(480, 780)}) {
+      w->resize(size);
+      QTest::qWait(300);
+      audit(QString("%1x%2").arg(size.width()).arg(size.height()));
+    }
+    w->resize(1180, 820);
+    QTest::qWait(300);
+    c.click("immersiveLayoutButton");
+    c.click("immersiveCoverflowToggle");
+    for (const QSize size : {QSize(1180, 820), QSize(1600, 1000), QSize(1180, 700), QSize(480, 780)}) {
+      w->resize(size);
+      QTest::qWait(400);
+      audit(QString("%1x%2 with Up next").arg(size.width()).arg(size.height()));
+      c.shot(QString("08-visualizer-up-next-%1x%2").arg(size.width()).arg(size.height()));
+    }
+    c.click("immersiveLayoutButton");
+    c.click("immersiveCoverflowToggle");
+    w->resize(1180, 820);
+    QTest::qWait(300);
+    auto ringAgain = shownItem(player, "spectrumRing");
+    b->pause();
+    c.check(c.until([&] { return !b->spectrumActive(); }), "pausing stops the measurement");
+    c.check(ringAgain && c.until([&] {
+              for (const auto &value : ringAgain->property("heights").toList())
+                if (qAbs(value.toDouble()) > 0.01)
+                  return false;
+              return true;
+            }, 4000),
+            "and the bars settle back to a ring of dots");
+    c.shot("09-visualizer-paused");
+    b->play();
+    c.check(c.until([&] { return b->spectrumActive(); }), "playing again resumes it");
+    b->setMotion(false);
+    QTest::qWait(200);
+    auto frames = ringAgain ? ringAgain->findChild<QObject *>("spectrumRingFrames") : nullptr;
+    c.check(!b->spectrumActive() && frames && !frames->property("running").toBool(),
+            "reduced motion holds the ring still and measures nothing");
+    b->setMotion(true);
+    c.click("immersiveLayoutButton");
+    c.click("immersiveLayout_split");
+    c.check(c.until([&] { return player->property("displayedLayout").toString() != "visualizer" && !b->spectrumActive(); }),
+            "leaving the visualizer stops the measurement");
+  }
 
   // The rounded backdrops stay out of it, because swelling would square their corners.
   w->setProperty("immersive", false);

@@ -279,6 +279,38 @@ private slots:
     AudioLevels quiet,loud;quiet.process(pcm(1200,.02,QAudioFormat::Float));loud.process(pcm(1200,.45,QAudioFormat::Float));QVERIFY(loud.takeLevels()[2].toDouble()>quiet.takeLevels()[2].toDouble()+.3);
     AudioLevels decay;decay.process(pcm(100,.45,QAudioFormat::Float));decay.takeLevels();for(int i=0;i<3;++i){decay.process(pcm(100,0,QAudioFormat::Float));decay.takeLevels();}QCOMPARE(decay.takeLevels(),QVariantList({0.,0.,0.,0.,0.}));
   }
+  void measuredSpectrum() {
+    // The visualizer's bands are pitch-spaced from 40 Hz to 16 kHz, so a tone
+    // lands in the band whose range holds it, and a higher tone further up.
+    const auto tone=[](double frequency,double amplitude,int channels=1,bool inverse=false,int frames=9600){
+      QAudioFormat f;f.setSampleRate(48000);f.setChannelCount(channels);f.setSampleFormat(QAudioFormat::Float);
+      QByteArray data(f.bytesForFrames(frames),Qt::Uninitialized);
+      for(int i=0;i<frames;++i)for(int c=0;c<channels;++c)
+        reinterpret_cast<float*>(data.data())[i*channels+c]=float(amplitude*std::sin(2*3.14159265358979323846*frequency*i/48000)*(inverse&&c?-1:1));
+      return QAudioBuffer(data,f);
+    };
+    const auto bandOf=[](double frequency,int bands){return int(std::floor(bands*std::log(frequency/40)/std::log(16000.0/40)));};
+    const auto loudest=[](const QVariantList &values){int best=0;for(int i=1;i<values.size();++i)if(values[i].toDouble()>values[best].toDouble())best=i;return best;};
+    int previous=-1;
+    for(double frequency:{100.0,440.0,1200.0,3500.0,10000.0}){
+      AudioSpectrum spectrum;spectrum.process(tone(frequency,0.45));
+      const auto bands=spectrum.take();
+      QCOMPARE(bands.size(),36);
+      const int peak=loudest(bands);
+      QVERIFY2(qAbs(peak-bandOf(frequency,36))<=1,qPrintable(QString("%1 Hz peaks in band %2, expected %3").arg(frequency).arg(peak).arg(bandOf(frequency,36))));
+      QVERIFY2(peak>previous,"a higher tone peaks further up the ring");previous=peak;
+      QVERIFY(bands[peak].toDouble()>0.5);
+    }
+    AudioSpectrum full;full.process(tone(1000,1.0));QVERIFY(full.take()[bandOf(1000,36)].toDouble()>0.99);
+    AudioSpectrum quiet,loud;quiet.process(tone(440,0.02));loud.process(tone(440,0.45));
+    QVERIFY(loud.take()[bandOf(440,36)].toDouble()>quiet.take()[bandOf(440,36)].toDouble()+0.3);
+    // Out-of-phase stereo is transformed per channel, so it does not cancel.
+    AudioSpectrum stereo;stereo.process(tone(440,0.45,2,true));QVERIFY(stereo.take()[bandOf(440,36)].toDouble()>0.5);
+    AudioSpectrum silence;silence.process(tone(440,0));for(const auto &value:silence.take())QCOMPARE(value.toDouble(),0.0);
+    // Less than half a window is not yet a spectrum.
+    AudioSpectrum early;early.process(tone(440,0.45,1,false,512));for(const auto &value:early.take())QCOMPARE(value.toDouble(),0.0);
+    AudioSpectrum cleared;cleared.process(tone(440,0.45));cleared.reset();for(const auto &value:cleared.take())QCOMPARE(value.toDouble(),0.0);
+  }
   void audioBandsFollowPlayback() {
     QTemporaryDir music;const auto path=music.filePath("bands.wav");
     QProcess encode;encode.start("ffmpeg",{"-nostdin","-v","error","-f","lavfi","-i","aevalsrc=if(lt(t\\,1.5)\\,0.45*sin(2*PI*100*t)\\,if(lt(t\\,3)\\,0\\,if(lt(t\\,4.5)\\,0.45*sin(2*PI*3500*t)\\,0))):s=48000:d=6","-c:a","pcm_s16le",path});QVERIFY(encode.waitForFinished(10000));QCOMPARE(encode.exitCode(),0);
@@ -290,7 +322,14 @@ private slots:
     QTest::qWait(250);QTRY_COMPARE_WITH_TIMEOUT(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}),700);
     b.seek(3300);QTRY_VERIFY_WITH_TIMEOUT(b.audioLevels()[3].toDouble()>.3,1500);QVERIFY(b.audioLevels()[3].toDouble()>b.audioLevels()[0].toDouble());
     b.setMotion(false);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));QTest::qWait(100);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));
-    b.setMotion(true);b.seek(200);QTRY_VERIFY_WITH_TIMEOUT(b.audioLevels()[0].toDouble()>.3,1500);b.setUiActive(false);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));QTest::qWait(100);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));b.stop();b.clearQueue();b.setUiActive(true);
+    // The spectrum is only measured while something asks for it.
+    b.setMotion(true);b.seek(200);QTRY_VERIFY_WITH_TIMEOUT(b.audioLevels()[0].toDouble()>.3,1500);
+    for(const auto &value:b.audioSpectrum())QCOMPARE(value.toDouble(),0.0);
+    b.setSpectrumActive(true);QTRY_VERIFY_WITH_TIMEOUT(b.audioSpectrum()[5].toDouble()>.3,1500);
+    QVERIFY(b.audioSpectrum()[5].toDouble()>b.audioSpectrum()[26].toDouble());
+    b.setSpectrumActive(false);for(const auto &value:b.audioSpectrum())QCOMPARE(value.toDouble(),0.0);
+    QTest::qWait(100);for(const auto &value:b.audioSpectrum())QCOMPARE(value.toDouble(),0.0);
+    b.setUiActive(false);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));QTest::qWait(100);QCOMPARE(b.audioLevels(),QVariantList({0.,0.,0.,0.,0.}));b.stop();b.clearQueue();b.setUiActive(true);
   }
   void animatedQueueAndSeekPreview() {
     Entries rows;QAbstractItemModelTester modelTest(&rows,QAbstractItemModelTester::FailureReportingMode::QtTest);

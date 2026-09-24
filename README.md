@@ -121,7 +121,7 @@ Click album or immersive artwork to inspect the full cover. Use the wheel or + /
 
 ### Playback and shortcuts
 
-Press **F11** for immersive playback. The **…** menu selects Artwork, Lyrics or Split; **Ctrl+L** opens the queue. Optional **Auto-hide controls** fades controls while idle; pointer or keyboard activity restores them. The cursor stays visible. Click an available artist or album name to browse, then use Back to return.
+Press **F11** for immersive playback. The **…** menu selects Artwork, Lyrics, Split, Sing along or Visualizer; **Ctrl+L** opens the queue. Visualizer cuts the cover to a Material cookie shape and rings it with 72 bars that follow the track's spectrum, bass at the top. The spectrum is measured only while the visualizer is on screen and playing, and the ring holds still when **Animations** is off. Optional **Auto-hide controls** fades controls while idle; pointer or keyboard activity restores them. The cursor stays visible. Click an available artist or album name to browse, then use Back to return.
 
 The same **…** menu offers **Up next covers**: a carousel of the queue below the player, with the playing track centered and large and the rest peeking either side. Scrolling snaps to a cover and plays it as soon as it settles; clicking a cover plays it directly. The choice is remembered. **Show all** opens the full queue for anything the strip cannot reach. The carousel shrinks the main cover to make room, so it is off by default.
 

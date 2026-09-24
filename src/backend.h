@@ -123,6 +123,10 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantMap current READ current NOTIFY trackChanged)
   Q_PROPERTY(int currentIndex READ currentIndex NOTIFY trackChanged)
   Q_PROPERTY(QVariantList audioLevels READ audioLevels NOTIFY audioLevelsChanged)
+  // The immersive visualizer's bands. They are measured only while something
+  // on screen asks for them through spectrumActive, and read zero otherwise.
+  Q_PROPERTY(QVariantList audioSpectrum READ audioSpectrum NOTIFY audioSpectrumChanged)
+  Q_PROPERTY(bool spectrumActive READ spectrumActive WRITE setSpectrumActive NOTIFY spectrumActiveChanged)
   Q_PROPERTY(bool playing READ playing NOTIFY playbackChanged)
   Q_PROPERTY(bool resolving READ resolving NOTIFY playbackChanged)
   Q_PROPERTY(bool buffering READ buffering NOTIFY playbackChanged)
@@ -244,6 +248,9 @@ public:
   Q_INVOKABLE void clearPlaylistVersions(const QString &id);
   QVariantList playlistRows(const QVariantMap &playlist) const;
   QVariantList audioLevels() const {return m_audioLevels;}
+  QVariantList audioSpectrum() const {return m_audioSpectrum;}
+  bool spectrumActive() const {return m_spectrumActive;}
+  void setSpectrumActive(bool active);
   MusicServer *server() {return &m_server;}
   QString serverArtwork() const {return m_serverArtwork;}
   bool serverPlaylistEditable() const {return m_page=="server" && m_request.value("mode")=="playlist" && m_request.value("editable").toBool();}
@@ -622,6 +629,8 @@ signals:
   void trackChanged();
   void playbackChanged();
   void audioLevelsChanged();
+  void audioSpectrumChanged();
+  void spectrumActiveChanged();
   void normalizationChanged();
   void positionChanged();
   void lyricIndexChanged();
@@ -788,6 +797,9 @@ private:
   void resetAudioLevels();
   AudioLevels m_levelAnalyzer;
   QVariantList m_audioLevels{0.0,0.0,0.0,0.0,0.0};
+  AudioSpectrum m_spectrum;
+  QVariantList m_audioSpectrum=QVariantList(36,QVariant(0.0));
+  bool m_spectrumActive=false;
   QElapsedTimer m_levelPublish;
   QTimer m_levelIdle;
   // Playback runs on two interchangeable decks. One carries the song being
