@@ -952,11 +952,13 @@ void runVisualPolishTests(Backend *b, QQuickWindow *w) {
     shot("03-loading-playback");
     QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,play->mapToScene(QPointF(play->width()/2,play->height()/2)).toPoint());
     check(until([&]{return !b->resolving();})&&!b->playing(),"clicking loading playback cancels preparation");
-    play->forceActiveFocus();QTest::keyClick(w,Qt::Key_Tab);QTest::keyClick(w,Qt::Key_Backtab);QTest::qWait(50);auto focus=findItem(play,"buttonFocusRing");
+    play->forceActiveFocus();QTest::keyClick(w,Qt::Key_Tab);QTest::keyClick(w,Qt::Key_Backtab);QTest::qWait(50);
     // Material rings the container, which sits inside the touch target, so the
-    // ring stands off the container rather than off the whole slot.
-    auto playContainer=play->property("background").value<QQuickItem*>();
-    check(focus&&focus->isVisible()&&playContainer&&focus->width()>playContainer->width(),"filled playback button exposes distinct keyboard focus ring");shot("04-keyboard-focus");
+    // ring stands off the container rather than off the whole slot. Play is cut
+    // from Material's shape library, so its ring traces that shape.
+    auto focus=findItem(play,"buttonShapeFocusRing");auto shape=findItem(play,"buttonShape");
+    check(focus&&focus->isVisible()&&shape&&focus->width()>shape->width()&&!findItem(play,"buttonFocusRing")->isVisible(),
+          "filled playback button exposes distinct keyboard focus ring");shot("04-keyboard-focus");
   }
   b->stop();b->dismissError();
   b->search("Test","songs");check(until([&]{return !b->busy();}),"fixture search loads");

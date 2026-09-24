@@ -66,6 +66,16 @@ AbstractButton {
     // button makes under the finger would pull against it. Compose scales
     // neither (IconButton.kt, ButtonGroup.kt).
     property bool grouped: false
+    // A container cut from Material's shape library instead of a rounded
+    // rectangle: Compose's IconButton takes any Shape, and MaterialShapes
+    // gives the 35 of them (MaterialShapes.kt). A toggle that comes on morphs
+    // to its selected shape, and the pulse deepens the outline (MShape). The
+    // shape guidelines ask for these sparingly, so this is off unless a caller
+    // names one.
+    property string materialShape: ""
+    property string selectedMaterialShape: ""
+    property real shapePulse: 0
+    readonly property bool shaped: materialShape.length > 0
     property bool morphPlayback:false
     property bool busy: false
     property bool confirmed: false
@@ -157,6 +167,7 @@ AbstractButton {
         }
     }
     background: Rectangle {
+        visible: !control.shaped
         // The container sits inside the touch target rather than filling it.
         width: control.text.length ? control.width : Math.min(control.width, Math.round(control.sizedSquareWidth)+control.groupExpansion)
         height: Math.min(control.height, control.sizedHeight)
@@ -209,7 +220,48 @@ AbstractButton {
         // between them rather than repeating the button's own radius.
         radius: Theme.shapeInside(control.background.radius, -3); color: "transparent"
         border.width: 2; border.color: Theme.focusRing
-        visible: control.visualFocus
+        visible: control.visualFocus && !control.shaped
+    }
+    // A shaped container takes the rectangle's colour and state layer and
+    // draws them as the shape. It sits between the hidden rectangle and the
+    // content (a Control keeps its background at z -1).
+    Loader {
+        z: -0.5
+        active: control.shaped
+        x: control.background.x; y: control.background.y
+        width: control.background.width; height: control.background.height
+        sourceComponent: Item {
+            // IconButton.kt:1561-1585 gives IconToggleButton's shape change
+            // DefaultEffects, so the morph cannot bounce past either shape.
+            property real morph: control.toggle && control.selected ? 1 : 0
+            Behavior on morph { enabled: app.motion; NumberAnimation { objectName: "buttonShapeMorph"; duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+            property real stateLayer: control.down || control.visualFocus ? Theme.pressedOpacity : control.hovered ? Theme.hoverOpacity : 0
+            Behavior on stateLayer { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+            MShape {
+                objectName: "buttonShape"
+                anchors.fill: parent
+                shape: control.materialShape
+                toShape: control.selectedMaterialShape || control.materialShape
+                progress: parent.morph
+                pulse: control.shapePulse*parent.morph
+                color: Qt.tint(control.background.color, Qt.rgba(control.ink.r,control.ink.g,control.ink.b,parent.stateLayer))
+            }
+            // The ring follows the outline 3dp out, as the rectangle's does.
+            // It exists only while focused: an outline that pulses with the
+            // music is rebuilt every frame, and a hidden one would be too.
+            Loader {
+                anchors.fill: parent; anchors.margins: -3
+                active: control.visualFocus
+                sourceComponent: MShape {
+                    objectName: "buttonShapeFocusRing"
+                    shape: control.materialShape
+                    toShape: control.selectedMaterialShape || control.materialShape
+                    progress: parent.parent.morph
+                    pulse: control.shapePulse*parent.parent.morph
+                    color: "transparent"; strokeColor: Theme.focusRing; strokeWidth: 2
+                }
+            }
+        }
     }
     contentItem: Item {
         opacity: control.dimmed ? Theme.disabledContentOpacity : 1

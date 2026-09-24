@@ -5575,6 +5575,12 @@ void runMaterialGrainTests(Backend *b, QQuickWindow *w) {
     // Material's disabled container is a tenth of onSurface, not the accent.
     c.check(qAbs(fill.alphaF() - 0.10) < 0.02,
             QString("its container drops to a tenth of onSurface (alpha %1)").arg(fill.alphaF(), 0, 'f', 2));
+    // Play is cut from Material's shape library, so the fill that reaches
+    // the screen is the shape's, and it has to carry the same disabled role.
+    auto shape = anyItem(play, "buttonShape");
+    const auto shapeFill = shape ? shape->property("color").value<QColor>() : QColor();
+    c.check(shape && qAbs(shapeFill.alphaF() - 0.10) < 0.02 && shapeFill.rgb() == fill.rgb(),
+            QString("and the shape it is drawn as takes that fill (alpha %1)").arg(shapeFill.alphaF(), 0, 'f', 2));
     c.check(content && qAbs(content->opacity() - 0.38) < 0.01,
             QString("and its content to 38%% (%1)").arg(content ? content->opacity() : 0, 0, 'f', 2));
     // An icon button, filled or not, dims onSurface (IconButtonDefaults.kt

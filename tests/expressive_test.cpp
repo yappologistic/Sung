@@ -15,6 +15,7 @@
 #include <QQmlEngine>
 #include <QQmlExpression>
 #include <QQuickItem>
+#include <QQmlProperty>
 #include <QQuickWindow>
 #include <QSGTextureProvider>
 #include <QSettings>
@@ -1478,6 +1479,68 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
   // The rounded backdrops stay out of it, because swelling would square their corners.
   w->setProperty("immersive", false);
   QTest::qWait(300);
+  // --- The play button hears the song ---
+  // Material's shape principles: a morph can say that something changed "in
+  // the environment, like sound", and abstract shapes are for sparing use.
+  // The player's play button is the one: Sung's square at rest, its nine-sided
+  // cookie while the song plays, and the scallops deepen on the measured low
+  // band. Every change here is made the way a person makes it, with a click.
+  {
+    const auto springs = b->motionSprings(b->motionScheme() != "standard");
+    auto usesSpring = [&](const char *name, const char *spring) {
+      auto animation = w->findChild<QObject *>(name);
+      const auto pair = springs.value(spring).toMap();
+      return animation && animation->property("duration").toInt() == pair.value("ms").toInt() &&
+             QQmlProperty::read(animation, "easing.bezierCurve", qmlContext(animation)).toList() ==
+                 pair.value("curve").toList();
+    };
+    auto play = shownItem(w->contentItem(), "playButton");
+    auto shape = play ? itemNamed(play, "buttonShape") : nullptr;
+    c.check(play && shape, "the player's play button is drawn as a Material shape");
+    if (play && shape) {
+      c.check(shape->property("shape").toString() == "square" &&
+                  shape->property("toShape").toString() == "cookie9Sided",
+              "a square at rest that morphs to the nine-sided cookie");
+      c.check(qAbs(shape->width() - 56) < 0.5 && qAbs(shape->height() - 56) < 0.5,
+              QString("on the medium icon button's 56dp square (%1x%2)")
+                  .arg(shape->width(), 0, 'f', 1).arg(shape->height(), 0, 'f', 1));
+      c.check(c.until([&] { return b->playing() && shape->property("progress").toReal() > 0.99; }),
+              "while the tone plays it is the cookie");
+      c.check(c.until([&] { return shape->property("pulse").toReal() > 0.05; }, 10000),
+              QString("and the decoded low band deepens its scallops (pulse %1)")
+                  .arg(shape->property("pulse").toReal(), 0, 'f', 2));
+      c.check(shape->property("pulse").toReal() < 0.95, "without pulling them past the shape");
+      c.shot("04-play-shape-playing");
+      c.check(usesSpring("buttonShapeMorph", "defaultEffects"),
+              "the morph takes DefaultEffects, IconToggleButton's shape spring");
+      c.check(usesSpring("playButtonPulseMotion", "fastSpatial"), "and the pulse the fast spatial spring");
+      const QPoint centre = play->mapToScene(QPointF(play->width() / 2, play->height() / 2)).toPoint();
+      QTest::mouseClick(w, Qt::LeftButton, {}, centre);
+      c.check(c.until([&] {
+                return !b->playing() && shape->property("progress").toReal() < 0.01 &&
+                       shape->property("pulse").toReal() < 0.01;
+              }),
+              "a click pauses it, and the square comes back still");
+      c.shot("05-play-shape-paused");
+      QTest::mouseClick(w, Qt::LeftButton, {}, centre);
+      c.check(c.until([&] { return b->playing() && shape->property("progress").toReal() > 0.99; }),
+              "another click plays, and the cookie returns");
+      // Keyboard reach: Tab gets there, and the ring follows the outline
+      // rather than a rectangle.
+      for (int i = 0; i < 80 && !play->property("visualFocus").toBool(); ++i)
+        QTest::keyClick(w, Qt::Key_Tab);
+      c.check(play->property("visualFocus").toBool(), "Tab reaches the play button");
+      c.check(c.until([&] { auto ring = itemNamed(play, "buttonShapeFocusRing"); return ring && ring->isVisible(); }) &&
+                  !itemNamed(play, "buttonFocusRing")->isVisible(),
+              "keyboard focus draws the ring around the shape, not a rectangle");
+      c.shot("06-play-shape-focus");
+      b->setMotion(false);
+      QCoreApplication::processEvents();
+      c.check(shape->property("pulse").toReal() < 0.01 && shape->property("progress").toReal() > 0.99,
+              "reduced motion holds the cookie still in one frame");
+      b->setMotion(true);
+    }
+  }
   w->setProperty("side", "now");
   QTest::qWait(600);
   auto panel = itemNamed(w->contentItem(), "nowBackdrop");

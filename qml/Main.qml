@@ -1512,7 +1512,26 @@ ApplicationWindow {
                             anchors.centerIn: parent; spacing: 6
                             MButton { objectName: "playerShuffle"; symbol: "shuffle"; tip: "Shuffle"; toggle: true; selected: app.shuffle; onClicked: app.shuffle=!app.shuffle; visible: window.width>=980 }
                             MButton { symbol: "previous"; tip: "Previous · Ctrl+←"; enabled: app.queue.count>0; onClicked: app.previous() }
-                            MButton { objectName: "playButton"; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"; filled: true; size: "medium"; implicitWidth: 72; enabled: app.queue.count>0; onClicked: app.toggle(); busy: app.buffering }
+                            // Material's shape principles: a morph can say that
+                            // something changed "in the environment, like sound",
+                            // and abstract shapes are for sparing use, so this is
+                            // the one. Play is Sung's square at rest and its
+                            // nine-sided cookie while the song plays, and the
+                            // scallops deepen with the measured low band, the one
+                            // the playing indicator and backdrop already follow.
+                            // The pulse follows the audio on the fast spatial
+                            // spring, so it moves like the rest of the window.
+                            // A full band takes the valleys nine tenths deeper,
+                            // from 80% of the radius to 62%, which reads as a
+                            // beat at 56dp without pinching the glyph inside.
+                            MButton {
+                                objectName: "playButton"; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause · Space":"Play · Space"
+                                filled: true; size: "medium"; enabled: app.queue.count>0; onClicked: app.toggle(); busy: app.buffering
+                                toggle: true; selected: app.playing||app.resolving
+                                materialShape: "square"; selectedMaterialShape: "cookie9Sided"
+                                shapePulse: app.motion && app.playing ? 0.9*(app.audioLevels[0] || 0) : 0
+                                Behavior on shapePulse { enabled: app.motion; NumberAnimation { objectName: "playButtonPulseMotion"; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+                            }
                             MButton { symbol: "next"; tip: "Next · Ctrl+→"; enabled: app.queue.count>0; onClicked: app.next() }
                             MButton { symbol: app.repeat===2?"repeat_one":"repeat"; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; toggle: true; selected: app.repeat>0; onClicked: app.repeat=(app.repeat+1)%3; visible: window.width>=980 }
                         }
