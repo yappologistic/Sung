@@ -28,6 +28,50 @@ Item {
     // to read a kick from across the room and short enough that the cover is
     // still the thing on screen.
     readonly property real visualizerScale: 1.5
+    // The visualizer's cover changes shape every so often. Material keeps
+    // abstract shapes for imagery and decorative moments, and names sound as
+    // one of the changes a morph is for (Shape, "Morph shapes to connect
+    // function and feeling", "Emphasize aesthetic moments with shape"). The
+    // set is the part of the library that is round and even all the way
+    // round: each fills its box both ways, so the picture stays centred and
+    // the ring keeps its footprint, and none reads as a symbol ("Shape is
+    // versatile, not semantic"), which rules out the heart, the arrow and the
+    // triangle in a player whose buttons use them. Burst and boom are left
+    // out too: their points cut away most of the picture.
+    readonly property var visualizerShapes: ["cookie12Sided","cookie9Sided","cookie7Sided","cookie6Sided","cookie4Sided","sunny","verySunny","softBurst","clover8Leaf","clover4Leaf","flower","puffyDiamond"]
+    property string visualizerShape: visualizerShapes[0]
+    property string visualizerNextShape: ""
+    property real visualizerMorph: 0
+    onVisualizingChanged: {visualizerShapeMorph.stop();visualizerNextShape="";visualizerMorph=0;visualizerShape=visualizerShapes[0]}
+    // Eight to sixteen seconds, a few bars of most songs: often enough to be
+    // noticed, seldom enough that the cover stays a picture ("Use abstract
+    // shapes sparingly"). It waits while the music is paused, since the change
+    // belongs to the sound, and while the window cannot be seen.
+    function visualizerShapeWait() { return 8000+Math.round(Math.random()*8000) }
+    Timer {
+        id: visualizerShapeTimer; objectName: "visualizerShapeTimer"
+        interval: player.visualizerShapeWait()
+        running: player.visualizing && app.playing && app.motion && player.visible && !!player.Window.window && player.Window.window.visible
+                 && player.Window.window.visibility!==Window.Minimized && !visualizerShapeMorph.running
+        onTriggered: {
+            const others=player.visualizerShapes.filter(name => name!==player.visualizerShape)
+            player.visualizerNextShape=others[Math.floor(Math.random()*others.length)]
+            interval=player.visualizerShapeWait()
+            visualizerShapeMorph.restart()
+        }
+    }
+    // Shape morphs use the expressive motion scheme (Shape, Shape morph). The
+    // cover is the largest thing on screen, so it takes the slow spatial
+    // spring, whose stiffness of 200 is also what Compose's own sequence of
+    // shapes morphs at (LoadingIndicator.kt). It rings, so a lobe overshoots
+    // and settles; the cover, its ring and its focus outline all read this
+    // one value.
+    NumberAnimation {
+        id: visualizerShapeMorph; objectName: "visualizerShapeMorph"
+        target: player; property: "visualizerMorph"; from: 0; to: 1
+        duration: Theme.springSlowSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSlowSpatial
+        onFinished: {player.visualizerShape=player.visualizerNextShape;player.visualizerNextShape="";player.visualizerMorph=0}
+    }
     property string displayedLayout: effectiveLayout
     property bool ready: false
     property bool autoHideControls: false
@@ -191,19 +235,25 @@ Item {
                         // the same pixel and the ring is exactly concentric.
                         anchors.centerIn: immersiveArt
                         width: immersiveArt.width+2*Math.floor((Math.min(parent.width,parent.height)-immersiveArt.width)/2); height: width
-                        sourceComponent: SpectrumRing { shape: immersiveArt.shape; coverSize: immersiveArt.width; running: app.playing }
+                        sourceComponent: SpectrumRing { shape: immersiveArt.shape; toShape: immersiveArt.toShape; morph: immersiveArt.morph; coverSize: immersiveArt.width; running: app.playing }
                     }
                     Artwork { id: immersiveArt; objectName: "immersiveArtwork"; anchors.centerIn: parent
-                        width: Math.max(80,Math.min(parent.width,parent.height)/(player.visualizing?player.visualizerScale:1)); height: width
-                        // Material's twelve-sided cookie: close enough to a
-                        // circle to read as a record, and its scallops give the
-                        // ring an edge to follow.
-                        shape: player.visualizing ? "cookie12Sided" : ""
+                        // In the visualizer the cover is a whole number of
+                        // pixels: centring a fractional cover rounds its
+                        // position, and the ring centred on it then hung up to
+                        // a pixel past the slot.
+                        width: Math.max(80,player.visualizing ? Math.floor(Math.min(parent.width,parent.height)/player.visualizerScale) : Math.min(parent.width,parent.height)); height: width
+                        // It starts as Material's twelve-sided cookie, close
+                        // enough to a circle to read as a record, and moves
+                        // through the set above.
+                        shape: player.visualizing ? player.visualizerShape : ""
+                        toShape: player.visualizing ? player.visualizerNextShape : ""
+                        morph: player.visualizerMorph
                         url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; opacity: player.coverHidden?0:1; radius: Theme.shapeExtraLarge; pixels: 850; highResolution: true; fit:app.currentArtworkFit
                         AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested()
                             background:Item {
                                 Rectangle {anchors.fill:parent;visible:!immersiveArt.shape;color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.parent.visualFocus?2:0;border.color:Theme.focusRing}
-                                MShape {anchors.fill:parent;visible:!!immersiveArt.shape && parent.parent.visualFocus;shape:immersiveArt.shape||"circle";color:"transparent";strokeColor:Theme.focusRing;strokeWidth:2}
+                                MShape {objectName:"immersiveArtworkFocusRing";anchors.fill:parent;visible:!!immersiveArt.shape && parent.parent.visualFocus;shape:immersiveArt.shape||"circle";toShape:immersiveArt.toShape;progress:immersiveArt.morph;color:"transparent";strokeColor:Theme.focusRing;strokeWidth:2}
                             }}
                     }
                 }

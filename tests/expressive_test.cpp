@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <functional>
 #include <unistd.h>
+#include <cmath>
 
 namespace {
 QQuickItem *itemNamed(QQuickItem *root, const QString &name) {
@@ -1478,7 +1479,7 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
   b->setMotion(true);
 
   // --- The visualizer layout ---
-  // The cover cut to Material's twelve-sided cookie, ringed by bars that
+  // The cover cut to Material's shapes in turn, ringed by bars that
   // follow the measured spectrum. It is chosen the way a person chooses it,
   // from the layout menu, and it has to share the screen with the details,
   // the transport and the optional Up next covers without touching them.
@@ -1518,6 +1519,107 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
                   physics.value("damping").toDouble() == 0.6,
               "the bars integrate Material's fast spatial spring, 0.6 and 800");
       c.shot("07-visualizer-playing");
+
+      // --- The cover changes shape ---
+      // Material's round shapes in turn, the next one eight to sixteen
+      // seconds after the last while the music plays. Nothing here touches
+      // the timer: the stage waits for it as someone watching would.
+      const auto family = player->property("visualizerShapes").toStringList();
+      const auto library = b->shapeNames();
+      bool known = family.size() >= 8 && family.first() == "cookie12Sided";
+      for (const auto &name : family)
+        known = known && library.contains(name);
+      c.check(known, QString("the cover moves through %1 of Material's shapes, from the twelve-sided cookie")
+                         .arg(family.size()));
+      auto timer = player->findChild<QObject *>("visualizerShapeTimer");
+      const int wait = timer ? timer->property("interval").toInt() : 0;
+      c.check(timer && timer->property("running").toBool() && wait >= 8000 && wait <= 16000,
+              QString("while it plays, the next change is %1 s away").arg(wait / 1000.0, 0, 'f', 1));
+      auto picture = cover->findChild<QQuickItem *>("artworkPicture");
+      auto outline = cover->findChild<QQuickItem *>("immersiveArtworkFocusRing");
+      const QString before = player->property("visualizerShape").toString();
+      c.check(c.until([&] { return !player->property("visualizerNextShape").toString().isEmpty(); }, 17000),
+              "and within sixteen seconds the cover starts to change on its own");
+      const QString next = player->property("visualizerNextShape").toString();
+      c.check(next != before && family.contains(next), QString("from %1 to %2, another of the set").arg(before, next));
+      c.until([&] {
+        const double m = player->property("visualizerMorph").toDouble();
+        return m > 0.3 && m < 0.9;
+      }, 3000);
+      const double m = player->property("visualizerMorph").toDouble();
+      const auto follows = [&](QQuickItem *item, const char *progress) {
+        return item && item->property("toShape").toString() == next &&
+               qAbs(item->property(progress).toDouble() - m) < 1e-9;
+      };
+      c.check(m > 0 && m < 1 && follows(picture, "morph") && follows(ringItem, "morph") && follows(outline, "progress"),
+              QString("mid-morph (%1) the picture, the ring and the focus outline share one frame (%2 %3 %4)")
+                  .arg(m, 0, 'f', 2)
+                  .arg(picture ? picture->property("toShape").toString() + "@" + QString::number(picture->property("morph").toDouble(), 'f', 2) : "no picture",
+                       ringItem->property("toShape").toString() + "@" + QString::number(ringItem->property("morph").toDouble(), 'f', 2),
+                       outline ? outline->property("toShape").toString() : "no outline"));
+      c.shot("10-visualizer-morphing");
+      c.check(c.until([&] {
+                return player->property("visualizerShape").toString() == next &&
+                       player->property("visualizerNextShape").toString().isEmpty() &&
+                       player->property("visualizerMorph").toDouble() == 0;
+              }, 3000) && picture && picture->property("shape").toString() == next,
+              "and it settles as the new shape");
+      c.check(timer && c.until([&] { return timer->property("running").toBool(); }),
+              "with the next change already waiting");
+
+      // Each shape of the set, drawn. Waiting for all of them at random would
+      // take minutes, so the shape is set directly here; the change on its
+      // own is what the lines above wait for. Around every one, each bar
+      // starts exactly the 8dp gap and half a 4dp bar from the cover,
+      // measured square to its edge, down a notch as much as on a lobe, and
+      // no bar leaves the ring's square.
+      const auto sceneRect = [&](QQuickItem *item) { return item->mapRectToScene(QRectF(0, 0, item->width(), item->height())); };
+      for (const auto &name : family) {
+        c.until([&] { return player->property("visualizerNextShape").toString().isEmpty(); }, 3000);
+        player->setProperty("visualizerShape", name);
+        QTest::qWait(120);
+        const QRectF coverRect = sceneRect(cover), ringRect = sceneRect(ringItem);
+        // The finest outline the library hands out, 512 radii to the turn.
+        const auto radii = b->shapeOutline(name, 512);
+        QList<QPointF> edge;
+        for (int i = 0; i + 1 < radii.size(); ++i) {
+          const double angle = 2 * M_PI * i / (radii.size() - 1), r = radii[i].toDouble() * coverRect.width() / 2;
+          edge.append(coverRect.center() + QPointF(r * std::cos(angle), r * std::sin(angle)));
+        }
+        const auto gapTo = [&](QPointF p) {
+          double best = 1e9;
+          for (int i = 0; i < edge.size(); ++i) {
+            const QPointF a = edge[i], e = edge[(i + 1) % edge.size()] - a;
+            const double t = qBound(0.0, QPointF::dotProduct(p - a, e) / QPointF::dotProduct(e, e), 1.0);
+            const QPointF d = p - (a + e * t);
+            best = std::min(best, std::hypot(d.x(), d.y()));
+          }
+          return best;
+        };
+        double nearest = 1e9, farthest = 0;
+        bool inside = true;
+        const auto bars = ringItem->property("segments").toList();
+        for (const auto &bar : bars) {
+          const auto ends = bar.toList();
+          if (ends.size() != 2) {
+            inside = false;
+            continue;
+          }
+          const QPointF start = ringItem->mapToScene(ends[0].toPointF()), end = ringItem->mapToScene(ends[1].toPointF());
+          const double d = gapTo(start) - 2;
+          nearest = std::min(nearest, d);
+          farthest = std::max(farthest, d);
+          inside = inside && ringRect.adjusted(-2.5, -2.5, 2.5, 2.5).contains(end);
+        }
+        const bool still = player->property("visualizerShape").toString() == name &&
+                           player->property("visualizerNextShape").toString().isEmpty();
+        c.check(still && bars.size() == 72 && nearest > 7.5 && farthest < 8.5 && inside && picture &&
+                    picture->property("shape").toString() == name,
+                QString("%1: the bars start %2 to %3 from the cover, %4 the ring").arg(name)
+                    .arg(nearest, 0, 'f', 1).arg(farthest, 0, 'f', 1).arg(inside ? "inside" : "outside"));
+        c.shot(QString("11-visualizer-shape-%1").arg(name));
+      }
+      player->setProperty("visualizerShape", family.first());
     }
     // Every window the view is used at: the ring is square, centred on the
     // cover, inside its slot, clear of the details below it, and the details
@@ -1585,14 +1687,18 @@ void runBackdropPulseTests(Backend *b, QQuickWindow *w) {
               return true;
             }, 4000),
             "and the bars settle back to a ring of dots");
+    auto shapeTimer = player->findChild<QObject *>("visualizerShapeTimer");
+    c.check(shapeTimer && !shapeTimer->property("running").toBool(),
+            "and the shape waits, since its change belongs to the sound");
     c.shot("09-visualizer-paused");
     b->play();
     c.check(c.until([&] { return b->spectrumActive(); }), "playing again resumes it");
     b->setMotion(false);
     QTest::qWait(200);
     auto frames = ringAgain ? ringAgain->findChild<QObject *>("spectrumRingFrames") : nullptr;
-    c.check(!b->spectrumActive() && frames && !frames->property("running").toBool(),
-            "reduced motion holds the ring still and measures nothing");
+    c.check(!b->spectrumActive() && frames && !frames->property("running").toBool() && shapeTimer &&
+                !shapeTimer->property("running").toBool(),
+            "reduced motion holds the ring and the shape still and measures nothing");
     b->setMotion(true);
     c.click("immersiveLayoutButton");
     c.click("immersiveLayout_split");

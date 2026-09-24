@@ -7,8 +7,8 @@ import QtQuick.Shapes
 // Material's shape guidance keeps abstract shapes for imagery and decorative
 // moments ("Emphasize aesthetic moments with shape"), and a visualizer is the
 // decorative moment of a music player. The bars start a gap outside the
-// cover's own outline rather than on a circle, so the cookie's scallops carry
-// out into the ring.
+// cover's own outline rather than on a circle, so the shape's lobes carry out
+// into the ring, and follow it while it morphs.
 //
 // Bass is at the top and the treble runs down both sides to meet at the
 // bottom, so the ring is symmetrical and the band that moves most sits where
@@ -25,6 +25,10 @@ Item {
     Accessible.ignored: true
 
     property string shape: "cookie12Sided"
+    // The shape the cover is morphing to and how far it has got, so the ring
+    // moves with the cover's edge.
+    property string toShape: ""
+    property real morph: 0
     // The diameter of the cover inside the ring.
     property real coverSize: 0
     // Playing and allowed to move. The ring only asks the backend to measure
@@ -44,7 +48,11 @@ Item {
     // the cover's edge and the first bar.
     readonly property real gap: Theme.space
     readonly property real reach: Math.max(0,(Math.min(width,height)-coverSize)/2-gap-barWidth)
-    readonly property var outline: app.shapeOutline(shape, barCount)
+    // Where each bar's round cap is centred: the cover's outline pushed out by
+    // the gap and half a bar, measured square to the edge rather than along
+    // the bar, so a bar down a clover's notch clears both leaves by the same
+    // 8dp a bar on a lobe does.
+    readonly property var starts: coverSize>0 ? app.shapeOffset(shape, toShape, morph, (gap+barWidth/2)/(coverSize/2), barCount) : []
     readonly property var physics: Theme.springs.fastSpatial
     property var heights: []
     property var speeds: []
@@ -63,7 +71,7 @@ Item {
         const lines = []
         for (let i = 0; i < barCount; ++i) {
             const angle = i*2*Math.PI/barCount
-            const start = inner*outline[i] + gap + barWidth/2
+            const start = inner*(starts[i] || 1)
             // A stroke of no length draws nothing, so a silent bar keeps a
             // hair of length and its round caps make it a dot.
             const length = Math.max(0.5, Math.min(1.15, heights[i] || 0)*reach)
@@ -94,8 +102,7 @@ Item {
     property bool settling: false
     onWidthChanged: rebuild()
     onHeightChanged: rebuild()
-    onCoverSizeChanged: rebuild()
-    onOutlineChanged: rebuild()
+    onStartsChanged: rebuild()
     Connections { target: app; function onSettingsChanged() { if (!app.motion) { ring.heights = []; ring.speeds = []; ring.rebuild() } } }
 
     FrameAnimation {

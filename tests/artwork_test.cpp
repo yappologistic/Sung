@@ -125,6 +125,47 @@ private slots:
     QCOMPARE(art.m_scrimSamples.size(), 256);
     QCOMPARE(art.m_scrimPreviousSamples.size(), 256);
   }
+  void shapeMorphMasksTheFrame() {
+    // A cover morphing from one shape to another is cut to the frame
+    // between them. Where the two differ most, a point just inside the
+    // halfway radius is painted and one just outside is not, and at either
+    // end the mask is that end's shape.
+    QTemporaryDir dir;
+    QImage cover(160, 160, QImage::Format_RGB32);
+    cover.fill(Qt::white);
+    const auto file = dir.filePath("white.png");
+    QVERIFY(cover.save(file));
+    RoundedArt art;
+    art.setWidth(200);
+    art.setHeight(200);
+    art.setPixels(160);
+    art.setSource(QUrl::fromLocalFile(file));
+    QTRY_VERIFY(art.ready());
+    art.setShape("cookie12Sided");
+    art.setToShape("puffyDiamond");
+    const auto from = m3::shapeOutline("cookie12Sided", 360), to = m3::shapeOutline("puffyDiamond", 360);
+    int widest = 0;
+    for (int i = 0; i < 360; ++i)
+      if (qAbs(from[i] - to[i]) > qAbs(from[widest] - to[widest]))
+        widest = i;
+    QVERIFY(qAbs(from[widest] - to[widest]) > 0.15);
+    const double angle = widest * M_PI / 180;
+    const auto painted = [&](double morph, double radius) {
+      art.setMorph(morph);
+      QImage canvas(200, 200, QImage::Format_ARGB32_Premultiplied);
+      canvas.fill(Qt::transparent);
+      QPainter painter(&canvas);
+      art.paint(&painter);
+      painter.end();
+      return qAlpha(canvas.pixel(int(std::lround(100 + radius * 100 * std::cos(angle))),
+                                 int(std::lround(100 + radius * 100 * std::sin(angle))))) > 128;
+    };
+    for (const double morph : {0.0, 0.5, 1.0}) {
+      const double edge = from[widest] + (to[widest] - from[widest]) * morph;
+      QVERIFY2(painted(morph, edge - 0.03), qPrintable(QString("inside at %1").arg(morph)));
+      QVERIFY2(!painted(morph, edge + 0.03), qPrintable(QString("outside at %1").arg(morph)));
+    }
+  }
   void backdropScrimProtectsInk() {
     QTemporaryDir dir;
     RoundedArt art;

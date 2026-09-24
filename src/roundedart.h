@@ -8,6 +8,7 @@
 #include <functional>
 #include <QVariantAnimation>
 #include <memory>
+#include "m3shape.h"
 #include "motionartwork.h"
 
 class RoundedArt : public QQuickPaintedItem {
@@ -19,6 +20,11 @@ class RoundedArt : public QQuickPaintedItem {
   // A named shape from Material's library to mask with, instead of the corner
   // radius. Empty, or a name this build does not know, keeps the rounded rect.
   Q_PROPERTY(QString shape READ shape WRITE setShape NOTIFY shapeChanged)
+  // A second shape and how far the mask has morphed towards it. The frame is
+  // the one MShape draws for the same pair, so a ring or outline following
+  // the cover meets its edge exactly.
+  Q_PROPERTY(QString toShape READ toShape WRITE setToShape NOTIFY toShapeChanged)
+  Q_PROPERTY(qreal morph READ morph WRITE setMorph NOTIFY morphChanged)
   Q_PROPERTY(int pixels READ pixels WRITE setPixels NOTIFY pixelsChanged)
   Q_PROPERTY(int blur READ blur WRITE setBlur NOTIFY blurChanged)
   Q_PROPERTY(bool crossfade READ crossfade WRITE setCrossfade NOTIFY crossfadeChanged)
@@ -49,6 +55,23 @@ public:
     fitTextureSize();
     emit shapeChanged();
     update();
+  }
+  QString toShape() const { return m_toShape; }
+  void setToShape(const QString &s) {
+    if (m_toShape == s)
+      return;
+    m_toShape = s;
+    emit toShapeChanged();
+    update();
+  }
+  qreal morph() const { return m_morph; }
+  void setMorph(qreal value) {
+    if (m_morph == value)
+      return;
+    m_morph = value;
+    emit morphChanged();
+    if (m3::hasShape(m_toShape))
+      update();
   }
   bool crossfade() const {return m_crossfade;}
   void setCrossfade(bool value);
@@ -90,6 +113,8 @@ signals:
   void sourceChanged();
   void radiusChanged();
   void shapeChanged();
+  void toShapeChanged();
+  void morphChanged();
   void pixelsChanged();
   void blurChanged();
   void readyChanged();
@@ -125,7 +150,8 @@ private:
   // Identifies the newest decode asked for. A result carrying anything else
   // belongs to a cover this surface has already moved on from.
   quint64 m_decode=0;
-  QString m_shape;
+  QString m_shape, m_toShape;
+  qreal m_morph = 0;
   qreal m_radius = 16;
   int m_pixels = 360;
 };

@@ -24,7 +24,10 @@ Shape {
     property color color: Theme.high
     property color strokeColor: "transparent"
     property real strokeWidth: 0
-    readonly property int sampleCount: 96
+    // One radius per pixel across, and never fewer than 96: a chord between
+    // samples cuts across a concave valley, and on a large cover a coarser
+    // outline would let the placeholder behind show there as a thin line.
+    readonly property int sampleCount: Math.max(96, Math.min(512, Math.ceil(Math.min(width, height))))
     readonly property var fromRadii: app.shapeOutline(shape, sampleCount)
     readonly property var toRadii: toShape.length ? app.shapeOutline(toShape, sampleCount) : fromRadii
 

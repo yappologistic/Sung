@@ -20,6 +20,7 @@
 #include <QtTest>
 #include <sys/resource.h>
 #include <atomic>
+#include <memory>
 #include <mutex>
 
 static double cpuSeconds() {
@@ -75,12 +76,14 @@ void runBenchmark(Backend *b,QQuickWindow *w) {
   QQuickWindow *visible=w;
   if(mode=="lyrics")w->setProperty("side","lyrics");
   if(mode=="immersive"||mode=="visualizer")QMetaObject::invokeMethod(w,"toggleImmersive");
+  QQuickItem *visualizerPlayer=nullptr;
   if(mode=="visualizer") {
     QTest::qWait(300);
     QQuickItem *player=nullptr;
     const auto find=[&](auto &&self,QQuickItem *item)->void{if(item->objectName()=="immersivePlayer")player=item;for(auto child:item->childItems())if(!player)self(self,child);};
     find(find,w->contentItem());
     if(player)QMetaObject::invokeMethod(player,"layoutRequested",Q_ARG(QString,QStringLiteral("visualizer")));
+    visualizerPlayer=player;
   }
   if(mode=="mini"){
     QMetaObject::invokeMethod(w,"openMiniPlayer");
@@ -115,6 +118,14 @@ void runBenchmark(Backend *b,QQuickWindow *w) {
     if(lastFrame>=0)intervals.append(now-lastFrame);
     lastFrame=now;++frames;
   },Qt::DirectConnection);
+  // The visualizer's cover changes shape every eight to sixteen seconds; the
+  // count says how many of those morphs the measured window took in.
+  std::unique_ptr<QSignalSpy> shapeChanges;
+  if(visualizerPlayer){
+    const auto meta=visualizerPlayer->metaObject();
+    const auto property=meta->property(meta->indexOfProperty("visualizerShape"));
+    if(property.hasNotifySignal())shapeChanges=std::make_unique<QSignalSpy>(visualizerPlayer,property.notifySignal());
+  }
   QElapsedTimer timer;timer.start();const auto start=cpuSeconds();const auto position=b->position();
   // Use the real event loop. QTest::qWait polling would add artificial CPU wakeups.
   QEventLoop loop;QTimer finish;finish.setSingleShot(true);finish.setTimerType(Qt::PreciseTimer);
@@ -123,6 +134,7 @@ void runBenchmark(Backend *b,QQuickWindow *w) {
   const auto elapsed=timer.nsecsElapsed()/1e9;
   QObject::disconnect(connection);QObject::disconnect(gpuConnection);
   QJsonObject result{{"mode",mode},{"seconds",elapsed},{"cpu_percent_one_core",(cpuSeconds()-start)/elapsed*100},{"frames_per_second",frames.load()/elapsed},{"position_delta_ms",b->position()-position},{"width",visible->width()},{"height",visible->height()},{"dpr",visible->devicePixelRatio()},{"qobjects",w->findChildren<QObject*>().size()}};
+  if(shapeChanges)result["visualizer_shape_changes"]=int(shapeChanges->count());
   result["graphics_api"]=int(visible->rendererInterface()->graphicsApi());
   result["exposed"]=visible->isExposed();
   {

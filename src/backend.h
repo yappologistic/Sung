@@ -425,9 +425,11 @@ public:
   Q_INVOKABLE QVariantMap motionSprings(bool expressive) const;
   // Material's shape library. `shapeOutline` hands back the radii the named
   // shape carries at `steps` even angles, which is what the loading indicator
-  // morphs between and what masks artwork.
+  // morphs between. `shapeOffset` is a morph frame's outline pushed out by
+  // `margin`, where the visualizer's ring starts its bars.
   Q_INVOKABLE QStringList shapeNames() const;
   Q_INVOKABLE QVariantList shapeOutline(const QString &name,int steps) const;
+  Q_INVOKABLE QVariantList shapeOffset(const QString &name,const QString &toName,qreal progress,qreal margin,int steps) const;
   bool artworkAccent() const {return m_settings.value("artworkAccent",false).toBool();}
   void setArtworkAccent(bool enabled) {if(artworkAccent()==enabled)return;m_settings.setValue("artworkAccent",enabled);emit settingsChanged();}
   // A hand-picked Material source color. Empty keeps the built-in palette.
