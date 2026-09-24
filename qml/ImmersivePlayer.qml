@@ -342,6 +342,7 @@ Item {
             MButtonGroup {
                 id: transportGroup
                 objectName: "immersiveTransportGroup"
+                size: transport.buttonSize
                 MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: "Previous"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.previous() }
                 MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; square: true; toggle: true; selected: app.playing||app.resolving; size: transport.buttonSize; iconWidth: "wide"; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.toggle() }
                 MButton { objectName: "immersiveNextButton"; symbol: "next"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: "Next"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.next() }

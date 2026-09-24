@@ -131,7 +131,10 @@ AbstractButton {
                       : text.length && !leftAligned ? Theme.primary : ambientInk
     // Material draws the container at the size's own height and keeps a 48dp
     // touch target around it, so a small button is a 40dp shape you can still
-    // hit comfortably. The target is the footprint the layout sees.
+    // hit comfortably. The target is the footprint the layout sees. Across,
+    // an icon button is as wide as its container or 48dp, whichever is more:
+    // a narrow large button is 64dp wide, not the 96dp of its height, or the
+    // gaps a button group sets between containers come out 16dp too wide.
     readonly property real touchTarget: Math.max(Theme.minimumTarget, sizedHeight)
     // A left aligned button is a list row: its label starts after the leading
     // inset and keeps room at the far end for a trailing symbol, or for air.
@@ -141,7 +144,7 @@ AbstractButton {
     readonly property real alignedTrailRoom: trailingSymbol.length ? 36 : 18
     implicitWidth: (text.length ? buttonLabel.implicitWidth + (leftAligned ? alignedLeadRoom + alignedTrailRoom
                                                                           : (symbol.length || busy ? control.sizedIcon+control.sizedGap : 0) + control.contentInset*2)
-                                : Math.max(control.touchTarget, Math.round(control.sizedSquareWidth)))
+                                : Math.max(Theme.minimumTarget, Math.round(control.sizedSquareWidth)))
                    + groupExpansion
     implicitHeight: control.touchTarget
     hoverEnabled: true

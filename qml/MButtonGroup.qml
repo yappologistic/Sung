@@ -23,9 +23,13 @@ import QtQuick
 Row {
     id: group
     objectName: "buttonGroup"
-    // ButtonGroupDefaults.HorizontalArrangement: ButtonGroupSmallTokens.
-    // BetweenSpace, 12dp, for every size of button.
-    spacing: 12
+    // The space between buttons depends on their size so every target stays
+    // 48dp: "Standard button group inner padding: XS 18dp, S 12dp, M 8dp,
+    // L 8dp, XL 8dp" (button groups, Specs). Compose ships only the small
+    // one (ButtonGroupSmallTokens.BetweenSpace, 12dp) and uses it for every
+    // size, which spaced large buttons half as wide again as the spec.
+    property string size: "small"
+    spacing: ({xsmall: 18, small: 12, medium: 8, large: 8, xlarge: 8})[size] || 12
     property real expandedRatio: 0.15
     readonly property real compressionLimit: 24
 

@@ -696,6 +696,15 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
             qPrintable(QString("the transport is Material's player: tonal %1x%2 skips around a filled %3x%4 play")
                        .arg(pc?pc->width():0,0,'f',0).arg(pc?pc->height():0,0,'f',0)
                        .arg(yc?yc->width():0,0,'f',0).arg(yc?yc->height():0,0,'f',0)));
+      // Button groups, Specs: "Standard button group inner padding ... M 8dp".
+      // A narrow button's footprint is its own width, so the space between
+      // containers is the spec's and not the height-wide footprint's.
+      if(pc&&yc&&nc){
+        const double left=yc->mapToScene({0,0}).x()-pc->mapToScene({pc->width(),0}).x();
+        const double right=nc->mapToScene({0,0}).x()-yc->mapToScene({yc->width(),0}).x();
+        check(qAbs(left-8)<0.5&&qAbs(right-8)<0.5,
+              qPrintable(QString("medium buttons sit 8dp apart, as the spec asks (%1 and %2)").arg(left,0,'f',1).arg(right,0,'f',1)));
+      }
       // Everything stacked down the middle shares one centre line. It did not:
       // the seek row carried the queue and volume buttons on its end, which
       // pushed the bar itself off centre while the row stayed centred.
@@ -864,6 +873,12 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     check(yc&&pc&&nc&&group&&qAbs(yc->height()-96)<0.5&&qAbs(yc->width()-128)<0.5&&qAbs(pc->width()-64)<0.5&&qAbs(nc->width()-64)<0.5,
           qPrintable(QString("a 1600dp window uses the large player: play %1x%2, skips %3 wide")
                      .arg(yc?yc->width():0,0,'f',1).arg(yc?yc->height():0,0,'f',1).arg(pc?pc->width():0,0,'f',1)));
+    if(yc&&pc&&nc){
+      const double left=yc->mapToScene({0,0}).x()-pc->mapToScene({pc->width(),0}).x();
+      const double right=nc->mapToScene({0,0}).x()-yc->mapToScene({yc->width(),0}).x();
+      check(qAbs(left-8)<0.5&&qAbs(right-8)<0.5,
+            qPrintable(QString("large buttons sit 8dp apart, as the spec asks (%1 and %2)").arg(left,0,'f',1).arg(right,0,'f',1)));
+    }
     if(yc&&pc&&nc&&group&&play){
       b->pause();check(waitFor([&]{return !b->playing()&&qAbs(yc->property("radius").toDouble()-28)<0.5;}),
                        qPrintable(QString("paused, play is the 28dp square (%1)").arg(yc->property("radius").toDouble(),0,'f',1)));
