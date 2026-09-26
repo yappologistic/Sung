@@ -7726,9 +7726,23 @@ void runMaterialConformanceTests(Backend *b, QQuickWindow *w) {
                   c.themeColor("secondary"), "in secondary");
     }
     c.shotNow("03a-focus-ring");
-    // The same button clicked with the pointer shows no ring.
-    w->contentItem()->forceActiveFocus();
+    // The same button pressed with the pointer shows no ring. Focus moves
+    // to the song list first, so the press is what brings it back.
+    if (auto list = shownItem(w->contentItem(), "tracksView"))
+      list->forceActiveFocus(Qt::OtherFocusReason);
     QTest::qWait(60);
+    c.check(!settings->hasActiveFocus() && ring && !ring->isVisible(),
+            "the ring leaves with keyboard focus");
+    QTest::mouseMove(w, pointOf(settings));
+    QTest::qWait(60);
+    QTest::mousePress(w, Qt::LeftButton, Qt::NoModifier, pointOf(settings));
+    QTest::qWait(120);
+    c.check(ring && !ring->isVisible(), "a pointer press leaves no focus ring");
+    QTest::mouseRelease(w, Qt::LeftButton, Qt::NoModifier, pointOf(settings));
+    QTest::qWait(400);
+    QTest::keyClick(w, Qt::Key_Escape);
+    QTest::qWait(400);
+    w->contentItem()->forceActiveFocus();
   }
   if (auto card = shownItem(w->contentItem(), "localFacetTabs")) Q_UNUSED(card);
 
@@ -7811,6 +7825,7 @@ void runMaterialConformanceTests(Backend *b, QQuickWindow *w) {
     QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/MSwitch.qml"));
     QScopedPointer<QObject> made(source.create(qmlContext(w)));
     auto sw = qobject_cast<QQuickItem *>(made.data());
+    c.check(sw, "a switch can be made to try");
     if (sw) {
       sw->setParentItem(w->contentItem());
       sw->setX(700); sw->setY(420); sw->setZ(95);
