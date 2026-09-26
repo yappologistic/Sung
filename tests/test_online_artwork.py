@@ -157,6 +157,10 @@ class OnlineArtworkTests(unittest.TestCase):
         self.assertEqual(art.album_motion(self.page(),self.candidate),self.base+'master.m3u8')
         self.assertEqual(art.album_motion(self.page(),dict(self.candidate,collectionId=124)),'')
         self.assertEqual(art.album_motion(self.page(),dict(self.candidate,artistName='Other')),'')
+        # A featured artist on the song, the album credited to the main one.
+        featured=dict(self.candidate,artistName='An Artist & A Guest',collectionArtistName='An Artist')
+        self.assertEqual(art.album_motion(self.page(),featured),self.base+'master.m3u8')
+        self.assertEqual(art.album_motion(self.page(),dict(featured,collectionArtistName='Someone Else')),'')
         self.assertEqual(art.album_motion(b'<html>No motion</html>',self.candidate),'')
 
     def test_urls_and_redirects(self):
@@ -183,6 +187,9 @@ large.m3u8
         huge+=b'#EXT-X-STREAM-INF:BANDWIDTH=25000000,CODECS="avc1.640033",RESOLUTION=2048x2048\nheavy.m3u8\n'
         self.assertEqual(art.variant_url(huge,self.base,'high'),self.base+'large.m3u8')
         self.assertEqual(art.variant_url(huge,self.base),self.base+'small.m3u8')
+        # Of three streams at one size, the large cover takes the richest.
+        ladder=b''.join(b'#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS="avc1.640020",RESOLUTION=1080x1080\n%s.m3u8\n'%(rate,name) for rate,name in ((3977535,b'low'),(6808389,b'high'),(5256752,b'mid')))
+        self.assertEqual(art.variant_url(ladder,self.base,'high'),self.base+'high.m3u8')
 
     def manifest(self):
         return b'#EXTM3U\n#EXT-X-MAP:URI="cover.mp4",BYTERANGE="100@0"\n#EXTINF:2,\n#EXT-X-BYTERANGE:1000@100\ncover.mp4\n#EXT-X-ENDLIST\n'

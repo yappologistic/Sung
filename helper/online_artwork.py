@@ -23,9 +23,13 @@ CACHE_LIMIT = 256 * 1024 * 1024
 # asked for only while that layout shows. It takes the largest square Apple
 # offers up to 2048, which a 1080p or 1440p window crops rather than enlarges.
 QUALITIES = {
-    'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes'),
-    'high': dict(suffix='-hq', largest=2048, target=2048, bandwidth=20000000, limit=64 * 1024 * 1024, bytes='hqBytes'),
+    'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes', richest=False),
+    'high': dict(suffix='-hq', largest=2048, target=2048, bandwidth=20000000, limit=64 * 1024 * 1024, bytes='hqBytes', richest=True),
 }
+# Apple's H.264 ladder for a motion cover stops at 1080 square, in three
+# bitrates; only HEVC goes on to 2160 (Innerlight EP, checked 2026-09). The
+# large cover takes the highest of the three, where the standard one keeps
+# the first listed.
 HOSTS = {'itunes.apple.com', 'music.apple.com', 'mvod.itunes.apple.com'}
 # A cover on Apple's image service in the shape its search API returns it. The
 # player rewrites the size segment for whatever surface draws it.
@@ -273,9 +277,13 @@ def album_motion(raw, candidate):
     for page in payload.get('data', [])[:4]:
         for section in page.get('data', {}).get('sections', [])[:12]:
             for item in section.get('items', [])[:20]:
+                # The header credits the album's artist, which a song with a
+                # featured artist does not share: "Elderbrook & Bob Moses" on
+                # Elderbrook's Innerlight EP. Search names it separately.
+                album_artist = candidate.get('collectionArtistName') or candidate['artistName']
                 if (item.get('id') == 'album-detail-header - ' + str(candidate['collectionId'])
                         and normal(item.get('title', '')) == normal(candidate['collectionName'])
-                        and [normal(x.get('title', '')) for x in item.get('subtitleLinks', [])] == [normal(candidate['artistName'])]):
+                        and [normal(x.get('title', '')) for x in item.get('subtitleLinks', [])] == [normal(album_artist)]):
                     url = item.get('videoArtwork', {}).get('dictionary', {}).get('motionDetailSquare', {}).get('video', '')
                     return safe_url(url) if url else ''
     return ''
@@ -298,8 +306,8 @@ def variant_url(raw, base, quality='standard'):
                 or a.get('VIDEO-RANGE', 'SDR') != 'SDR' or float(a.get('FRAME-RATE', '30')) > 30
                 or int(a.get('BANDWIDTH', '0')) > q['bandwidth'] or lines[i+1].startswith('#')):
             continue
-        choices.append((width, safe_url(urljoin(base, lines[i+1].strip()))))
-    return min(choices, key=lambda x: abs(x[0]-q['target']))[1] if choices else ''
+        choices.append((width, safe_url(urljoin(base, lines[i+1].strip())), int(a.get('BANDWIDTH', '0'))))
+    return min(choices, key=lambda x: (abs(x[0]-q['target']), -x[2] if q['richest'] else 0))[1] if choices else ''
 
 
 def movie_url(raw, base):
