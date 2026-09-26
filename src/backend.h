@@ -180,11 +180,13 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantMap albumInfo READ albumInfo NOTIFY catalogChanged)
   Q_PROPERTY(QVariantMap artistInfo READ artistInfo NOTIFY catalogChanged)
   Q_PROPERTY(QString currentMotionArt READ currentMotionArt NOTIFY onlineArtworkChanged)
-  // Set while the Motion layout shows: an online animated cover is then
-  // fetched at the size that fills a window rather than the shared one.
-  Q_PROPERTY(bool largeMotionArt READ largeMotionArt WRITE setLargeMotionArt NOTIFY largeMotionArtChanged)
-  // The size of that large cover: 1080, 1920 or 2160 square, shown in
-  // Settings as 1080p, 2K and 4K.
+  // Which of Apple's animated covers to fetch, as the helper names them:
+  // "standard", the one every surface shares, or while the Motion layout
+  // shows, the size and shape that fill its window ("1920", "tall1080", ...).
+  // The interface decides, since it knows the window.
+  Q_PROPERTY(QString motionArtQuality READ motionArtQuality WRITE setMotionArtQuality NOTIFY motionArtQualityChanged)
+  // The Motion layout's cover size as set: 0 picks one from the window
+  // (Auto), or 1080, 1920 or 2160, shown in Settings as 1080p, 2K and 4K.
   Q_PROPERTY(int motionQuality READ motionQuality WRITE setMotionQuality NOTIFY settingsChanged)
   Q_PROPERTY(QString artworkStatus READ artworkStatus NOTIFY onlineArtworkChanged)
   Q_PROPERTY(QString artworkPage READ artworkPage NOTIFY onlineArtworkChanged)
@@ -480,9 +482,9 @@ public:
   bool watchMusicFolders() const { return m_settings.value("watchMusicFolders",true).toBool(); }
   void setWatchMusicFolders(bool value);
   QString onlineMotionArt() const { return m_onlineMotionArt; }
-  bool largeMotionArt() const { return m_largeMotionArt; }
-  void setLargeMotionArt(bool value);
-  int motionQuality() const { const int size=m_settings.value("motionQuality",2160).toInt(); return size==1080 || size==1920 ? size : 2160; }
+  QString motionArtQuality() const { return m_motionArtQuality; }
+  void setMotionArtQuality(const QString &quality);
+  int motionQuality() const { const int size=m_settings.value("motionQuality",0).toInt(); return size==1080 || size==1920 || size==2160 ? size : 0; }
   void setMotionQuality(int size);
   bool onlineArtwork() const { return m_settings.value("onlineArtwork",true).toBool(); }
   void setOnlineArtwork(bool value) { if(onlineArtwork()==value)return;m_settings.setValue("onlineArtwork",value);emit settingsChanged(); }
@@ -640,7 +642,7 @@ public:
   QMediaPlayer *media() { return &m_media(); }
 signals:
   void onlineArtworkChanged();
-  void largeMotionArtChanged();
+  void motionArtQualityChanged();
   void videoCoversChanged();
   void viewAboutToChange();
   void localImportChanged();
@@ -688,7 +690,7 @@ private:
   quint64 m_onlineArtworkToken=0, m_onlineArtworkGeneration=0;
   bool m_onlineArtworkAttempted=false;
   int m_onlineArtworkRetries=0;
-  bool m_largeMotionArt=false;
+  QString m_motionArtQuality=QStringLiteral("standard");
   void refetchMotionArt();
   friend class BackendTest;
   friend class CrossfadeTest;

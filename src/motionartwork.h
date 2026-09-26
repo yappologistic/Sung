@@ -17,7 +17,7 @@ class MotionArtwork : public QObject {
   Q_PROPERTY(bool running READ running WRITE setRunning NOTIFY runningChanged)
   // The longest side a published frame may have. 800 serves every cover
   // surface; the Motion layout raises it to the large cover's own size
-  // (Backend::motionQuality) so that cover arrives without a second scale
+  // (Backend::motionArtQuality) so that cover arrives without a second scale
   // on every frame.
   Q_PROPERTY(int maximumSize READ maximumSize WRITE setMaximumSize NOTIFY maximumSizeChanged)
 public:

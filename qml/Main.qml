@@ -47,8 +47,31 @@ ApplicationWindow {
     // The Motion layout fills the window with the cover, so only there is it
     // fetched and decoded large; every other surface shares the small one.
     readonly property bool motionLayoutShown: immersive && !!immersiveLoader.item && immersiveLoader.item.motionLayout
-    Binding { target: motionArtwork; property: "maximumSize"; value: window.motionLayoutShown ? app.motionQuality : 800 }
-    Binding { target: app; property: "largeMotionArt"; value: window.motionLayoutShown }
+    // Its shape and size follow the window once a resize has settled, so
+    // dragging an edge does not start a download at every step.
+    property size motionWindow: Qt.size(width, height)
+    // Restarted by onWidthChanged and onHeightChanged below.
+    Timer { id: motionWindowSettle; interval: 600; onTriggered: window.motionWindow = Qt.size(window.width, window.height) }
+    // Apple's square cover or its 3:4 tall one, whichever is nearer the
+    // window's shape: the two meet at the geometric mean of their aspects,
+    // sqrt(4/3), where each would crop the same share of itself.
+    readonly property bool motionTall: motionWindow.height > motionWindow.width*Math.sqrt(4/3)
+    // Apple's streams behind 1080p, 2K and 4K (helper/online_artwork.py):
+    // their widths, and their longest sides for the decoder.
+    readonly property var motionTiers: [1080, 1920, 2160]
+    readonly property var motionWidths: motionTall ? [1078, 1662, 2048] : [1080, 1920, 2160]
+    readonly property var motionHeights: motionTall ? [1438, 2216, 2732] : [1080, 1920, 2160]
+    // Auto takes the smallest that fills the window without enlarging it:
+    // a cover filling the window needs the window's width, or the width its
+    // height asks of the cover's shape, whichever is more.
+    readonly property int motionAutoTier: {
+        const need = Math.max(motionWindow.width, motionWindow.height*(motionTall ? 3/4 : 1))*Screen.devicePixelRatio
+        const at = motionWidths.findIndex(w => w >= need)
+        return motionTiers[at >= 0 ? at : motionTiers.length-1]
+    }
+    readonly property int motionTier: app.motionQuality > 0 ? app.motionQuality : motionAutoTier
+    Binding { target: motionArtwork; property: "maximumSize"; value: window.motionLayoutShown ? window.motionHeights[window.motionTiers.indexOf(window.motionTier)] : 800 }
+    Binding { target: app; property: "motionArtQuality"; value: window.motionLayoutShown ? (window.motionTall ? "tall" : "")+window.motionTier : "standard" }
     property var fileDialogs: null
     function openFileDialog(kind) {
         if(!fileDialogs) {
@@ -202,8 +225,8 @@ ApplicationWindow {
     Settings { id: geometry; category: "Window"; property int width: 1180; property int height: 800; property real panelWidth: 0 }
     Settings { id: railSettings; category: "Navigation"; property bool expanded: false }
     Component.onCompleted: { windowResources.manage(window);width=geometry.width;height=geometry.height;geometryReady=true;app.setUiActive(uiActive);if(!app.onboarded)Qt.callLater(()=>{if(!app.onboarded)onboarding.open();}); }
-    onWidthChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.width=width;}
-    onHeightChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.height=height;}
+    onWidthChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.width=width;motionWindowSettle.restart();}
+    onHeightChanged: {if(albumFlying)cancelAlbumFlight();if(geometryReady && !immersive && visibility===Window.Windowed)geometry.height=height;motionWindowSettle.restart();}
     property bool albumFlying: false
     property bool albumOpening: false
     property bool albumReturning:false
@@ -2321,7 +2344,7 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
                     // Every control term below must also appear here, or its
                     // parent disappears before Settings can show the match.
-                    property bool hasMatches: settingsDialog.matches("Navigation top bar sidebar rail destinations") || settingsDialog.matches("Appearance theme system Noctalia light dark") || settingsDialog.matches("Appearance artwork accent color") || settingsDialog.matches("Accent color source palette") || settingsDialog.matches("Ambient artwork backdrop immersive now playing") || settingsDialog.matches("Backdrop follows the music audio") || settingsDialog.matches("Album covers for music videos YouTube Apple Music") || settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content") || settingsDialog.matches("Contrast standard medium high accessibility") || settingsDialog.matches("Density compact comfortable spacing") || settingsDialog.matches("Pointer density precise mouse touch target") || settingsDialog.matches("Current view layout density grid list") || (!!app.current.id && settingsDialog.matches("Current artwork")) || settingsDialog.matches("Animated album artwork") || settingsDialog.matches("Online animated covers YouTube Apple Music") || settingsDialog.matches("Motion layout video quality 1080p 2K 4K animated cover") || settingsDialog.matches("Animations") || settingsDialog.matches("Poster-style lyrics Google Sans Flex stretch font current line")
+                    property bool hasMatches: settingsDialog.matches("Navigation top bar sidebar rail destinations") || settingsDialog.matches("Appearance theme system Noctalia light dark") || settingsDialog.matches("Appearance artwork accent color") || settingsDialog.matches("Accent color source palette") || settingsDialog.matches("Ambient artwork backdrop immersive now playing") || settingsDialog.matches("Backdrop follows the music audio") || settingsDialog.matches("Album covers for music videos YouTube Apple Music") || settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content") || settingsDialog.matches("Contrast standard medium high accessibility") || settingsDialog.matches("Density compact comfortable spacing") || settingsDialog.matches("Pointer density precise mouse touch target") || settingsDialog.matches("Current view layout density grid list") || (!!app.current.id && settingsDialog.matches("Current artwork")) || settingsDialog.matches("Animated album artwork") || settingsDialog.matches("Online animated covers YouTube Apple Music") || settingsDialog.matches("Motion layout video quality auto 1080p 2K 4K animated cover") || settingsDialog.matches("Animations") || settingsDialog.matches("Poster-style lyrics Google Sans Flex stretch font current line")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===0
                     SungText {objectName:"settingsAppearanceHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Appearance";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options0;objectName:"settingsRows0";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
@@ -2387,13 +2410,14 @@ ApplicationWindow {
                 // The Motion layout fills the window with the animated cover.
                 // A larger one is sharper and costs more to decode; Apple's
                 // sizes and what each costs are in helper/online_artwork.py.
-                SungText {text:"Motion layout video";visible:settingsDialog.matches("Motion layout video quality 1080p 2K 4K animated cover");font.pixelSize:Theme.bodyLarge;emphasized:true;Layout.topMargin:4}
+                SungText {text:"Motion layout video";visible:settingsDialog.matches("Motion layout video quality auto 1080p 2K 4K animated cover");font.pixelSize:Theme.bodyLarge;emphasized:true;Layout.topMargin:4}
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
                     objectName:"motionQualityControl"
-                    visible:settingsDialog.matches("Motion layout video quality 1080p 2K 4K animated cover")
+                    visible:settingsDialog.matches("Motion layout video quality auto 1080p 2K 4K animated cover")
                     enabled:app.motion && app.animatedArtwork && app.onlineArtwork
                     accessibleName:"Motion layout video"
-                    options:[{key:1080,label:"1080p",name:"motionQuality1080"},
+                    options:[{key:0,label:"Auto",name:"motionQualityAuto"},
+                             {key:1080,label:"1080p",name:"motionQuality1080"},
                              {key:1920,label:"2K",name:"motionQuality1920"},
                              {key:2160,label:"4K",name:"motionQuality2160"}]
                     value:app.motionQuality; onChosen:value=>app.motionQuality=value

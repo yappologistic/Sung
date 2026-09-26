@@ -24,7 +24,7 @@ CACHE_LIMIT = 256 * 1024 * 1024
 # offers up to 2048, which a 1080p or 1440p window crops rather than enlarges.
 QUALITIES = {
     'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes',
-                     richest=False, codecs=('avc1',), decoders=('h264',)),
+                     richest=False, codecs=('avc1',), decoders=('h264',), shape='square'),
 }
 # Apple's H.264 ladder for a motion cover stops at 1080 square; HEVC goes on
 # to 1920 and 2160, the 2160 in three bitrates (Innerlight EP, checked
@@ -34,10 +34,30 @@ QUALITIES = {
 # machine decodes cheaply; the others take HEVC. Each takes its richest
 # stream first and steps down whenever one would not fit the size limit.
 # The standard cover keeps the first stream listed at its size.
-for _size, _codecs in ((1080, ('avc1',)), (1920, ('avc1', 'hvc1')), (2160, ('avc1', 'hvc1'))):
+#
+# Albums also carry a tall cover, 3:4, for a window taller than it is wide,
+# whose ladder runs 1078x1438 in H.264 and 1662x2216 and 2048x2732 in HEVC
+# (Innerlight EP, After Hours, Dawn FM, checked 2026-09). Its three largest
+# are the same three settings, matched by width. An album without one gets
+# its square cover instead (tall1920 falls back to 1920, and so on).
+for _size, _tall, _codecs in ((1080, 1080, ('avc1',)), (1920, 1700, ('avc1', 'hvc1')), (2160, 2048, ('avc1', 'hvc1'))):
+    _decoders = ('h264', 'hevc') if 'hvc1' in _codecs else ('h264',)
     QUALITIES[str(_size)] = dict(suffix='-%d' % _size, largest=_size, target=_size, bandwidth=25000000,
                                  limit=64 * 1024 * 1024, bytes='bytes%d' % _size, richest=True, codecs=_codecs,
-                                 decoders=('h264', 'hevc') if 'hvc1' in _codecs else ('h264',))
+                                 decoders=_decoders, shape='square')
+    QUALITIES['tall%d' % _size] = dict(suffix='-tall%d' % _size, largest=_tall, target=_tall, bandwidth=25000000,
+                                       limit=64 * 1024 * 1024, bytes='bytesTall%d' % _size, richest=True, codecs=_codecs,
+                                       decoders=_decoders, shape='tall', square=str(_size))
+
+
+def shaped(width, height, q, fallback=False):
+    """Whether a stream of this size is the kind `q` asks for: a square, or a
+    3:4 tall cover; with `fallback`, a tall request also takes its square."""
+    if q['shape'] == 'tall':
+        if 128 <= width <= q['largest'] and 1.25 <= height / max(1, width) <= 1.4:
+            return True
+        return fallback and shaped(width, height, QUALITIES[q['square']])
+    return 128 <= width == height <= q['largest']
 
 HOSTS = {'itunes.apple.com', 'music.apple.com', 'mvod.itunes.apple.com'}
 # A cover on Apple's image service in the shape its search API returns it. The
@@ -278,7 +298,7 @@ def archive_cover(track):
     return ''
 
 
-def album_motion(raw, candidate):
+def album_motion(raw, candidate, shape='square'):
     match = re.search(r'<script[^>]*id="serialized-server-data"[^>]*>(.*?)</script>', raw.decode(), re.S)
     if not match:
         return ''
@@ -293,7 +313,9 @@ def album_motion(raw, candidate):
                 if (item.get('id') == 'album-detail-header - ' + str(candidate['collectionId'])
                         and normal(item.get('title', '')) == normal(candidate['collectionName'])
                         and [normal(x.get('title', '')) for x in item.get('subtitleLinks', [])] == [normal(album_artist)]):
-                    url = item.get('videoArtwork', {}).get('dictionary', {}).get('motionDetailSquare', {}).get('video', '')
+                    # An album with no animated cover carries the keys as null.
+                    key, kind = ('tallVideoArtwork', 'motionDetailTall') if shape == 'tall' else ('videoArtwork', 'motionDetailSquare')
+                    url = ((item.get(key) or {}).get('dictionary') or {}).get(kind, {}).get('video', '')
                     return safe_url(url) if url else ''
     return ''
 
@@ -312,7 +334,7 @@ def variants(raw, base, quality='standard'):
             continue
         a = attributes(line)
         width, height = map(int, a.get('RESOLUTION', '0x0').split('x'))
-        if (not 128 <= width == height <= q['largest'] or not a.get('CODECS', '').startswith(q['codecs'])
+        if (not shaped(width, height, q) or not a.get('CODECS', '').startswith(q['codecs'])
                 or a.get('VIDEO-RANGE', 'SDR') != 'SDR' or float(a.get('FRAME-RATE', '30')) > 30
                 or int(a.get('BANDWIDTH', '0')) > q['bandwidth'] or lines[i+1].startswith('#')):
             continue
@@ -366,7 +388,7 @@ def validate_movie(path, quality='standard'):
     streams = info.get('streams', [])
     if (len(streams) != 1 or streams[0].get('codec_type') != 'video'
             or streams[0].get('codec_name') not in QUALITIES[quality]['decoders']
-            or not 128 <= streams[0].get('width', 0) == streams[0].get('height', 0) <= QUALITIES[quality]['largest']
+            or not shaped(streams[0].get('width', 0), streams[0].get('height', 0), QUALITIES[quality], fallback=True)
             or not 0 < float(Fraction(streams[0].get('r_frame_rate', '0'))) <= 30
             or not 0 < float(info.get('format', {}).get('duration', 0)) <= 60):
         raise ValueError('Unsupported cover video')
@@ -467,11 +489,14 @@ def lookup(req):
                     except (ValueError, ZeroDivisionError, subprocess.SubprocessError):
                         path.unlink()
                 if not cached_movie(path, limit=q['limit']):
-                    master = album_motion(fetch(page), candidate)
+                    raw_page = fetch(page)
+                    master, streams = album_motion(raw_page, candidate, q['shape']), quality
+                    if not master and q['shape'] == 'tall':
+                        master, streams = album_motion(raw_page, candidate), q['square']
                     if not master:
                         continue
                     url = ''
-                    for variant in variants(fetch(master, 262144), master, quality)[:4]:
+                    for variant in variants(fetch(master, 262144), master, streams)[:4]:
                         try:
                             url = movie_url(fetch(variant, 262144), variant, q['limit'])
                             break

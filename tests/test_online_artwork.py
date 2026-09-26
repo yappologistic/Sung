@@ -205,6 +205,52 @@ large.m3u8
         self.assertEqual(art.variant_url(apple,self.base,'2160'),self.base+'k4.m3u8')
         self.assertNotIn(self.base+'k4.m3u8',art.variants(apple,self.base,'1920'))
 
+    def test_tall_cover_selection(self):
+        # Apple's tall ladder for Innerlight EP, as it was served.
+        rows=[('664x886','avc1',2183846),('830x1108','avc1',4003339),('1078x1438','avc1',4046252),('1078x1438','avc1',6742552),
+              ('1078x1438','hvc1',5005098),('1080x1440','hvc1',7050220),('1662x2216','hvc1',12147834),
+              ('2048x2732','hvc1',12107779),('2048x2732','hvc1',21212378),('1080x1080','avc1',6808389)]
+        raw=b'#EXTM3U\n'+b''.join(b'#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS="%s.x",RESOLUTION=%s\n%s.m3u8\n'%(rate,codec.encode(),size.encode(),(size+'-'+str(rate)).encode())
+                                   for size,codec,rate in rows)
+        pick=lambda q:art.variant_url(raw,self.base,q).rsplit('/',1)[1]
+        # 1080p keeps H.264; the others take the richest stream of their width.
+        self.assertEqual(pick('tall1080'),'1078x1438-6742552.m3u8')
+        self.assertEqual(pick('tall1920'),'1662x2216-12147834.m3u8')
+        self.assertEqual(pick('tall2160'),'2048x2732-21212378.m3u8')
+        # A square stream is never taken for a tall cover, nor a tall one for a square.
+        self.assertNotIn('1080x1080',' '.join(art.variants(raw,self.base,'tall1080')))
+        self.assertEqual(pick('1080'),'1080x1080-6808389.m3u8')
+
+    def test_tall_header_and_missing_video(self):
+        tall=dict(motionDetailTall=dict(video=self.base+'tall.m3u8'))
+        item=dict(id='album-detail-header - 123', title='An Album', subtitleLinks=[dict(title='An Artist')],
+                  videoArtwork=dict(dictionary=dict(motionDetailSquare=dict(video=self.base+'master.m3u8'))),
+                  tallVideoArtwork=dict(dictionary=tall))
+        page=lambda i:('<script id="serialized-server-data">'+json.dumps(dict(data=[dict(data=dict(sections=[dict(items=[i])]))]))+'</script>').encode()
+        self.assertEqual(art.album_motion(page(item),self.candidate,'tall'),self.base+'tall.m3u8')
+        self.assertEqual(art.album_motion(page(item),self.candidate),self.base+'master.m3u8')
+        # An album with no animated cover carries the keys as null.
+        bare=dict(item,videoArtwork=None,tallVideoArtwork=None)
+        self.assertEqual(art.album_motion(page(bare),self.candidate,'tall'),'')
+        self.assertEqual(art.album_motion(page(bare),self.candidate),'')
+
+    def test_tall_request_falls_back_to_the_square_cover(self):
+        video=self.root/'square.mp4'
+        subprocess.run(['ffmpeg','-nostdin','-v','error','-f','lavfi','-i','testsrc2=size=256x256:rate=10:duration=0.5','-threads','1','-c:v','libx264',str(video)],capture_output=True,check=True)
+        def fetch(url,limit=0):
+            if '/search?' in url:return json.dumps(dict(results=[self.candidate])).encode()
+            if 'music.apple.com/' in url:return self.page()
+            if url.endswith('master.m3u8'):return b'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=10000,CODECS="avc1.64001F",RESOLUTION=256x256\nvariant.m3u8\n'
+            if url.endswith('variant.m3u8'):return self.manifest()
+            return video.read_bytes()
+        with patch.object(art,'fetch',side_effect=fetch):
+            found=art.lookup(dict(self.track,quality='tall1920'))
+            self.assertEqual(found['status'],'ready')
+            self.assertTrue(found['motionArt'].endswith('/123-tall1920.mp4'))
+            # And the square file it kept is accepted next time, not refetched.
+            self.assertEqual(art.lookup(dict(self.track,quality='tall1920')),found)
+        art.validate_movie(self.root/'cache/123-tall1920.mp4','tall1920')
+
     def manifest(self):
         return b'#EXTM3U\n#EXT-X-MAP:URI="cover.mp4",BYTERANGE="100@0"\n#EXTINF:2,\n#EXT-X-BYTERANGE:1000@100\ncover.mp4\n#EXT-X-ENDLIST\n'
 

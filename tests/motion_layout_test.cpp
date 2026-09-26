@@ -117,7 +117,7 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   // sharpness readings below need.
   const QString busy = c.directory + "/busy.mp4", large1080 = c.directory + "/busy-1080.mp4",
                 large1920 = c.directory + "/busy-1920.mp4",
-                fractal = c.directory + "/fractal.mp4",
+                fractal = c.directory + "/fractal.mp4", fractalTall = c.directory + "/fractal-tall.mp4",
                 still = c.directory + "/still.png";
   c.check(c.encode({"-f", "lavfi", "-i", "testsrc2=size=720x720:rate=24:duration=3", "-threads", "1",
                     "-c:v", "libx264", "-pix_fmt", "yuv420p", busy}), "generate a detailed animated cover");
@@ -130,6 +130,9 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
           "generate a 2K animated cover");
   c.check(c.encode({"-f", "lavfi", "-i", "mandelbrot=size=720x720:rate=24", "-t", "3", "-threads", "1",
                     "-c:v", "libx264", "-pix_fmt", "yuv420p", fractal}), "generate a second animated cover");
+  // Apple's tall covers are 3:4.
+  c.check(c.encode({"-f", "lavfi", "-i", "mandelbrot=size=540x720:rate=24", "-t", "3", "-threads", "1",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", fractalTall}), "generate a tall animated cover");
   c.check(c.encode({"-f", "lavfi", "-i", "gradients=size=800x800:c0=0x2b4a8b:c1=0xe07a3f:n=2:seed=3",
                     "-frames:v", "1", still}), "generate a still cover");
   qputenv("SUNG_MOTION_FIXTURE", busy.toUtf8());
@@ -148,7 +151,7 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return !b->currentMotionArt().isEmpty(); }, 12000), "its animated cover is found");
   auto *motion = qmlContext(w)->contextProperty("motionArtwork").value<MotionArtwork *>();
   c.check(motion && c.until([&] { return !motion->frame().isNull(); }), "the animated cover decodes");
-  c.check(!b->largeMotionArt() && motion->frame().width() <= 800 && b->currentMotionArt().endsWith("motionbusy1.mp4"),
+  c.check(b->motionArtQuality() == "standard" && motion->frame().width() <= 800 && b->currentMotionArt().endsWith("motionbusy1.mp4"),
           "outside Motion the shared cover is the small one");
 
   // The Motion video size is chosen in Settings, the way a person does it.
@@ -168,9 +171,7 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
     QTest::keyClick(w, Qt::Key_Escape);
     c.check(settings && c.until([&] { return !settings->property("visible").toBool(); }), "Settings closes");
   };
-  c.check(b->motionQuality() == 2160, "4K is the default");
-  chooseQuality("motionQuality1080", "07-motion-quality-setting");
-  c.check(b->motionQuality() == 1080, "clicking 1080p chooses it");
+  c.check(b->motionQuality() == 0, "Auto is the default");
 
   // Set directly rather than through F11, which would also take the
   // offscreen screen's fixed square and keep the window from resizing.
@@ -180,8 +181,9 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   c.check(player, "the immersive view opens");
   if (!player) { fprintf(stdout, "RESULT %d failures\n", c.failures); QCoreApplication::exit(1); return; }
   // A laptop's shape: a square cover filling it loses a third of itself.
+  // Past the 600ms the window size is given to settle.
   w->resize(1280, 800);
-  QTest::qWait(600);
+  QTest::qWait(900);
 
   // Chosen from the menu the way a person chooses it.
   c.click("immersiveLayoutButton");
@@ -203,29 +205,37 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
     QTest::qWait(5000);
     fprintf(stdout, "MEASURE cpu%% motion %s %.1f\n", label, (cpuSeconds() - start) / 5 * 100);
   };
-  c.check(b->largeMotionArt() && motion->maximumSize() == 1080, "Motion asks for the 1080p cover");
-  c.check(c.until([&] { return b->currentMotionArt().endsWith("-1080.mp4") && motion->frame().width() == 1080; }, 12000),
-          "the 1080p cover arrives and is drawn at its own size");
-  measure("1080p");
+  // Auto: a 1280px-wide window needs a cover at least 1280 wide, and the
+  // smallest square that is is 2K.
+  c.check(b->motionArtQuality() == "1920" && motion->maximumSize() == 1920, "Auto asks a 1280x800 window for the 2K cover");
+  c.check(c.until([&] { return b->currentMotionArt().endsWith("-1920.mp4") && motion->frame().width() == 1920; }, 12000),
+          "the 2K cover arrives and is drawn at its own size");
+  measure("Auto 2K");
   // Settings is reached from the library, so step out of the immersive view
   // to change the size; Motion stays the chosen layout.
-  w->setProperty("immersive", false);
-  QTest::qWait(500);
-  chooseQuality("motionQuality1920", "");
-  c.check(b->motionQuality() == 1920, "clicking 2K chooses it");
-  w->setProperty("immersive", true);
-  c.check(c.until([&] { return (player = shown(w->contentItem(), "immersivePlayer")) != nullptr
-                               && player->property("displayedLayout").toString() == "motion"; }),
-          "the immersive view comes back in Motion");
-  scene = named(player, "motionScene");
-  backdrop = named(player, "motionBackdrop");
-  c.check(scene && backdrop, "the motion backdrop exists again");
-  if (!scene || !backdrop) { fprintf(stdout, "RESULT %d failures\n", c.failures); QCoreApplication::exit(1); return; }
-  c.check(motion->maximumSize() == 1920, "Motion asks for the 2K cover");
+  const auto reenter = [&](const QString &segment, const QString &capture) {
+    w->setProperty("immersive", false);
+    QTest::qWait(500);
+    chooseQuality(segment, capture);
+    w->setProperty("immersive", true);
+    c.check(c.until([&] { return (player = shown(w->contentItem(), "immersivePlayer")) != nullptr
+                                 && player->property("displayedLayout").toString() == "motion"; }),
+            "the immersive view comes back in Motion");
+    scene = named(player, "motionScene");
+    backdrop = named(player, "motionBackdrop");
+    return scene && backdrop;
+  };
+  if (!reenter("motionQuality1080", "07-motion-quality-setting")) { fprintf(stdout, "RESULT %d failures\n", c.failures); QCoreApplication::exit(1); return; }
+  c.check(b->motionQuality() == 1080 && motion->maximumSize() == 1080, "1080p chosen in Settings asks for the 1080p cover");
+  c.check(c.until([&] { return b->currentMotionArt().endsWith("-1080.mp4") && motion->frame().width() == 1080
+                               && backdrop->property("moving").toBool(); }, 12000),
+          "the 1080p cover arrives and is drawn at its own size");
+  measure("1080p");
+  if (!reenter("motionQualityAuto", "")) { fprintf(stdout, "RESULT %d failures\n", c.failures); QCoreApplication::exit(1); return; }
+  c.check(b->motionQuality() == 0, "Auto can be chosen again");
   c.check(c.until([&] { return b->currentMotionArt().endsWith("-1920.mp4") && motion->frame().width() == 1920
                                && backdrop->property("moving").toBool(); }, 12000),
-          "the 2K cover arrives and is drawn at its own size");
-  measure("2K");
+          "and the 2K cover comes back without a new download");
   c.check(c.until([&] { return scene->opacity() == 1; }), "the backdrop fades all the way in");
   auto *ambient = named(player, "ambientBackdrop");
   c.check(ambient && c.until([&] { return !ambient->isVisible(); }), "the ambient wash steps aside");
@@ -297,6 +307,7 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   // A different song crossfades to its own cover.
   qputenv("SUNG_MOTION_FIXTURE", fractal.toUtf8());
   qputenv("SUNG_MOTION_FIXTURE_1920", fractal.toUtf8());
+  qputenv("SUNG_MOTION_FIXTURE_tall1080", fractalTall.toUtf8());
   QSignalSpy mixes(backdrop, SIGNAL(mixChanged()));
   QVariantMap second{{"id", "motionfrac1"}, {"videoId", "motionfrac1"}, {"title", "Deep Zoom"},
                      {"artist", "Fixture Artist"}, {"album", "Iterations"}, {"kind", "song"}, {"art", art}};
@@ -347,12 +358,20 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   w->resize(480, 620);
   QTest::qWait(600);
   c.check(qAbs(backdrop->width() - 480) < 1 && qAbs(backdrop->height() - 620) < 1, "the backdrop fills a narrow window");
+  // Taller than it is wide by more than sqrt(4/3): the tall cover crops less
+  // than the square one, and a 480px window needs only its 1080p.
+  c.check(c.until([&] { return b->motionArtQuality() == "tall1080"; }, 3000), "a narrow window asks for the tall cover");
+  c.check(c.until([&] { return b->currentMotionArt().endsWith("-tall1080.mp4") && motion->frame().height() > motion->frame().width()
+                               && backdrop->property("moving").toBool(); }, 12000),
+          "and draws it, taller than wide");
+  c.check(motion->maximumSize() == 1438, "decoded up to the tall cover's own height");
   if (title) {
     const QRectF at = title->mapRectToScene(title->boundingRect());
     c.check(at.right() <= 480 && at.left() >= 0, "the title stays inside a narrow window");
   }
   c.shot("06-motion-narrow");
   w->resize(1280, 800);
+  c.check(c.until([&] { return b->motionArtQuality() == "1920"; }, 3000), "a wide window goes back to the square cover");
 
   // Leaving Motion gives the backdrop up and brings the cover back.
   c.click("immersiveLayoutButton");
@@ -360,7 +379,7 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return !scene->isVisible(); }), "leaving Motion fades the backdrop out");
   c.check(c.until([&] { return !backdrop->property("ready").toBool(); }), "and lets its pictures go");
   c.check(cover && c.until([&] { return cover->isVisible(); }), "the cover returns in Artwork");
-  c.check(c.until([&] { return !b->largeMotionArt() && motion->maximumSize() == 800 && !b->currentMotionArt().contains("-1920"); }, 12000),
+  c.check(c.until([&] { return b->motionArtQuality() == "standard" && motion->maximumSize() == 800 && !b->currentMotionArt().contains("-1920"); }, 12000),
           "and the shared cover goes back to the small one");
   fprintf(stdout, "RESULT %d failures\n", c.failures);
   fflush(stdout);
