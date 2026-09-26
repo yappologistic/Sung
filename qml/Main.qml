@@ -47,7 +47,7 @@ ApplicationWindow {
     // The Motion layout fills the window with the cover, so only there is it
     // fetched and decoded large; every other surface shares the small one.
     readonly property bool motionLayoutShown: immersive && !!immersiveLoader.item && immersiveLoader.item.motionLayout
-    Binding { target: motionArtwork; property: "maximumSize"; value: window.motionLayoutShown ? 2160 : 800 }
+    Binding { target: motionArtwork; property: "maximumSize"; value: window.motionLayoutShown ? app.motionQuality : 800 }
     Binding { target: app; property: "largeMotionArt"; value: window.motionLayoutShown }
     property var fileDialogs: null
     function openFileDialog(kind) {
@@ -2321,7 +2321,7 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
                     // Every control term below must also appear here, or its
                     // parent disappears before Settings can show the match.
-                    property bool hasMatches: settingsDialog.matches("Navigation top bar sidebar rail destinations") || settingsDialog.matches("Appearance theme system Noctalia light dark") || settingsDialog.matches("Appearance artwork accent color") || settingsDialog.matches("Accent color source palette") || settingsDialog.matches("Ambient artwork backdrop immersive now playing") || settingsDialog.matches("Backdrop follows the music audio") || settingsDialog.matches("Album covers for music videos YouTube Apple Music") || settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content") || settingsDialog.matches("Contrast standard medium high accessibility") || settingsDialog.matches("Density compact comfortable spacing") || settingsDialog.matches("Pointer density precise mouse touch target") || settingsDialog.matches("Current view layout density grid list") || (!!app.current.id && settingsDialog.matches("Current artwork")) || settingsDialog.matches("Animated album artwork") || settingsDialog.matches("Online animated covers YouTube Apple Music") || settingsDialog.matches("Animations") || settingsDialog.matches("Poster-style lyrics Google Sans Flex stretch font current line")
+                    property bool hasMatches: settingsDialog.matches("Navigation top bar sidebar rail destinations") || settingsDialog.matches("Appearance theme system Noctalia light dark") || settingsDialog.matches("Appearance artwork accent color") || settingsDialog.matches("Accent color source palette") || settingsDialog.matches("Ambient artwork backdrop immersive now playing") || settingsDialog.matches("Backdrop follows the music audio") || settingsDialog.matches("Album covers for music videos YouTube Apple Music") || settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content") || settingsDialog.matches("Contrast standard medium high accessibility") || settingsDialog.matches("Density compact comfortable spacing") || settingsDialog.matches("Pointer density precise mouse touch target") || settingsDialog.matches("Current view layout density grid list") || (!!app.current.id && settingsDialog.matches("Current artwork")) || settingsDialog.matches("Animated album artwork") || settingsDialog.matches("Online animated covers YouTube Apple Music") || settingsDialog.matches("Motion layout video quality 1080p 2K 4K animated cover") || settingsDialog.matches("Animations") || settingsDialog.matches("Poster-style lyrics Google Sans Flex stretch font current line")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===0
                     SungText {objectName:"settingsAppearanceHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Appearance";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options0;objectName:"settingsRows0";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
@@ -2384,6 +2384,20 @@ ApplicationWindow {
                 MSettingRow {opens:true;text:"Current artwork";visible:!!app.current.id && settingsDialog.matches("Current artwork");onClicked:{settingsDialog.close();artworkControls.open();}}
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; objectName: "animatedArtworkSwitch"; visible: settingsDialog.matches("Animated album artwork"); text: "Animated album artwork"; checked: app.animatedArtwork; onToggled: app.animatedArtwork=checked }
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; objectName: "onlineArtworkSwitch"; visible: settingsDialog.matches("Online animated covers YouTube Apple Music"); text: "Online animated covers"; checked: app.onlineArtwork; onToggled: app.onlineArtwork=checked }
+                // The Motion layout fills the window with the animated cover.
+                // A larger one is sharper and costs more to decode; Apple's
+                // sizes and what each costs are in helper/online_artwork.py.
+                SungText {text:"Motion layout video";visible:settingsDialog.matches("Motion layout video quality 1080p 2K 4K animated cover");font.pixelSize:Theme.bodyLarge;emphasized:true;Layout.topMargin:4}
+                MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
+                    objectName:"motionQualityControl"
+                    visible:settingsDialog.matches("Motion layout video quality 1080p 2K 4K animated cover")
+                    enabled:app.motion && app.animatedArtwork && app.onlineArtwork
+                    accessibleName:"Motion layout video"
+                    options:[{key:1080,label:"1080p",name:"motionQuality1080"},
+                             {key:1920,label:"2K",name:"motionQuality1920"},
+                             {key:2160,label:"4K",name:"motionQuality2160"}]
+                    value:app.motionQuality; onChosen:value=>app.motionQuality=value
+                }
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; objectName: "albumCoversSwitch"; visible: settingsDialog.matches("Album covers for music videos YouTube Apple Music"); text: "Album covers for music videos"; checked: app.albumCovers; onToggled: app.albumCovers=checked }
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Animations"); text: "Animations"; checked: app.motion; onToggled: app.motion=checked }
                 // Off unless chosen: some listeners want the words to hold still.

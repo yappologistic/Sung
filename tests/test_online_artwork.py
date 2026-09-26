@@ -182,19 +182,28 @@ large.m3u8
         self.assertEqual(art.variant_url(b'#EXTM3U',self.base),'')
         # The large cover takes the biggest square up to 2160, and still no
         # HDR or stream above its bandwidth ceiling.
-        self.assertEqual(art.variant_url(raw,self.base,'high'),self.base+'large.m3u8')
+        self.assertEqual(art.variant_url(raw,self.base,'2160'),self.base+'large.m3u8')
         huge=raw+b'#EXT-X-STREAM-INF:BANDWIDTH=9000000,CODECS="avc1.640033",RESOLUTION=3840x3840\nhuge.m3u8\n'
         huge+=b'#EXT-X-STREAM-INF:BANDWIDTH=26000000,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=2160x2160\nheavy.m3u8\n'
         huge+=b'#EXT-X-STREAM-INF:BANDWIDTH=12000000,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=2160x2160,VIDEO-RANGE=PQ\npq.m3u8\n'
-        self.assertEqual(art.variant_url(huge,self.base,'high'),self.base+'large.m3u8')
+        self.assertEqual(art.variant_url(huge,self.base,'2160'),self.base+'large.m3u8')
         # HEVC is the large cover's way to 2160; the standard cover stays H.264.
         sharp=huge+b'#EXT-X-STREAM-INF:BANDWIDTH=12430160,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=2160x2160,VIDEO-RANGE=SDR\nsharp.m3u8\n'
-        self.assertEqual(art.variant_url(sharp,self.base,'high'),self.base+'sharp.m3u8')
-        self.assertEqual(art.variants(sharp,self.base,'high'),[self.base+n for n in ('sharp.m3u8','large.m3u8','small.m3u8')])
+        self.assertEqual(art.variant_url(sharp,self.base,'2160'),self.base+'sharp.m3u8')
+        self.assertEqual(art.variants(sharp,self.base,'2160'),[self.base+n for n in ('sharp.m3u8','large.m3u8','small.m3u8')])
         self.assertEqual(art.variant_url(sharp,self.base),self.base+'small.m3u8')
         # Of three streams at one size, the large cover takes the richest.
         ladder=b''.join(b'#EXT-X-STREAM-INF:BANDWIDTH=%d,CODECS="avc1.640020",RESOLUTION=1080x1080\n%s.m3u8\n'%(rate,name) for rate,name in ((3977535,b'low'),(6808389,b'high'),(5256752,b'mid')))
-        self.assertEqual(art.variant_url(ladder,self.base,'high'),self.base+'high.m3u8')
+        self.assertEqual(art.variant_url(ladder,self.base,'1080'),self.base+'high.m3u8')
+        # Each Motion size takes its own square: 1080p stays H.264 even where
+        # an HEVC stream at 1080 is richer, 2K takes 1920 over 2160.
+        apple=ladder+(b'#EXT-X-STREAM-INF:BANDWIDTH=7145316,CODECS="hvc1.2.20000000.L123.B0",RESOLUTION=1080x1080\nhevc1080.m3u8\n'
+                      b'#EXT-X-STREAM-INF:BANDWIDTH=12252443,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=1920x1920\nk2.m3u8\n'
+                      b'#EXT-X-STREAM-INF:BANDWIDTH=12430160,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=2160x2160\nk4.m3u8\n')
+        self.assertEqual(art.variant_url(apple,self.base,'1080'),self.base+'high.m3u8')
+        self.assertEqual(art.variant_url(apple,self.base,'1920'),self.base+'k2.m3u8')
+        self.assertEqual(art.variant_url(apple,self.base,'2160'),self.base+'k4.m3u8')
+        self.assertNotIn(self.base+'k4.m3u8',art.variants(apple,self.base,'1920'))
 
     def manifest(self):
         return b'#EXTM3U\n#EXT-X-MAP:URI="cover.mp4",BYTERANGE="100@0"\n#EXTINF:2,\n#EXT-X-BYTERANGE:1000@100\ncover.mp4\n#EXT-X-ENDLIST\n'
@@ -249,27 +258,27 @@ large.m3u8
             if 'music.apple.com/' in url:return self.page()
             if url.endswith('master.m3u8'):return master
             if url.endswith('.m3u8'):return self.manifest().replace(b'cover.mp4',url.rsplit('/',1)[1].replace('.m3u8','.mp4').encode())
-            self.assertEqual(limit,art.QUALITIES['high' if url.endswith('large.mp4') else 'standard']['limit'])
+            self.assertEqual(limit,art.QUALITIES['2160' if url.endswith('large.mp4') else 'standard']['limit'])
             return (large if url.endswith('large.mp4') else small).read_bytes()
         with patch.object(art,'fetch',side_effect=fetch):
             standard=art.lookup(self.track)
-            high=art.lookup(dict(self.track,quality='high'))
+            high=art.lookup(dict(self.track,quality='2160'))
             self.assertTrue(standard['motionArt'].endswith('/123.mp4'))
-            self.assertTrue(high['motionArt'].endswith('/123-hq.mp4'))
+            self.assertTrue(high['motionArt'].endswith('/123-2160.mp4'))
             fetched=len(calls)
             # Each size now answers from the cache without a request.
             self.assertEqual(art.lookup(self.track),standard)
-            self.assertEqual(art.lookup(dict(self.track,quality='high')),high)
+            self.assertEqual(art.lookup(dict(self.track,quality='2160')),high)
             self.assertEqual(len(calls),fetched)
-        info=json.loads(subprocess.run(['ffprobe','-v','error','-show_entries','stream=width','-of','json',str(self.root/'cache/123-hq.mp4')],capture_output=True,check=True).stdout)
+        info=json.loads(subprocess.run(['ffprobe','-v','error','-show_entries','stream=width','-of','json',str(self.root/'cache/123-2160.mp4')],capture_output=True,check=True).stdout)
         self.assertEqual(info['streams'][0]['width'],1024)
         with self.assertRaises(ValueError):art.validate_movie(large)
-        art.validate_movie(large,'high')
+        art.validate_movie(large,'2160')
 
     def test_large_cover_steps_down_to_a_stream_that_fits(self):
         master=(b'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=20869391,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=2160x2160\nrich.m3u8\n'
                 b'#EXT-X-STREAM-INF:BANDWIDTH=12430160,CODECS="hvc1.2.20000000.H150.B0",RESOLUTION=2160x2160\nfits.m3u8\n')
-        limit=art.QUALITIES['high']['limit']
+        limit=art.QUALITIES['2160']['limit']
         def playlist(size):
             return b'#EXTM3U\n#EXT-X-MAP:URI="c.mp4",BYTERANGE="900@0"\n#EXTINF:30,\n#EXT-X-BYTERANGE:%d@900\nc.mp4\n#EXT-X-ENDLIST\n'%size
         fetched=[]
@@ -282,7 +291,7 @@ large.m3u8
             if url.endswith('fits.m3u8'):return playlist(limit//2)
             return b'\0\0\0\x18ftypisom'
         with patch.object(art,'fetch',side_effect=fetch),patch.object(art,'validate_movie'):
-            self.assertEqual(art.lookup(dict(self.track,quality='high'))['status'],'ready')
+            self.assertEqual(art.lookup(dict(self.track,quality='2160'))['status'],'ready')
         # The richer stream was sized from its playlist and never downloaded.
         self.assertIn(self.base+'rich.m3u8',fetched)
         self.assertEqual([u for u in fetched if u.endswith('.mp4')],[self.base+'c.mp4'])

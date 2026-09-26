@@ -183,6 +183,9 @@ class Backend : public QObject {
   // Set while the Motion layout shows: an online animated cover is then
   // fetched at the size that fills a window rather than the shared one.
   Q_PROPERTY(bool largeMotionArt READ largeMotionArt WRITE setLargeMotionArt NOTIFY largeMotionArtChanged)
+  // The size of that large cover: 1080, 1920 or 2160 square, shown in
+  // Settings as 1080p, 2K and 4K.
+  Q_PROPERTY(int motionQuality READ motionQuality WRITE setMotionQuality NOTIFY settingsChanged)
   Q_PROPERTY(QString artworkStatus READ artworkStatus NOTIFY onlineArtworkChanged)
   Q_PROPERTY(QString artworkPage READ artworkPage NOTIFY onlineArtworkChanged)
   Q_PROPERTY(bool watchMusicFolders READ watchMusicFolders WRITE setWatchMusicFolders NOTIFY settingsChanged)
@@ -474,6 +477,8 @@ public:
   QString onlineMotionArt() const { return m_onlineMotionArt; }
   bool largeMotionArt() const { return m_largeMotionArt; }
   void setLargeMotionArt(bool value);
+  int motionQuality() const { const int size=m_settings.value("motionQuality",2160).toInt(); return size==1080 || size==1920 ? size : 2160; }
+  void setMotionQuality(int size);
   bool onlineArtwork() const { return m_settings.value("onlineArtwork",true).toBool(); }
   void setOnlineArtwork(bool value) { if(onlineArtwork()==value)return;m_settings.setValue("onlineArtwork",value);emit settingsChanged(); }
   // Whether a song that only has a video frame shows the album cover Apple
@@ -679,6 +684,7 @@ private:
   bool m_onlineArtworkAttempted=false;
   int m_onlineArtworkRetries=0;
   bool m_largeMotionArt=false;
+  void refetchMotionArt();
   friend class BackendTest;
   friend class CrossfadeTest;
   friend class SubsonicTest;

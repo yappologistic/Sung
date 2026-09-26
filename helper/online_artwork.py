@@ -25,15 +25,20 @@ CACHE_LIMIT = 256 * 1024 * 1024
 QUALITIES = {
     'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes',
                      richest=False, codecs=('avc1',), decoders=('h264',)),
-    'high': dict(suffix='-hq', largest=2160, target=2160, bandwidth=25000000, limit=64 * 1024 * 1024, bytes='hqBytes',
-                 richest=True, codecs=('avc1', 'hvc1'), decoders=('h264', 'hevc')),
 }
 # Apple's H.264 ladder for a motion cover stops at 1080 square; HEVC goes on
 # to 1920 and 2160, the 2160 in three bitrates (Innerlight EP, checked
-# 2026-09). A 2160 cover fills a 2560px window at 1.2x where the 1080 one
-# was stretched 2.4x, so the large cover takes HEVC, richest first, stepping
-# down whenever a stream would not fit its size limit. The standard cover
-# stays H.264 and keeps the first stream listed at its size.
+# 2026-09). The Motion layout offers the three largest as 1080p, 2K and 4K:
+# a 2160 cover fills a 2560px window at 1.2x where a 1080 one is stretched
+# 2.4x, and costs about twice the decoding. 1080p stays H.264, which every
+# machine decodes cheaply; the others take HEVC. Each takes its richest
+# stream first and steps down whenever one would not fit the size limit.
+# The standard cover keeps the first stream listed at its size.
+for _size, _codecs in ((1080, ('avc1',)), (1920, ('avc1', 'hvc1')), (2160, ('avc1', 'hvc1'))):
+    QUALITIES[str(_size)] = dict(suffix='-%d' % _size, largest=_size, target=_size, bandwidth=25000000,
+                                 limit=64 * 1024 * 1024, bytes='bytes%d' % _size, richest=True, codecs=_codecs,
+                                 decoders=('h264', 'hevc') if 'hvc1' in _codecs else ('h264',))
+
 HOSTS = {'itunes.apple.com', 'music.apple.com', 'mvod.itunes.apple.com'}
 # A cover on Apple's image service in the shape its search API returns it. The
 # player rewrites the size segment for whatever surface draws it.
@@ -489,7 +494,7 @@ def lookup(req):
             result.update(status='ready', motionArt=path.resolve().as_uri(), page=page, art=still_art(candidate) or result['art'])
             # The other size of the same album stays valid beside this one.
             if earlier.get('albumId') == album_id:
-                saved.update({k: earlier[k] for k in ('bytes', 'hqBytes') if k in earlier})
+                saved.update({k: earlier[k] for k in (x['bytes'] for x in QUALITIES.values()) if k in earlier})
             saved.update({'albumId': album_id, q['bytes']: path.stat().st_size, 'expires': now + 7 * 86400})
             break
         saved.update(art=result['art'], page=result['page'])

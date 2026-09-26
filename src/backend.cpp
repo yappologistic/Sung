@@ -2527,7 +2527,7 @@ void Backend::fetchOnlineArtwork() {
   const auto directory=audioDirectory();if(!directory || !directory->isValid())return;
   const auto root=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/motion-art";
   auto args=current();args["op"]="online-artwork";args["artworkCache"]=root;args["scratch"]=directory->path();args["refresh"]=m_artworkForce;args["motion"]=motionWanted;args["covers"]=coverLookupWanted();m_artworkForce=false;
-  const bool large=m_largeMotionArt;args["quality"]=large?"high":"standard";
+  const bool large=m_largeMotionArt;args["quality"]=large?QString::number(motionQuality()):QStringLiteral("standard");
   const auto generation=++m_onlineArtworkGeneration;
   const auto videoId=current().value("videoId").toString();
   request("motion-artwork",args,[this,generation,root,motionWanted,videoId,large](const QVariantMap &data){
@@ -2562,6 +2562,15 @@ void Backend::fetchOnlineArtwork() {
 void Backend::setLargeMotionArt(bool value) {
   if(m_largeMotionArt==value)return;
   m_largeMotionArt=value;emit largeMotionArtChanged();
+  refetchMotionArt();
+}
+void Backend::setMotionQuality(int size) {
+  if(size!=1080 && size!=1920 && size!=2160)return;
+  if(size==motionQuality())return;
+  m_settings.setValue("motionQuality",size);emit settingsChanged();
+  if(m_largeMotionArt)refetchMotionArt();
+}
+void Backend::refetchMotionArt() {
   if(!motionLookupWanted())return;
   m_onlineArtworkTimer.stop();cancel("motion-artwork");++m_onlineArtworkGeneration;
   m_onlineArtworkAttempted=false;m_onlineArtworkRetries=0;
