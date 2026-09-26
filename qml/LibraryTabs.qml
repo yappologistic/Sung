@@ -12,7 +12,8 @@ Flickable {
     readonly property string shownKey: pendingKey || currentKey
     onCurrentKeyChanged: pendingKey = ""
     function choose(key) {
-        if (key !== currentKey) pendingKey = key
+        // Choosing the tab already current drops any other still pending.
+        pendingKey = key !== currentKey ? key : ""
         chosen(key)
     }
     property int focusIndex: -1
