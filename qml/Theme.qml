@@ -95,7 +95,12 @@ QtObject {
         // entries before blending them into an animated scheme.
         function asColor(hex) {return Qt.rgba(parseInt(hex.slice(1,3),16)/255,parseInt(hex.slice(3,5),16)/255,parseInt(hex.slice(5,7),16)/255,1)}
         for(const name in old)old[name]=asColor(old[name])
-        old.outline=blend(old.outlineVariant,old.onSurfaceVariant,0.5)
+        // The outline is a boundary that has to hold on its own, as the
+        // edge of a text field or a switch track, so it takes the scheme's
+        // own tone (ColorLightTokens and ColorDarkTokens: NeutralVariant50
+        // and 60) instead of an average of two neighbours, which measured
+        // 2.9:1 against the surface where Material's 3:1 is the floor.
+        old.outline=generated.outline
         return Object.assign({},generated,old)
     }
     function refreshSchemes() {

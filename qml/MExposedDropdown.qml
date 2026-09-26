@@ -25,6 +25,9 @@ Item {
     readonly property bool menuOpen: menu.visible
     // So a control that replaces an older one can keep the name it was known by.
     property string fieldName: "dropdownField"
+    // The surface the field sits on, which the floating label masks the
+    // outline with: a pane by default, surfaceContainerHigh inside a dialog.
+    property color labelSurface: Theme.surfaceLow
 
     implicitWidth: Math.max(160, metrics.advanceWidth(currentLabel) + 88)
     implicitHeight: 56
@@ -85,7 +88,7 @@ Item {
         text: control.label
         font.pixelSize: Theme.labelMedium
         color: field.activeFocus || control.open ? Theme.primary : Theme.muted
-        Rectangle { anchors.fill: parent; anchors.leftMargin: -4; anchors.rightMargin: -4; color: Theme.surfaceLow; z: -1 }
+        Rectangle { objectName: "dropdownLabelMask"; anchors.fill: parent; anchors.leftMargin: -4; anchors.rightMargin: -4; color: control.labelSurface; z: -1 }
     }
 
     MMenu {

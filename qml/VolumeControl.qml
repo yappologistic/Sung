@@ -23,7 +23,11 @@ RowLayout {
         onOpened: body.item.beginEdit()
         function apply(){body.item.apply();}
         closePolicy:Popup.CloseOnEscape|Popup.CloseOnPressOutside
-        background:Rectangle {radius:Theme.shapeExtraLarge;color:Theme.high;border.width:1;border.color:Theme.outlineVariant}
+        // A floating surface is set off by its elevation, not an outline: a
+        // dialog's surfaceContainerHigh and extra large corner, lifted three
+        // levels (DialogTokens.ContainerElevation).
+        background:Rectangle {radius:Theme.shapeExtraLarge;color:Theme.high
+            MElevation {anchors.fill:parent;radius:parent.radius;level:3}}
         enter:Transition {NumberAnimation {property:"opacity";from:0;to:1;duration:Theme.enterDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.enterCurve}}
         exit:Transition {NumberAnimation {property:"opacity";to:0;duration:Theme.exitDuration;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.exitCurve}}
         Loader {
