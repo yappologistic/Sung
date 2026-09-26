@@ -7,6 +7,11 @@
 #include <QVideoSink>
 #include <QTransform>
 
+// An animation larger than the cap is decoded down to it; a smaller one is
+// left at its own size for the surface to scale, not enlarged up front.
+static QSize bounded(const QSize &native,int cap) {
+  return native.width()>cap || native.height()>cap ? native.scaled(cap,cap,Qt::KeepAspectRatio) : native;
+}
 MotionArtwork::MotionArtwork(QObject *parent):QObject(parent) {}
 MotionArtwork::~MotionArtwork() { clear(); }
 void MotionArtwork::clear() {
@@ -14,7 +19,7 @@ void MotionArtwork::clear() {
 }
 void MotionArtwork::publish(QImage frame) {
   if(frame.isNull())return;
-  if(frame.width()>800 || frame.height()>800)frame=frame.scaled(800,800,Qt::KeepAspectRatio,Qt::SmoothTransformation);
+  if(frame.width()>m_maximumSize || frame.height()>m_maximumSize)frame=frame.scaled(m_maximumSize,m_maximumSize,Qt::KeepAspectRatio,Qt::SmoothTransformation);
   m_frame=std::move(frame);emit frameChanged();
 }
 void MotionArtwork::publishVideo(const QVideoFrame &frame) {
@@ -35,7 +40,7 @@ void MotionArtwork::setSource(const QUrl &source) {
     if(!size.isValid() || size.width()>4096 || size.height()>4096 || !reader.supportsAnimation())return;
     m_movie=std::make_unique<QMovie>(file.absoluteFilePath());
     m_movie->setCacheMode(QMovie::CacheNone);
-    m_movie->setScaledSize(size.scaled(800,800,Qt::KeepAspectRatio));
+    m_movie->setScaledSize(bounded(size,m_maximumSize));
     connect(m_movie.get(),&QMovie::frameChanged,m_movie.get(),[this]{publish(m_movie->currentImage());});
     // QMovie emits finished() in the call that detects an unreadable frame.
     // Queue the next pass so start() cannot recurse through that signal, and
@@ -68,4 +73,13 @@ void MotionArtwork::setRunning(bool running) {
     else if(m_movie->state()!=QMovie::NotRunning)m_movie->setPaused(!running);
   }
   if(m_player){if(running)m_player->play();else m_player->pause();}
+}
+void MotionArtwork::setMaximumSize(int size) {
+  size=qBound(64,size,4096);
+  if(m_maximumSize==size)return;
+  m_maximumSize=size;emit maximumSizeChanged();
+  if(m_movie){
+    QImageReader reader(m_movie->fileName());const auto native=reader.size();
+    if(native.isValid())m_movie->setScaledSize(bounded(native,size));
+  }
 }

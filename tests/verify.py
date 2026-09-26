@@ -107,6 +107,7 @@ if ready:
                       ("crossfade-ui","--crossfade-ui-test"),("track-details","--track-details-test"),
                       ("queue-history","--queue-history-test"),
                       ("window-wash","--window-wash-test"),
+                      ("motion-layout","--motion-layout-test"),
                       ("material-foundations","--material-foundations-test"),
                       ("material-components","--material-components-test"),
                       ("material-conformance","--material-conformance-test"),

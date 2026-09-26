@@ -2527,9 +2527,10 @@ void Backend::fetchOnlineArtwork() {
   const auto directory=audioDirectory();if(!directory || !directory->isValid())return;
   const auto root=QStandardPaths::writableLocation(QStandardPaths::CacheLocation)+"/motion-art";
   auto args=current();args["op"]="online-artwork";args["artworkCache"]=root;args["scratch"]=directory->path();args["refresh"]=m_artworkForce;args["motion"]=motionWanted;args["covers"]=coverLookupWanted();m_artworkForce=false;
+  const bool large=m_largeMotionArt;args["quality"]=large?"high":"standard";
   const auto generation=++m_onlineArtworkGeneration;
   const auto videoId=current().value("videoId").toString();
-  request("motion-artwork",args,[this,generation,root,motionWanted,videoId](const QVariantMap &data){
+  request("motion-artwork",args,[this,generation,root,motionWanted,videoId,large](const QVariantMap &data){
     if(generation!=m_onlineArtworkGeneration || !m_uiActive)return;
     if(motionWanted){m_artworkStatus="No animated cover found";emit onlineArtworkChanged();}
     if((data.value("status")=="retry" || !data.value("ok").toBool()) && m_onlineArtworkRetries++<1 && playing()){
@@ -2550,10 +2551,21 @@ void Backend::fetchOnlineArtwork() {
     if(!motionWanted || !motionLookupWanted())return;
     const QUrl url(data.value("motionArt").toString());const QFileInfo file(url.toLocalFile());
     if(!url.isLocalFile() || !file.isFile() || file.isSymLink()
-        || file.suffix()!="mp4" || file.size()<=0 || file.size()>16*1024*1024
+        || file.suffix()!="mp4" || file.size()<=0 || file.size()>(large?64:16)*1024*1024
         || file.canonicalPath()!=QFileInfo(root).canonicalFilePath())return;
     m_onlineMotionArt=url.toString();m_artworkPage=data.value("page").toString();m_artworkStatus="Online album cover";emit onlineArtworkChanged();
   },directory);
+}
+
+// The cover already showing keeps playing until the other size arrives, so
+// switching layouts never drops the picture to a still in between.
+void Backend::setLargeMotionArt(bool value) {
+  if(m_largeMotionArt==value)return;
+  m_largeMotionArt=value;emit largeMotionArtChanged();
+  if(!motionLookupWanted())return;
+  m_onlineArtworkTimer.stop();cancel("motion-artwork");++m_onlineArtworkGeneration;
+  m_onlineArtworkAttempted=false;m_onlineArtworkRetries=0;
+  updateOnlineArtwork();
 }
 
 void Backend::setSleepFade(bool enabled) {

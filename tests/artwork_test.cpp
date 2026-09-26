@@ -1,4 +1,5 @@
 #include "roundedart.h"
+#include "motionbackdrop.h"
 #include "artworkurl.h"
 #include "m3motion.h"
 #include <QBuffer>
@@ -583,6 +584,101 @@ private slots:
     QCOMPARE(archive.m_image.size(),QSize(900,900));
     QVERIFY(archive.m_image.pixelColor(10,10).red()>200&&archive.m_image.pixelColor(10,10).green()>200&&archive.m_image.pixelColor(10,10).blue()<80);
     RoundedArt::resolveVideoFrame=nullptr;
+  }
+  // The Motion backdrop draws the animation while there is one, the still
+  // otherwise, and never an empty view while the next picture is on its way.
+  void motionBackdropChoosesAndHoldsItsPicture() {
+    QTemporaryDir dir;
+    const auto save=[&](const QString &name,Qt::GlobalColor color){
+      const auto path=dir.filePath(name);QFile file(path);
+      if(file.open(QIODevice::WriteOnly))file.write(solid(64,64,color));
+      return QUrl::fromLocalFile(path);
+    };
+    const auto red=save("red.png",Qt::red),green=save("green.png",Qt::green);
+    RoundedArt still;still.setPixels(64);still.setSource(red);
+    QTRY_VERIFY(!still.picture().isNull());
+    MotionBackdrop backdrop;backdrop.setSize({400,250});
+    QSignalSpy scenes(&backdrop,&MotionBackdrop::sceneChanged);
+    backdrop.setStill(&still);
+    QVERIFY(backdrop.ready());QVERIFY(!backdrop.moving());QCOMPARE(scenes.count(),1);
+    QVERIFY(backdrop.m_previous.frame.isNull());QCOMPARE(backdrop.mix(),1.0);
+
+    MotionArtwork animation;animation.m_source=QUrl::fromLocalFile(dir.filePath("cover.mp4"));
+    QImage frame(96,96,QImage::Format_ARGB32_Premultiplied);frame.fill(Qt::blue);animation.publish(frame);
+    backdrop.setAnimation(&animation);
+    QVERIFY(backdrop.moving());QCOMPARE(scenes.count(),2);
+    // The still is kept underneath until the crossfade says it may go.
+    QVERIFY(!backdrop.m_previous.frame.isNull());QCOMPARE(backdrop.mix(),0.0);
+    backdrop.setMix(0.5);QVERIFY(!backdrop.m_previous.frame.isNull());
+    backdrop.setMix(1);QVERIFY(backdrop.m_previous.frame.isNull());
+    // Later frames of the same animation are the same scene.
+    frame.fill(Qt::cyan);animation.publish(frame);
+    QCOMPARE(scenes.count(),2);QCOMPARE(backdrop.m_current.frame.pixelColor(0,0),QColor(Qt::cyan));
+
+    backdrop.setAnimation(nullptr);
+    QVERIFY(!backdrop.moving());QCOMPARE(scenes.count(),3);backdrop.setMix(1);
+    // A new still is decoded off the GUI thread. Until it lands, the old one
+    // stays rather than the view going blank.
+    still.setSource(green);
+    QVERIFY(backdrop.ready());QVERIFY(backdrop.m_current.key.endsWith("red.png"));
+    QTRY_VERIFY(backdrop.m_current.key.endsWith("green.png"));
+    QCOMPARE(backdrop.m_current.frame.pixelColor(32,32),QColor(Qt::green));
+    // With no cover at all there is nothing to show, and the last picture
+    // fades out rather than cutting.
+    backdrop.setMix(1);still.setSource(QUrl());
+    QTRY_VERIFY(!backdrop.ready());
+    QVERIFY(!backdrop.m_previous.frame.isNull());
+    backdrop.setMix(1);QVERIFY(backdrop.m_previous.frame.isNull());
+  }
+  // The edge picture is the blur and the feather in one: opaque at the view's
+  // border, clear in its middle, and the shape of the view, not the frame.
+  void motionBackdropEdgeFeathersIntoABlur() {
+    QImage checker(512,512,QImage::Format_RGB32);
+    for(int y=0;y<512;++y)for(int x=0;x<512;++x)checker.setPixel(x,y,((x/8+y/8)%2)?qRgb(255,255,255):qRgb(0,0,0));
+    MotionArtwork animation;animation.m_source=QUrl("file:///checker.mp4");animation.publish(checker);
+    MotionBackdrop backdrop;backdrop.setSize({1280,800});backdrop.setAnimation(&animation);
+    const QImage edge=backdrop.m_current.edge;
+    QVERIFY(!edge.isNull());
+    QCOMPARE(edge.format(),QImage::Format_ARGB32_Premultiplied);
+    QCOMPARE(edge.width(),128);QCOMPARE(edge.height(),80);
+    QVERIFY(qAlpha(edge.pixel(0,0))>=250);
+    QVERIFY(qAlpha(edge.pixel(0,40))>=240);
+    QVERIFY(qAlpha(edge.pixel(64,0))>=240);
+    QCOMPARE(qAlpha(edge.pixel(64,40)),0);
+    // Halfway through the feather it is neither.
+    const int half=qAlpha(edge.pixel(6,40));
+    QVERIFY2(half>40&&half<215,qPrintable(QString::number(half)));
+    // A checkerboard blurred is grey: no black or white survives at the border.
+    const QColor border=QColor::fromRgba(edge.pixel(0,40)).toRgb();
+    QVERIFY2(border.red()>60&&border.red()<195,qPrintable(border.name()));
+    // A new size is a new crop, not the old picture stretched.
+    backdrop.setSize({600,800});
+    QCOMPARE(backdrop.m_current.edge.width(),96);QCOMPARE(backdrop.m_current.edge.height(),128);
+  }
+  // Each band's scrim is solved from the picture under it, and holds the
+  // most any frame of the scene has needed so a loop does not pump it.
+  void motionBackdropScrimFollowsThePicture() {
+    MotionArtwork animation;animation.m_source=QUrl("file:///bands.mp4");
+    QImage frame(200,200,QImage::Format_RGB32);frame.fill(Qt::black);animation.publish(frame);
+    MotionBackdrop backdrop;backdrop.setSize({400,400});
+    backdrop.setSurface(QColor(20,18,24));backdrop.setInk(QColor(202,196,208));backdrop.setContrast(4.5);
+    backdrop.setTopBand(60);backdrop.setBottomBand(120);
+    backdrop.setAnimation(&animation);
+    QCOMPARE(backdrop.bottomScrim(),0.0);QCOMPARE(backdrop.topScrim(),0.0);
+    // White only in the bottom band: the bottom scrim thickens, the top not.
+    frame.fill(Qt::black);
+    {QPainter paint(&frame);paint.fillRect(0,150,200,50,Qt::white);}
+    animation.publish(frame);animation.publish(frame.copy());
+    QVERIFY(backdrop.bottomScrim()>0.5);QCOMPARE(backdrop.topScrim(),0.0);
+    const qreal needed=backdrop.bottomScrim();
+    const auto ratio=scrimcontrast::minimumContrast({&backdrop.m_current.bottom},QColor(20,18,24),QColor(202,196,208),needed);
+    QVERIFY2(ratio>=4.5,qPrintable(QString::number(ratio)));
+    // The loop darkens again; the scrim it needed stays.
+    frame.fill(Qt::black);animation.publish(frame);animation.publish(frame.copy());
+    QCOMPARE(backdrop.bottomScrim(),needed);
+    // New inputs start the worst case again from what is on screen.
+    backdrop.setContrast(3);
+    QCOMPARE(backdrop.bottomScrim(),0.0);
   }
 };
 QTEST_MAIN(ArtworkTest)

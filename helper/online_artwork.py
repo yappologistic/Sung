@@ -15,7 +15,17 @@ from urllib.parse import urlencode, urljoin, urlsplit
 from urllib.request import Request, HTTPRedirectHandler, build_opener
 
 MEDIA_LIMIT = 16 * 1024 * 1024
-CACHE_LIMIT = 64 * 1024 * 1024
+# Room for a few large covers beside the standard ones; the newest stay.
+CACHE_LIMIT = 256 * 1024 * 1024
+# Two sizes of animated cover. The standard one is what every surface shares,
+# small enough that the one decoder costs little beside a 360px still. The
+# large one is for the Motion layout, where the cover fills the window, and is
+# asked for only while that layout shows. It takes the largest square Apple
+# offers up to 2048, which a 1080p or 1440p window crops rather than enlarges.
+QUALITIES = {
+    'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes'),
+    'high': dict(suffix='-hq', largest=2048, target=2048, bandwidth=20000000, limit=64 * 1024 * 1024, bytes='hqBytes'),
+}
 HOSTS = {'itunes.apple.com', 'music.apple.com', 'mvod.itunes.apple.com'}
 # A cover on Apple's image service in the shape its search API returns it. The
 # player rewrites the size segment for whatever surface draws it.
@@ -275,7 +285,8 @@ def attributes(line):
     return dict((k, v.strip('"')) for k, v in re.findall(r'([A-Z-]+)=("[^"]*"|[^,]*)', line.partition(':')[2]))
 
 
-def variant_url(raw, base):
+def variant_url(raw, base, quality='standard'):
+    q = QUALITIES[quality]
     lines = raw.decode().splitlines()
     choices = []
     for i, line in enumerate(lines[:-1]):
@@ -283,13 +294,12 @@ def variant_url(raw, base):
             continue
         a = attributes(line)
         width, height = map(int, a.get('RESOLUTION', '0x0').split('x'))
-        if (not 128 <= width == height <= 800 or not a.get('CODECS', '').startswith('avc1')
+        if (not 128 <= width == height <= q['largest'] or not a.get('CODECS', '').startswith('avc1')
                 or a.get('VIDEO-RANGE', 'SDR') != 'SDR' or float(a.get('FRAME-RATE', '30')) > 30
-                or int(a.get('BANDWIDTH', '0')) > 3000000 or lines[i+1].startswith('#')):
+                or int(a.get('BANDWIDTH', '0')) > q['bandwidth'] or lines[i+1].startswith('#')):
             continue
         choices.append((width, safe_url(urljoin(base, lines[i+1].strip()))))
-    # Prefer a modest size for the shared decoder, retaining detail in immersive view.
-    return min(choices, key=lambda x: abs(x[0]-512))[1] if choices else ''
+    return min(choices, key=lambda x: abs(x[0]-q['target']))[1] if choices else ''
 
 
 def movie_url(raw, base):
@@ -314,7 +324,7 @@ def movie_url(raw, base):
     return url
 
 
-def validate_movie(path):
+def validate_movie(path, quality='standard'):
     with path.open('rb') as source:
         if source.read(12)[4:8] != b'ftyp':
             raise ValueError('Not an MP4 cover')
@@ -324,15 +334,15 @@ def validate_movie(path):
     info = json.loads(result.stdout)
     streams = info.get('streams', [])
     if (len(streams) != 1 or streams[0].get('codec_type') != 'video' or streams[0].get('codec_name') != 'h264'
-            or not 128 <= streams[0].get('width', 0) == streams[0].get('height', 0) <= 800
+            or not 128 <= streams[0].get('width', 0) == streams[0].get('height', 0) <= QUALITIES[quality]['largest']
             or not 0 < float(Fraction(streams[0].get('r_frame_rate', '0'))) <= 30
             or not 0 < float(info.get('format', {}).get('duration', 0)) <= 60):
         raise ValueError('Unsupported cover video')
 
 
-def cached_movie(path, expected_size=None):
+def cached_movie(path, expected_size=None, limit=MEDIA_LIMIT):
     try:
-        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= MEDIA_LIMIT:
+        if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= limit:
             return False
         if expected_size is not None and path.stat().st_size != expected_size:
             return False
@@ -365,19 +375,22 @@ def lookup(req):
     scratch.mkdir(parents=True, exist_ok=True, mode=0o700)
     motion = bool(req.get('motion', True))
     covers = bool(req.get('covers', True))
+    quality = req.get('quality') if req.get('quality') in QUALITIES else 'standard'
+    q = QUALITIES[quality]
+    earlier = {}
     key = hashlib.sha256(json.dumps([4]+[req.get(k, '') for k in ('title', 'artist', 'album', 'seconds')]).encode()).hexdigest()
     record = cache / (key + '.json')
     now = time.time()
     try:
-        saved = json.loads(record.read_text())
+        saved = earlier = json.loads(record.read_text())
         if saved['expires'] > now and (not req.get('refresh') or saved.get('status') == 'retry'):
             if saved.get('status') == 'retry':
                 return {'status': 'retry', 'retryAfter': max(1, math.ceil(saved['expires']-now))}
             still = {'art': saved.get('art', ''), 'page': saved.get('page', '')}
             album_id = str(saved.get('albumId', ''))
-            path = cache / (album_id + '.mp4')
+            path = cache / (album_id + q['suffix'] + '.mp4')
             if album_id.isdigit():
-                if cached_movie(path, saved.get('bytes')):
+                if cached_movie(path, saved.get(q['bytes']), q['limit']):
                     path.touch()
                     return {'status': 'ready', 'motionArt': path.resolve().as_uri(), **still}
                 if path.is_file() and not path.is_symlink():
@@ -414,24 +427,24 @@ def lookup(req):
         for candidate in (matches if motion else []):
             album_id = str(candidate['collectionId'])
             page = 'https://music.apple.com/us/album/' + album_id
-            path = cache / (album_id + '.mp4')
+            path = cache / (album_id + q['suffix'] + '.mp4')
             try:
-                if cached_movie(path):
+                if cached_movie(path, limit=q['limit']):
                     try:
-                        validate_movie(path)
+                        validate_movie(path, quality)
                     except (ValueError, ZeroDivisionError, subprocess.SubprocessError):
                         path.unlink()
-                if not cached_movie(path):
+                if not cached_movie(path, limit=q['limit']):
                     master = album_motion(fetch(page), candidate)
                     if not master:
                         continue
-                    variant = variant_url(fetch(master, 262144), master)
+                    variant = variant_url(fetch(master, 262144), master, quality)
                     if not variant:
                         continue
                     url = movie_url(fetch(variant, 262144), variant)
                     temp = scratch / 'cover.mp4'
-                    temp.write_bytes(fetch(url, MEDIA_LIMIT))
-                    validate_movie(temp)
+                    temp.write_bytes(fetch(url, q['limit']))
+                    validate_movie(temp, quality)
                     # A complete silent MP4 needs no transcoding or second decoder.
                     os.replace(temp, path)
             except HTTPError as error:
@@ -442,7 +455,10 @@ def lookup(req):
                 continue
             path.touch()
             result.update(status='ready', motionArt=path.resolve().as_uri(), page=page, art=still_art(candidate) or result['art'])
-            saved.update(albumId=album_id, bytes=path.stat().st_size, expires=now + 7 * 86400)
+            # The other size of the same album stays valid beside this one.
+            if earlier.get('albumId') == album_id:
+                saved.update({k: earlier[k] for k in ('bytes', 'hqBytes') if k in earlier})
+            saved.update({'albumId': album_id, q['bytes']: path.stat().st_size, 'expires': now + 7 * 86400})
             break
         saved.update(art=result['art'], page=result['page'])
     except (OSError, ValueError, KeyError, TypeError, AttributeError, ZeroDivisionError, subprocess.SubprocessError) as error:

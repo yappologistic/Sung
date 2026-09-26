@@ -16,13 +16,19 @@ Item {
     readonly property bool hasTimedLyrics: app.lyricLines.length>0
     // The visualizer needs nothing from the song but its sound, so it is
     // always available.
-    readonly property string effectiveLayout: preferredLayout==="visualizer" ? "visualizer"
+    // Motion needs nothing from the song either: without an animated cover
+    // it shows the still one the same way.
+    readonly property string effectiveLayout: preferredLayout==="visualizer" || preferredLayout==="motion" ? preferredLayout
         : preferredLayout==="singalong" ? (hasTimedLyrics?"singalong":"artwork")
         : hasLyrics && ["split","lyrics"].indexOf(preferredLayout)>=0 ? preferredLayout : "artwork"
     // The artwork and the visualizer both give the cover the screen; the
     // visualizer cuts it to a shape and rings it with the sound.
     readonly property bool coverAlone: displayedLayout==="artwork" || displayedLayout==="visualizer"
     readonly property bool visualizing: displayedLayout==="visualizer"
+    // The cover is the backdrop itself (MotionScene.qml), so the column that
+    // holds it keeps only the details, low and to the left, out of the
+    // picture's way.
+    readonly property bool motionLayout: displayedLayout==="motion"
     // The ring's share of the square the cover would otherwise fill. A third
     // of the diameter leaves the bars a sixth of it on each side, long enough
     // to read a kick from across the room and short enough that the cover is
@@ -77,9 +83,13 @@ Item {
     property bool autoHideControls: false
     property bool controlsShown: true
     readonly property bool keyboardFocus: hasKeyboardFocus(player.Window.window ? player.Window.window.activeFocusItem : null)
-    readonly property bool hideBlocked: !autoHideControls || !player.Window.window || !player.Window.window.active || !app.playing || app.buffering || externalModalOpen || popupVisible || immersiveLyrics.searchOpen || keyboardFocus
+    // Motion always hides its controls when idle: the picture is the point
+    // of the layout, and the controls would otherwise cover it for good.
+    readonly property bool hideBlocked: !(autoHideControls || motionLayout) || !player.Window.window || !player.Window.window.active || !app.playing || app.buffering || externalModalOpen || popupVisible || immersiveLyrics.searchOpen || keyboardFocus
     property bool coverHidden: false
-    property real detailsOpacity: coverHidden ? 0 : 1
+    // In Motion the details are what covers the picture, so they leave with
+    // the controls.
+    property real detailsOpacity: coverHidden || (motionLayout && !controlsShown) ? 0 : 1
     readonly property var artistTarget: app.relatedCollection(app.current,"artist")
     readonly property var albumTarget: app.relatedCollection(app.current,"album")
     // How wide the column holding the cover and its details is. Material has
@@ -91,7 +101,7 @@ Item {
     // constant guessing at it.
     // The metadata column needs room for ordinary words even when the split
     // view is narrow. The floor is a layout allowance, not an artwork size.
-    readonly property real coverColumnWidth: Math.max(200,width*(coverAlone?0.55:0.34))
+    readonly property real coverColumnWidth: Math.max(200,width*(coverAlone?0.55:motionLayout?0.5:0.34))
     // Material has no now-playing text measure token. 520px caps the title's
     // two lines; the column sets the floor when it is narrower.
     readonly property real detailsMeasure: Math.min(520,coverColumn.width)
@@ -104,7 +114,7 @@ Item {
     // the middle of a column wider than itself. Left-aligned details start
     // where the cover starts, not at the column's edge, or a small cover
     // leaves them hanging off to its left.
-    readonly property real coverInset: detailsCentred ? 0 : Math.max(0,(coverSlot.width-immersiveArt.width)/2)
+    readonly property real coverInset: detailsCentred || motionLayout ? 0 : Math.max(0,(coverSlot.width-immersiveArt.width)/2)
     readonly property real detailsWidth: detailsCentred ? detailsMeasure : Math.min(520,coverColumn.width-coverInset)
     readonly property int detailsAlignment: detailsCentred ? Qt.AlignHCenter : Qt.AlignLeft
     // The page margin (16dp compact, 24dp beyond) between the cover and the
@@ -141,7 +151,7 @@ Item {
         -topControls.implicitHeight-transport.implicitHeight-seekRow.implicitHeight
         -coverflowReserve-4*shell.spacing-title.implicitHeight-(detailsCentred?coverGap:0)-2*48
     readonly property bool coverflowVisible: coverflow && app.queue.count>0 &&
-        (displayedLayout==="lyrics" || displayedLayout==="singalong" ||
+        (displayedLayout==="lyrics" || displayedLayout==="singalong" || motionLayout ||
          coverflowCoverBudget/(visualizing?visualizerScale:1)>=160)
     function hasKeyboardFocus(item) {
         for(let p=item;p && p!==player;p=p.parent)
@@ -150,7 +160,7 @@ Item {
     }
     function wake() { controlsShown=true;idle.restart(); }
     function showLyricsSearch() {
-        if(["artwork","singalong","visualizer"].indexOf(preferredLayout)>=0)layoutRequested("lyrics");
+        if(["artwork","singalong","visualizer","motion"].indexOf(preferredLayout)>=0)layoutRequested("lyrics");
         immersiveLyrics.openSearch();wake();
     }
     // A layout fade can reveal Lyrics after openSearch's first focus request.
@@ -184,7 +194,14 @@ Item {
     }
     Behavior on detailsOpacity { NumberAnimation { objectName: "immersiveDetailFadeMotion"; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
     NumberAnimation on opacity { from: 0; to: 1; duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve }
-    AmbientBackdrop { anchors.fill: parent; url: app.current.art || "" }
+    AmbientBackdrop { anchors.fill: parent; url: app.current.art || ""; allowed: !player.motionLayout }
+    MotionScene {
+        anchors.fill: parent
+        shown: player.motionLayout
+        controlsShown: player.controlsShown
+        topBand: shell.y+topControls.y+topControls.height
+        bottomBand: Math.max(0,player.height-(shell.y+body.y+coverColumn.y+title.y))
+    }
     ColumnLayout {
         id: shell
         // Material's page margins for the window size class, the same ones the
@@ -237,7 +254,7 @@ Item {
                         width: immersiveArt.width+2*Math.floor((Math.min(parent.width,parent.height)-immersiveArt.width)/2); height: width
                         sourceComponent: SpectrumRing { shape: immersiveArt.shape; toShape: immersiveArt.toShape; morph: immersiveArt.morph; coverSize: immersiveArt.width; running: app.playing }
                     }
-                    Artwork { id: immersiveArt; objectName: "immersiveArtwork"; anchors.centerIn: parent
+                    Artwork { id: immersiveArt; objectName: "immersiveArtwork"; anchors.centerIn: parent; visible: !player.motionLayout
                         // In the visualizer the cover is a whole number of
                         // pixels: centring a fractional cover rounds its
                         // position, and the ring centred on it then hung up to
@@ -312,7 +329,7 @@ Item {
                         width: player.detailsCentred ? Math.min(parent.width+24,implicitContentWidth+24) : parent.width+24
                         height: parent.height
                         leftPadding: 12; rightPadding: 12; topPadding: 16; bottomPadding: 0
-                        enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
+                        enabled:!!player.artistTarget.kind && presentation.shown.id===app.current.id && player.detailsOpacity>0;Accessible.ignored:player.detailsOpacity===0;focusPolicy:Qt.StrongFocus
                         Accessible.name: "Open artist \u00b7 "+(app.current.artist || "")
                         onClicked: player.collectionRequested(player.artistTarget)
                         contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
@@ -337,7 +354,7 @@ Item {
                         width: player.detailsCentred ? Math.min(parent.width+24,implicitContentWidth+24) : parent.width+24
                         height: parent.height
                         leftPadding: 12; rightPadding: 12; topPadding: 0; bottomPadding: 16
-                        enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id;focusPolicy:Qt.StrongFocus
+                        enabled:!!player.albumTarget.kind && presentation.shown.id===app.current.id && player.detailsOpacity>0;Accessible.ignored:player.detailsOpacity===0;focusPolicy:Qt.StrongFocus
                         Accessible.name: "Open album \u00b7 "+(app.current.album || "")
                         onClicked: player.collectionRequested(player.albumTarget)
                         contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
@@ -352,7 +369,8 @@ Item {
             Item { Layout.fillWidth: true; visible: player.displayedLayout==="lyrics" && body.lyricMeasureFits }
             // Beside the cover, the line being sung sits level with the
             // cover's middle, where the eye already is.
-            LyricsView { id: immersiveLyrics; expanded: true; visible:!player.coverAlone && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics" || !body.lyricMeasureFits; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
+            Item { Layout.fillWidth: true; visible: player.motionLayout }
+            LyricsView { id: immersiveLyrics; expanded: true; visible:!player.coverAlone && !player.motionLayout && player.displayedLayout!=="singalong"; Layout.fillWidth: player.displayedLayout!=="lyrics" || !body.lyricMeasureFits; Layout.minimumWidth: 0; Layout.fillHeight: true; Layout.minimumHeight: 0
                 readingY: player.displayedLayout==="split" ? coverColumn.y+coverSlot.y+immersiveArt.y+immersiveArt.height/2-y : -1
                 Layout.preferredWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : -1
                 Layout.maximumWidth: player.displayedLayout==="lyrics" ? (body.lyricMeasureFits ? player.lyricMeasure : shell.width) : Infinity
@@ -468,7 +486,7 @@ Item {
         id:layoutMenu;objectName:"immersiveLayoutMenu"
         onClosed:{layoutButton.forceActiveFocus(Qt.PopupFocusReason);player.wake();}
         Repeater {
-            model:[{key:"artwork",label:"Artwork"},{key:"lyrics",label:"Lyrics"},{key:"split",label:"Split"},{key:"singalong",label:"Sing along"},{key:"visualizer",label:"Visualizer"}]
+            model:[{key:"artwork",label:"Artwork"},{key:"lyrics",label:"Lyrics"},{key:"split",label:"Split"},{key:"singalong",label:"Sing along"},{key:"visualizer",label:"Visualizer"},{key:"motion",label:"Motion"}]
             MMenuItem {required property var modelData;objectName:"immersiveLayout_"+modelData.key;text:modelData.label;checkable:true
                 // Offered only where the song can actually drive it.
                 enabled:modelData.key!=="singalong" || player.hasTimedLyrics
@@ -484,6 +502,7 @@ Item {
         MMenuItem {objectName:"immersiveTiming";symbol:"settings";text:"Lyric timing";enabled:app.lyricLines.length>0;onTriggered:player.timingRequested()}
         MDivider {}
         MMenuItem {objectName:"immersiveCoverflowToggle";text:"Up next covers";checkable:true;checked:player.coverflow;onTriggered:player.coverflowRequested(!player.coverflow)}
-        MMenuItem {objectName:"immersiveAutoHide";text:"Auto-hide controls";checkable:true;checked:player.autoHideControls;onTriggered:player.autoHideRequested(!player.autoHideControls)}
+        // Motion hides them regardless, so the entry reads on and waits.
+        MMenuItem {objectName:"immersiveAutoHide";text:"Auto-hide controls";checkable:true;checked:player.autoHideControls || player.motionLayout;enabled:!player.motionLayout;onTriggered:player.autoHideRequested(!player.autoHideControls)}
     }
 }

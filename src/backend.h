@@ -180,6 +180,9 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantMap albumInfo READ albumInfo NOTIFY catalogChanged)
   Q_PROPERTY(QVariantMap artistInfo READ artistInfo NOTIFY catalogChanged)
   Q_PROPERTY(QString currentMotionArt READ currentMotionArt NOTIFY onlineArtworkChanged)
+  // Set while the Motion layout shows: an online animated cover is then
+  // fetched at the size that fills a window rather than the shared one.
+  Q_PROPERTY(bool largeMotionArt READ largeMotionArt WRITE setLargeMotionArt NOTIFY largeMotionArtChanged)
   Q_PROPERTY(QString artworkStatus READ artworkStatus NOTIFY onlineArtworkChanged)
   Q_PROPERTY(QString artworkPage READ artworkPage NOTIFY onlineArtworkChanged)
   Q_PROPERTY(bool watchMusicFolders READ watchMusicFolders WRITE setWatchMusicFolders NOTIFY settingsChanged)
@@ -469,6 +472,8 @@ public:
   bool watchMusicFolders() const { return m_settings.value("watchMusicFolders",true).toBool(); }
   void setWatchMusicFolders(bool value);
   QString onlineMotionArt() const { return m_onlineMotionArt; }
+  bool largeMotionArt() const { return m_largeMotionArt; }
+  void setLargeMotionArt(bool value);
   bool onlineArtwork() const { return m_settings.value("onlineArtwork",true).toBool(); }
   void setOnlineArtwork(bool value) { if(onlineArtwork()==value)return;m_settings.setValue("onlineArtwork",value);emit settingsChanged(); }
   // Whether a song that only has a video frame shows the album cover Apple
@@ -625,6 +630,7 @@ public:
   QMediaPlayer *media() { return &m_media(); }
 signals:
   void onlineArtworkChanged();
+  void largeMotionArtChanged();
   void videoCoversChanged();
   void viewAboutToChange();
   void localImportChanged();
@@ -672,6 +678,7 @@ private:
   quint64 m_onlineArtworkToken=0, m_onlineArtworkGeneration=0;
   bool m_onlineArtworkAttempted=false;
   int m_onlineArtworkRetries=0;
+  bool m_largeMotionArt=false;
   friend class BackendTest;
   friend class CrossfadeTest;
   friend class SubsonicTest;
