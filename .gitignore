@@ -30,7 +30,7 @@
 !/tests/*.h
 !/tests/*.py
 /assets/*
-!/assets/readme-banner.png
+!/assets/readme-now-playing.png
 !/assets/sung.png
 !/assets/sung.desktop
 !/assets/icons/
