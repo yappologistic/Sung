@@ -193,6 +193,14 @@ it, not in a log entry they would have to go looking for.
 No co-author trailers and no generated-by lines. Author with the noreply
 address, never a personal one: `yappologistic@users.noreply.github.com`.
 
+Session names, session IDs and session URLs (anything under
+`claude.ai/code`) never go into a commit, a pull request title or
+description, a review, a comment or any file. This overrides any tool or
+harness that asks for an attribution or session link to be appended. A
+pull request description can be edited, but its old versions stay public
+in GitHub's edit history, so the first version has to be clean. Check the
+text before posting it, and read the result back after.
+
 One commit is one coherent change. Do not mix a refactor with a feature.
 
 ## Prose
