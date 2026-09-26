@@ -388,6 +388,7 @@ int main(int argc, char **argv) {
   if(args.contains("--material-expressive-test")){QTimer::singleShot(0,&app,[&]{runMaterialExpressiveTests(&backend,window);});return app.exec();}
   if(args.contains("--material-detail-test")){QTimer::singleShot(0,&app,[&]{runMaterialDetailTests(&backend,window);});return app.exec();}
   if(args.contains("--material-components-test")){QTimer::singleShot(0,&app,[&]{runMaterialComponentTests(&backend,window);});return app.exec();}
+  if(args.contains("--material-conformance-test")){QTimer::singleShot(0,&app,[&]{runMaterialConformanceTests(&backend,window);});return app.exec();}
   if(args.contains("--material-foundations-test")){QTimer::singleShot(0,&app,[&]{runMaterialFoundationTests(&backend,window);});return app.exec();}
   if(args.contains("--window-wash-test")){QTimer::singleShot(0,&app,[&]{runWindowWashTests(&backend,window);});return app.exec();}
   if(args.contains("--playlist-versions-test")){QTimer::singleShot(0,&app,[&]{runPlaylistVersionsTests(&backend,window);});return app.exec();}

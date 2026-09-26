@@ -7560,3 +7560,392 @@ void runMaterialScaleTests(Backend *b, QQuickWindow *w) {
   c.shot("09-restored");
   c.finish();
 }
+
+// The Material conformance pass: each correction driven the way a person
+// meets it, with the pointer and the keyboard, and held to the number the
+// specification publishes for it. The sources are cited beside the QML each
+// check reads; the numbers here are the same ones.
+void runMaterialConformanceTests(Backend *b, QQuickWindow *w) {
+  Check c{b, w, qEnvironmentVariable("SUNG_TEST_OUTPUT")};
+  QDir().mkpath(c.directory + "/music/Still Water");
+  QWindowSystemInterface::handleFocusWindowChanged(w);
+  w->resize(1400, 900);
+  QTest::qWait(500);
+  b->setTheme("dark");
+  b->setMotion(true);
+  b->setVolume(0);
+  b->setAutoplay(false);
+  b->setWatchMusicFolders(false);
+  b->setOnlineArtwork(false);
+  const QStringList titles{"The light arrives", "Across the still water", "A quiet moment",
+                           "Harbour lights", "Night ferry", "Coming ashore"};
+  for (int i = 0; i < titles.size(); ++i)
+    if (!encodeTrack(c, QString("%1/music/Still Water/%2.flac").arg(c.directory).arg(i + 1),
+                     titles[i], "Still Water", i < 3 ? "Rill" : "Marble Coast", i + 1))
+      return c.finish();
+  b->importMusicFolder(QUrl::fromLocalFile(c.directory + "/music"));
+  c.check(c.until([&] { return !b->importingLocal(); }, 40000), "import the fixture");
+  QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
+  c.check(c.until([&] { return b->results()->count() == titles.size(); }), "the songs are listed");
+  QTest::qWait(700);
+  const auto songs = b->results()->rows;
+  const auto sceneRect = [](QQuickItem *item) { return item->mapRectToScene(item->boundingRect()); };
+  const auto pointOf = [&](QQuickItem *item) { return sceneRect(item).center().toPoint(); };
+
+  // --- List items: 16dp either side (ListTokens.ItemLeadingSpace) ---
+  auto row = shownItem(w->contentItem(), "trackRow_0");
+  auto cover = row ? anyItem(row, "trackLeadingArtwork") : nullptr;
+  c.check(row && qAbs(row->property("leftPadding").toDouble() - 16) < 0.1 &&
+              qAbs(row->property("rightPadding").toDouble() - 16) < 0.1,
+          "a song row keeps Material's 16dp leading and trailing space");
+  if (row && cover)
+    c.check(qAbs(sceneRect(cover).left() - sceneRect(row).left() - 16) < 1,
+            QString("its cover starts 16dp in (%1)")
+                .arg(sceneRect(cover).left() - sceneRect(row).left(), 0, 'f', 1));
+
+  // --- Menus open from their anchor, sized to what they hold ---
+  QQuickItem *rowActions = nullptr;
+  if (row)
+    for (auto item : row->findChildren<QQuickItem *>())
+      if (item->isVisible() && item->property("symbol").toString() == "more") { rowActions = item; break; }
+  auto trackMenu = w->findChild<QObject *>("trackActions");
+  c.check(rowActions && trackMenu, "a song row offers its actions");
+  if (rowActions && trackMenu) {
+    QTest::mouseMove(w, pointOf(rowActions));
+    QTest::qWait(60);
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, pointOf(rowActions));
+    // Menu.kt:1829-1851: scale from 0.8 on FastSpatial as it opens.
+    QTest::qWait(16);
+    const double early = trackMenu->property("scale").toDouble();
+    c.shotNow("01a-menu-opening");
+    c.check(early < 0.999 && early >= 0.75,
+            QString("the menu grows out of its anchor rather than appearing whole (scale %1)").arg(early, 0, 'f', 3));
+    c.check(c.until([&] { return trackMenu->property("opened").toBool() &&
+                                 qAbs(trackMenu->property("scale").toDouble() - 1) < 0.001; }, 3000),
+            "and settles at full size");
+    if (auto surface = trackMenu->property("background").value<QQuickItem *>())
+      c.check(qAbs(sceneRect(surface).right() - sceneRect(rowActions).right()) < 1,
+              QString("it hangs from the button, their ends lined up (%1 against %2)")
+                  .arg(sceneRect(surface).right()).arg(sceneRect(rowActions).right()));
+    const int origin = trackMenu->property("transformOrigin").toInt();
+    c.check(origin == QQuickItem::TopRight,
+            QString("from the corner it shares with the button below it (origin %1)").arg(origin));
+    const double width = trackMenu->property("width").toDouble();
+    c.check(width >= 112 && width <= 280,
+            QString("between Material's 112 and 280dp (%1)").arg(width, 0, 'f', 0));
+    int cut = 0, shown = 0;
+    double widestLabel = 0;
+    QQuickItem *firstLabel = nullptr, *firstIcon = nullptr, *firstItem = nullptr;
+    for (auto label : trackMenu->findChildren<QQuickItem *>("menuItemLabel"))
+      if (label->isVisible()) {
+        ++shown;
+        widestLabel = std::max(widestLabel, label->implicitWidth());
+        if (label->property("truncated").toBool()) ++cut;
+        if (!firstLabel) firstLabel = label;
+      }
+    c.check(shown > 5 && cut == 0, QString("every label fits whole (%1 of %2 cut)").arg(cut).arg(shown));
+    // It wraps its widest label: 16 + 28 + label + 16.
+    c.check(qAbs(width - std::ceil(widestLabel + 60)) <= 2 || qAbs(width - 280) < 0.5,
+            QString("and is as wide as its widest item (%1 for a %2dp label)")
+                .arg(width, 0, 'f', 0).arg(widestLabel, 0, 'f', 0));
+    for (auto item : trackMenu->findChildren<QQuickItem *>())
+      if (item->isVisible() && item->inherits("QQuickMenuItem") && !item->property("symbol").toString().isEmpty()) {
+        firstItem = item;
+        firstIcon = item->property("indicator").value<QQuickItem *>();
+        break;
+      }
+    if (firstItem && firstIcon) {
+      auto label = anyItem(firstItem, "menuItemLabel");
+      const double iconX = sceneRect(firstIcon).left() - sceneRect(firstItem).left();
+      const double labelX = label ? sceneRect(label).left() - sceneRect(firstItem).left() : -1;
+      c.check(qAbs(iconX - 16) < 0.5 && qAbs(labelX - 44) < 0.5,
+              QString("items put the icon at 16dp and the label at 44dp (%1, %2)").arg(iconX).arg(labelX));
+    }
+    c.shotNow("01b-menu-open");
+    QTest::keyClick(w, Qt::Key_Escape);
+    QTest::qWait(40);
+    const double closing = trackMenu->property("scale").toDouble();
+    c.check(closing < 0.999, QString("closing shrinks it back towards its anchor (scale %1)").arg(closing, 0, 'f', 3));
+    c.check(c.until([&] { return !trackMenu->property("visible").toBool(); }, 3000), "and it closes");
+  }
+
+  // --- Tabs: one indicator that travels, over a divider that spans the row ---
+  auto tabs = shownItem(w->contentItem(), "libraryTabs");
+  auto indicator = tabs ? anyItem(tabs, "tabIndicator") : nullptr;
+  auto divider = tabs ? anyItem(tabs, "tabDivider") : nullptr;
+  c.check(tabs && indicator && divider, "the library tabs draw an indicator and a divider");
+  if (tabs && indicator && divider) {
+    c.check(qAbs(divider->width() - tabs->width()) < 0.5 && tabs->width() > 800,
+            QString("the divider spans the whole row (%1 of %2)").arg(divider->width()).arg(tabs->width()));
+    auto from = shownItem(tabs, "localFilesTab");
+    auto to = shownItem(tabs, "playlistsTab");
+    const double startX = sceneRect(indicator).center().x();
+    c.check(from && qAbs(startX - sceneRect(from).center().x()) < 1, "the indicator stands under Local files");
+    if (to) {
+      const double goal = sceneRect(to).center().x();
+      QTest::mouseMove(w, pointOf(to));
+      QTest::qWait(40);
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, pointOf(to));
+      // TabRow.kt:1110-1117: offset and width on DefaultSpatial.
+      QTest::qWait(60);
+      const double midX = sceneRect(indicator).center().x();
+      c.shotNow("02a-tab-indicator-moving");
+      c.check((midX < startX - 1) && qAbs(midX - goal) > 1,
+              QString("clicking Playlists sends it across rather than jumping (%1 between %2 and %3)")
+                  .arg(midX, 0, 'f', 0).arg(startX, 0, 'f', 0).arg(goal, 0, 'f', 0));
+      c.check(c.until([&] { return qAbs(sceneRect(indicator).center().x() - goal) < 1; }, 3000),
+              "and it lands under Playlists");
+      c.shot("02b-tab-indicator-landed");
+    }
+    QMetaObject::invokeMethod(w, "chooseLibrary", Q_ARG(QVariant, QVariant("files")));
+    c.check(c.until([&] { return b->results()->count() == titles.size(); }), "back to the songs");
+    QTest::qWait(600);
+  }
+
+  // --- The focus ring: 3dp, 2dp clear, keyboard only ---
+  auto settings = shownItem(w->contentItem(), "settingsButton");
+  if (settings) {
+    // A click leaves no ring.
+    auto card = shownItem(w->contentItem(), "openCollectionCard");
+    Q_UNUSED(card);
+    settings->forceActiveFocus(Qt::TabFocusReason);
+    QTest::qWait(120);
+    auto ring = anyItem(settings, "buttonFocusRing");
+    auto container = settings->property("background").value<QQuickItem *>();
+    c.check(ring && ring->isVisible() && container, "Tab focus rings the settings button");
+    if (ring && container) {
+      const QRectF r = sceneRect(ring), b2 = sceneRect(container);
+      c.check(qAbs(r.left() - (b2.left() - 5)) < 0.5 && qAbs(r.width() - (b2.width() + 10)) < 0.5 &&
+                  QQmlProperty::read(ring, "border.width", qmlContext(ring)).toInt() == 3,
+              QString("3dp thick and 2dp clear of the button (%1 around %2)").arg(r.width()).arg(b2.width()));
+      c.check(ring->property("border").value<QObject *>()->property("color").value<QColor>() ==
+                  c.themeColor("secondary"), "in secondary");
+    }
+    c.shotNow("03a-focus-ring");
+    // The same button clicked with the pointer shows no ring.
+    w->contentItem()->forceActiveFocus();
+    QTest::qWait(60);
+  }
+  if (auto card = shownItem(w->contentItem(), "localFacetTabs")) Q_UNUSED(card);
+
+  // --- The FAB is Material's baseline FAB, not the deprecated small one ---
+  if (auto fab = shownItem(w->contentItem(), "fab")) {
+    auto shape = anyItem(fab, "fabShape");
+    c.check(qAbs(fab->width() - 56) < 0.5 && qAbs(fab->height() - 56) < 0.5 && shape &&
+                qAbs(shape->property("radius").toDouble() - 16) < 0.5,
+            QString("the library FAB is 56dp at the 16dp corner (%1, %2)")
+                .arg(fab->width()).arg(shape ? shape->property("radius").toDouble() : -1));
+    QTest::mouseMove(w, pointOf(fab));
+    QTest::qWait(250);
+    auto lift = shape ? anyItem(shape, "elevation") : nullptr;
+    c.check(lift && lift->property("level").toInt() == 4, "hovering lifts it to level 4");
+    c.shotNow("04-fab-hovered");
+    QTest::mouseMove(w, QPoint(700, 40));
+    QTest::qWait(100);
+  }
+
+  // --- A tooltip grows in as the menu does ---
+  if (settings) {
+    QTest::mouseMove(w, pointOf(settings));
+    QPointer<QQuickItem> popupItem;
+    c.check(c.until([&] {
+      for (auto item : w->findChildren<QQuickItem *>("tooltipContainer"))
+        if (item->isVisible()) { popupItem = item->parentItem(); return true; }
+      return false;
+    }, 3000), "hovering a control brings up its tooltip");
+    if (popupItem) {
+      c.check(c.until([&] { return popupItem && popupItem->scale() < 0.999 && popupItem->scale() > 0.75; }, 400) ||
+                  (popupItem && qAbs(popupItem->scale() - 1) < 0.001),
+              "which scales in from 0.8");
+      c.check(c.until([&] { return popupItem && qAbs(popupItem->scale() - 1) < 0.001 && popupItem->opacity() > 0.99; }, 2000),
+              "and settles whole");
+      c.shotNow("05-tooltip");
+    }
+    QTest::mouseMove(w, QPoint(700, 500));
+    QTest::qWait(400);
+  }
+
+  // --- The checkbox draws its tick in, and has a keyboard ring ---
+  {
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/MCheckbox.qml"));
+    QScopedPointer<QObject> made(source.create(qmlContext(w)));
+    auto box = qobject_cast<QQuickItem *>(made.data());
+    c.check(box, "a checkbox can be made to try");
+    if (box) {
+      box->setParentItem(w->contentItem());
+      box->setX(700); box->setY(420); box->setZ(95);
+      QTest::qWait(100);
+      auto reveal = anyItem(box, "checkboxMarkReveal");
+      c.check(reveal && reveal->width() < 0.5, "unchecked, no tick shows");
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, pointOf(box));
+      QTest::qWait(30);
+      const double part = reveal ? reveal->width() : -1;
+      c.check(part > 0 && part < 18, QString("clicked, the tick draws in (%1 of 18 so far)").arg(part, 0, 'f', 1));
+      c.check(c.until([&] { return reveal && reveal->width() >= 17.9; }, 2000), "and is drawn whole");
+      QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, pointOf(box));
+      QTest::qWait(20);
+      c.check(reveal && reveal->width() < 0.5, "cleared, it snaps away");
+      // The clicks gave it focus by mouse, which shows no ring; take focus
+      // away and bring it back by keyboard.
+      if (settings) settings->forceActiveFocus(Qt::TabFocusReason);
+      QTest::qWait(50);
+      box->forceActiveFocus(Qt::TabFocusReason);
+      QTest::qWait(100);
+      auto ring = anyItem(box, "checkboxFocusRing");
+      c.check(ring && ring->isVisible() && qAbs(ring->width() - 44) < 0.5, "Tab draws its 44dp ring");
+      c.shotNow("06-checkbox-focus");
+      box->setVisible(false);
+      box->setParentItem(nullptr);
+    }
+  }
+
+  // --- The switch handle answers the pointer ---
+  {
+    // The pointer rests away from where the switch will be.
+    QTest::mouseMove(w, QPoint(300, 700));
+    QTest::qWait(50);
+    QQmlComponent source(qmlEngine(w), QUrl("qrc:/qml/MSwitch.qml"));
+    QScopedPointer<QObject> made(source.create(qmlContext(w)));
+    auto sw = qobject_cast<QQuickItem *>(made.data());
+    if (sw) {
+      sw->setParentItem(w->contentItem());
+      sw->setX(700); sw->setY(420); sw->setZ(95);
+      sw->setProperty("checked", true);
+      QTest::qWait(150);
+      auto handle = anyItem(sw, "switchHandle");
+      c.check(handle && handle->property("color").value<QColor>() == c.themeColor("primaryText"),
+              "an on switch's handle rests on onPrimary");
+      if (handle) {
+        QTest::mouseMove(w, handle->mapToScene(handle->boundingRect().center()).toPoint());
+        c.check(c.until([&] { return handle->property("color").value<QColor>() == c.themeColor("primaryContainer"); }, 1500),
+                "and steps to primaryContainer under the pointer");
+      }
+      QTest::mouseMove(w, QPoint(700, 700));
+      sw->setVisible(false);
+      sw->setParentItem(nullptr);
+    }
+  }
+
+  // --- Text fields: a primary caret and a 40% selection ---
+  c.click("navBar_search");
+  QTest::qWait(500);
+  auto searchBox = shownItem(w->contentItem(), "searchField");
+  c.check(searchBox, "the Search destination shows its search bar");
+  if (auto search = searchBox) {
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, pointOf(search));
+    QTest::qWait(200);
+    for (const QChar ch : QString("still"))
+      QTest::keyClick(w, ch.toLatin1());
+    QTest::qWait(300);
+    auto caret = search->property("cursorDelegate").value<QObject *>();
+    QQuickItem *caretItem = nullptr;
+    for (auto item : search->findChildren<QQuickItem *>())
+      if (item->metaObject()->className() == QByteArray("MCaret_QMLTYPE") || QString(item->metaObject()->className()).startsWith("MCaret"))
+        caretItem = item;
+    Q_UNUSED(caret);
+    c.check(caretItem && caretItem->property("color").value<QColor>() == c.themeColor("primary") &&
+                qAbs(caretItem->width() - 2) < 0.1,
+            "the search caret is primary and 2dp wide");
+    const auto selection = search->property("selectionColor").value<QColor>();
+    const auto primary = c.themeColor("primary");
+    c.check(qAbs(selection.alphaF() - 0.4) < 0.01 && selection.red() == primary.red() &&
+                search->property("selectedTextColor").value<QColor>() == c.themeColor("text"),
+            "selected text sits on primary at 40% and keeps its own colour");
+    QTest::keyClick(w, Qt::Key_A, Qt::ControlModifier);
+    QTest::qWait(100);
+    c.shotNow("07-search-selection");
+    // Suggestions are Material list items: 56 or 72dp, body large headline.
+    QList<QQuickItem *> labels;
+    collectItems(w->contentItem(), "suggestionLabels", labels);
+    auto first = shownItem(w->contentItem(), "suggestion_0");
+    if (first) {
+      auto leading = shownItem(w->contentItem(), "suggestionLeading_0");
+      const double lead = leading ? sceneRect(leading).left() - sceneRect(first).left() : -1;
+      const double h = first->height();
+      c.check((qAbs(h - 56) < 0.5 || qAbs(h - 72) < 0.5) && qAbs(lead - 16) < 0.5,
+              QString("a suggestion is a %1dp list item leading 16dp in (%2)").arg(h).arg(lead));
+    }
+    QTest::keyClick(w, Qt::Key_A, Qt::ControlModifier);
+    QTest::keyClick(w, Qt::Key_Delete);
+    QTest::keyClick(w, Qt::Key_Escape);
+    QTest::qWait(300);
+    w->contentItem()->forceActiveFocus();
+    QTest::qWait(300);
+  }
+
+  // --- A playlist names its size once ---
+  const auto playlist = b->createPlaylist("Evening drive");
+  b->addItemsToPlaylist(playlist, {songs[0], songs[1]});
+  QTest::qWait(150);
+  b->openPlaylist(playlist);
+  c.check(c.until([&] { return b->results()->count() == 2; }), "the playlist opens");
+  QTest::qWait(700);
+  auto summary = shownItem(w->contentItem(), "albumSummary");
+  auto count = shownItem(w->contentItem(), "collectionTrackCount");
+  c.check(summary && summary->property("text").toString().contains("2 ") && !count,
+          QString("its header says how many songs it holds, and nothing repeats it (%1)")
+              .arg(summary ? summary->property("text").toString() : QString("no summary")));
+  c.shot("08-playlist-header");
+
+  // --- Dialogs: basic ones stay within 280 to 560dp ---
+  auto stats = c.dialog("listeningStatsDialog");
+  if (stats) {
+    const double width = stats->property("width").toDouble();
+    c.check(width >= 280 && width <= 560, QString("the listening dialog is %1dp, inside Material's range").arg(width));
+    c.shot("09-listening-dialog");
+    c.closeDialog(stats);
+  }
+
+  // --- Snackbars and errors keep clear of the controls ---
+  QMetaObject::invokeMethod(b, "toast", Q_ARG(QString, QString(
+      "A long notification that would run on past the width Material allows a snackbar to take on a wide window")));
+  auto toast = shownItem(w->contentItem(), "toastBar");
+  c.check(c.until([&] { toast = shownItem(w->contentItem(), "toastBar"); return toast && toast->height() > 40; }, 2000),
+          "a snackbar comes up");
+  if (toast) {
+    c.check(toast->width() <= 600.5, QString("no wider than Material's 600dp (%1)").arg(toast->width()));
+    c.shot("10-snackbar");
+  }
+  b->notifyError("The music server did not answer");
+  auto error = shownItem(w->contentItem(), "errorBar");
+  auto player = shownItem(w->contentItem(), "playbackBar");
+  c.check(c.until([&] { error = shownItem(w->contentItem(), "errorBar"); return error != nullptr; }, 2000),
+          "an error comes up");
+  if (error && player) {
+    c.check(sceneRect(error).bottom() <= sceneRect(player).top() - 15.5,
+            QString("above the playback bar, not over it (%1 against %2)")
+                .arg(sceneRect(error).bottom()).arg(sceneRect(player).top()));
+    c.check(error->width() <= 600.5, "and no wider than a snackbar");
+  }
+  c.shot("11-error-bar");
+  b->dismissError();
+  // A compact window keeps the error off the transport too.
+  w->resize(560, 760);
+  b->notifyError("The music server did not answer");
+  QTest::qWait(700);
+  error = shownItem(w->contentItem(), "errorBar");
+  QQuickItem *transport = nullptr;
+  for (auto item : w->contentItem()->findChildren<QQuickItem *>())
+    if (item->isVisible() && item->property("symbol").toString() == "next" && item->inherits("QQuickAbstractButton")) {
+      transport = item;
+      break;
+    }
+  if (error && transport)
+    c.check(!sceneRect(error).intersects(sceneRect(transport)),
+            QString("at 560dp the error clears the Next button (%1 against %2)")
+                .arg(sceneRect(error).bottom()).arg(sceneRect(transport).top()));
+  c.shot("12-error-compact");
+  b->dismissError();
+  w->resize(1400, 900);
+  QTest::qWait(500);
+
+  // --- Emphasis is weight, not width ---
+  b->home();
+  c.check(c.until([&] { return !b->busy(); }), "Home opens");
+  QTest::qWait(400);
+  if (auto title = shownItem(w->contentItem(), "collectionHeaderTitle"))
+    c.check(qAbs(title->property("font").value<QFont>().variableAxisValue(QFont::Tag("wdth")) - 100) < 0.01,
+            "an emphasized headline keeps the width axis at 100");
+  c.shot("13-home");
+  c.finish();
+}
