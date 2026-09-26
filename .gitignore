@@ -2,6 +2,7 @@
 /*
 !/.gitignore
 !/README.md
+!/CLAUDE.md
 !/LICENSE
 !/NOTICE
 !/CMakeLists.txt
@@ -63,7 +64,8 @@ settings.json
 .idea/
 .vscode/
 
-# README is the only Markdown file in the public repository.
+# README and CLAUDE.md are the only Markdown files in the public repository.
 *.[mM][dD]
 *.[mM][aA][rR][kK][dD][oO][wW][nN]
 !/README.md
+!/CLAUDE.md
