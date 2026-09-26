@@ -138,6 +138,11 @@ Item {
     signal collectionRequested(var item)
     signal coverflowRequested(bool enabled)
     property bool coverflow: false
+    // Motion's "Lyrics over video": the line being sung, large over the
+    // picture. A choice in the menu, kept like the others.
+    signal motionLyricsRequested(bool enabled)
+    property bool motionLyrics: true
+    readonly property bool motionLyricShown: motionLayout && motionLyrics && hasTimedLyrics
     // ImmersiveCoverflow.qml:16-20 computes this row from the window height.
     // The duplicate measure is needed before its Loader exists; reading the
     // loaded item's height here makes coverflowVisible depend on itself.
@@ -200,7 +205,12 @@ Item {
         shown: player.motionLayout
         controlsShown: player.controlsShown
         topBand: shell.y+topControls.y+topControls.height
-        bottomBand: Math.max(0,player.height-(shell.y+body.y+coverColumn.y+title.y))
+        // The line being sung sits above the details and needs the scrim
+        // as well, for as long as it shows, controls or not.
+        bottomBand: Math.max(0,player.height-(shell.y+body.y+coverColumn.y+title.y)+(player.motionLyricShown?motionLyric.reserve:0))
+        textShown: player.motionLyricShown
+        textTop: shell.y+body.y+coverColumn.y+title.y-motionLyric.reserve
+        textHeight: player.motionLyricShown ? motionLyric.reserve : 0
     }
     ColumnLayout {
         id: shell
@@ -272,6 +282,69 @@ Item {
                                 MFocusRing {visible:!immersiveArt.shape && parent.parent.visualFocus;targetRadius:Theme.shapeExtraLarge}
                                 MShape {objectName:"immersiveArtworkFocusRing";anchors.fill:parent;anchors.margins:-Theme.focusRingOutset;visible:!!immersiveArt.shape && parent.parent.visualFocus;shape:immersiveArt.shape||"circle";toShape:immersiveArt.toShape;progress:immersiveArt.morph;color:"transparent";strokeColor:Theme.focusRing;strokeWidth:Theme.focusRingWidth}
                             }}
+                    }
+                }
+                // The line being sung, over the picture. It hangs from just
+                // above the title and grows upward into the empty cover slot,
+                // so a line that wraps never moves the details below it.
+                Item {
+                    id: motionLyric
+                    objectName: "motionLyricSlot"
+                    Layout.fillWidth: true
+                    Layout.maximumWidth: Math.min(player.lyricMeasure, coverColumn.width)
+                    Layout.preferredHeight: 0
+                    visible: player.motionLyricShown
+                    readonly property string current: {
+                        const line = app.lyricLines[app.lyricIndex]
+                        return line ? String(line.text || "").trim() : ""
+                    }
+                    property string shown: ""
+                    property real rise: 0
+                    // Room the scrim keeps for three lines, the most a line may
+                    // take, so the scrim's edge holds still as lines change, and
+                    // a step of clearance so its fade never starts at the letters.
+                    readonly property real reserve: Math.max(3*lyricText.lineHeight, lyricText.implicitHeight) + player.coverGap + Theme.space
+                    function settle() { lineChange.stop(); shown = current; lyricText.opacity = 1; rise = 0 }
+                    onVisibleChanged: if (visible) settle()
+                    onCurrentChanged: {
+                        if (!visible) return
+                        if (!app.motion) { settle(); return }
+                        lineChange.restart()
+                    }
+                    // One line leaves before the next arrives. Colour and
+                    // opacity take FastEffects, which cannot overshoot into a
+                    // flash; the short rise is a movement and takes FastSpatial
+                    // (MotionScheme.kt), the pair the title uses between songs.
+                    SequentialAnimation {
+                        id: lineChange
+                        NumberAnimation { target: lyricText; property: "opacity"; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+                        ScriptAction { script: { motionLyric.shown = motionLyric.current; motionLyric.rise = Theme.spaceMedium } }
+                        ParallelAnimation {
+                            // An animation's values are read when it starts, before
+                            // the swap, so it always rises to full; an empty line,
+                            // a gap in the singing, is simply not shown.
+                            NumberAnimation { target: lyricText; property: "opacity"; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+                            NumberAnimation { target: motionLyric; property: "rise"; to: 0; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+                        }
+                    }
+                    SungText {
+                        id: lyricText
+                        objectName: "motionLyric"
+                        anchors.left: parent.left; anchors.right: parent.right
+                        anchors.bottom: parent.bottom; anchors.bottomMargin: player.coverGap
+                        transform: Translate { y: motionLyric.rise }
+                        text: motionLyric.shown
+                        visible: text.length > 0
+                        // TypeScaleTokens: display small where the window has
+                        // room, headline medium where it does not, the same
+                        // step the title takes between its two sizes.
+                        typeRole: player.width<900?"headlineMedium":"displaySmall"
+                        font.pixelSize: player.width<900?Theme.headlineMedium:Theme.displaySmall
+                        emphasized: true
+                        color: Theme.text
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
                     }
                 }
                 SungText {
@@ -501,6 +574,9 @@ Item {
         MMenuItem {objectName:"immersiveSpeed";symbol:"speed";text:"Playback speed · "+Number(app.playbackRate.toFixed(2))+"×";onTriggered:player.speedRequested()}
         MMenuItem {objectName:"immersiveTiming";symbol:"settings";text:"Lyric timing";enabled:app.lyricLines.length>0;onTriggered:player.timingRequested()}
         MDivider {}
+        // Only Motion draws lyrics over its picture, so only there is this
+        // a choice to make.
+        MMenuItem {objectName:"immersiveMotionLyrics";text:"Lyrics over video";checkable:true;checked:player.motionLyrics;enabled:player.motionLayout;onTriggered:player.motionLyricsRequested(!player.motionLyrics)}
         MMenuItem {objectName:"immersiveCoverflowToggle";text:"Up next covers";checkable:true;checked:player.coverflow;onTriggered:player.coverflowRequested(!player.coverflow)}
         // Motion hides them regardless, so the entry reads on and waits.
         MMenuItem {objectName:"immersiveAutoHide";text:"Auto-hide controls";checkable:true;checked:player.autoHideControls || player.motionLayout;enabled:!player.motionLayout;onTriggered:player.autoHideRequested(!player.autoHideControls)}

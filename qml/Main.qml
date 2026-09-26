@@ -198,7 +198,7 @@ ApplicationWindow {
     TrackPresentation { id: nowPresentation; visible: !window.immersive && !window.compactMode }
     property real previousVolume: 0.65
     function toggleMute() { if(app.volume>0){previousVolume=app.volume;app.volume=0;}else app.volume=previousVolume; }
-    Settings { id: listeningSettings; category: "Listening"; property string layout: "split"; property bool autoHide: false; property bool coverflow: false }
+    Settings { id: listeningSettings; category: "Listening"; property string layout: "split"; property bool autoHide: false; property bool coverflow: false; property bool motionLyrics: true }
     property string immersiveReturnView: ""
     function openImmersiveCollection(item) {
         if(!item.kind)return;
@@ -616,6 +616,8 @@ ApplicationWindow {
     Loader { id: immersiveLoader; anchors.fill: parent; active: window.immersive; sourceComponent: Component { ImmersivePlayer { coverHidden: window.coverFlying;
                 preferredLayout:listeningSettings.layout;autoHideControls:listeningSettings.autoHide;externalModalOpen:window.modalOpen
                 coverflow:listeningSettings.coverflow
+                motionLyrics:listeningSettings.motionLyrics
+                onMotionLyricsRequested:enabled=>listeningSettings.motionLyrics=enabled
                 onCoverflowRequested:enabled=>listeningSettings.coverflow=enabled
                 onAutoHideRequested:enabled=>listeningSettings.autoHide=enabled
                 onLayoutRequested:layout=>listeningSettings.layout=layout

@@ -11,6 +11,12 @@ Item {
     objectName: "motionScene"
     property bool shown: false
     property bool controlsShown: true
+    // Text other than the controls: the line being sung, which stays when the
+    // controls leave. Its band (scene y and height) keeps a scrim of its own
+    // then, so the rest of the picture is left clear.
+    property bool textShown: false
+    property real textTop: 0
+    property real textHeight: 0
     // How far down the top controls reach, and how far up the bottom ones.
     property real topBand: 0
     property real bottomBand: 0
@@ -67,9 +73,6 @@ Item {
     }
     Item {
         anchors.fill: parent
-        opacity: scene.controlsShown ? 1 : 0
-        // The controls' own fade, so text and its scrim leave together.
-        Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
         // Each scrim holds its solved strength across the band the text is
         // in, then thins to nothing beyond it: as far again at the top, where
         // the band is one row of icons and a short ramp reads as a bar, half
@@ -79,7 +82,10 @@ Item {
         Rectangle {
             objectName: "motionTopScrim"
             width: parent.width; height: scene.topBand * 2
-            visible: scene.topBand > 0
+            visible: scene.topBand > 0 && opacity > 0
+            // The controls' own fade, so text and its scrim leave together.
+            opacity: scene.controlsShown ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
             gradient: Gradient {
                 GradientStop { position: 0; color: scene.veil(scene.topScrim, 1) }
                 GradientStop { position: 1 / 2; color: scene.veil(scene.topScrim, 1) }
@@ -93,7 +99,9 @@ Item {
             objectName: "motionBottomScrim"
             width: parent.width; height: scene.bottomBand * 1.5
             y: parent.height - height
-            visible: scene.bottomBand > 0
+            visible: scene.bottomBand > 0 && opacity > 0
+            opacity: scene.controlsShown ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
             gradient: Gradient {
                 GradientStop { position: 0; color: scene.veil(scene.bottomScrim, 0) }
                 GradientStop { position: 1 / 12; color: scene.veil(scene.bottomScrim, 0.15625) }
@@ -101,6 +109,30 @@ Item {
                 GradientStop { position: 3 / 12; color: scene.veil(scene.bottomScrim, 0.84375) }
                 GradientStop { position: 1 / 3; color: scene.veil(scene.bottomScrim, 1) }
                 GradientStop { position: 1; color: scene.veil(scene.bottomScrim, 1) }
+            }
+        }
+        // Behind the line being sung while the controls are away: its band at
+        // the bottom scrim's strength, which was solved over this same band,
+        // thinning over half the band's height above and below.
+        Rectangle {
+            objectName: "motionLyricScrim"
+            readonly property real ramp: scene.textHeight/2
+            width: parent.width; height: scene.textHeight + 2*ramp
+            y: scene.textTop - ramp
+            visible: scene.textHeight > 0 && opacity > 0
+            opacity: scene.textShown && !scene.controlsShown ? 1 : 0
+            Behavior on opacity { NumberAnimation { duration: Theme.normal; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.effectsCurve } }
+            gradient: Gradient {
+                GradientStop { position: 0; color: scene.veil(scene.bottomScrim, 0) }
+                GradientStop { position: 1 / 16; color: scene.veil(scene.bottomScrim, 0.15625) }
+                GradientStop { position: 2 / 16; color: scene.veil(scene.bottomScrim, 0.5) }
+                GradientStop { position: 3 / 16; color: scene.veil(scene.bottomScrim, 0.84375) }
+                GradientStop { position: 1 / 4; color: scene.veil(scene.bottomScrim, 1) }
+                GradientStop { position: 3 / 4; color: scene.veil(scene.bottomScrim, 1) }
+                GradientStop { position: 13 / 16; color: scene.veil(scene.bottomScrim, 0.84375) }
+                GradientStop { position: 14 / 16; color: scene.veil(scene.bottomScrim, 0.5) }
+                GradientStop { position: 15 / 16; color: scene.veil(scene.bottomScrim, 0.15625) }
+                GradientStop { position: 1; color: scene.veil(scene.bottomScrim, 0) }
             }
         }
     }

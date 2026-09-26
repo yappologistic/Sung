@@ -304,6 +304,97 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(400);
   c.check(player->isVisible(), "Escape closes the menu, not the immersive view");
 
+  // --- The line being sung, over the picture ---
+  // Lyrics arrive the way a person adds them: an .lrc file imported for the
+  // song. Each line lasts four seconds; the fifth is long enough to wrap.
+  const QStringList sung{"Neon rain on the window", "Every light a little louder", "", "Hold the signal steady",
+                         "And if the city keeps on humming through the night we will follow every wire home"};
+  QFile lrc(c.directory + "/neon.lrc");
+  if (lrc.open(QIODevice::WriteOnly)) {
+    for (int i = 0; i < sung.size(); ++i)
+      lrc.write(QString("[00:%1.00]%2\n").arg(i * 4 + 2, 2, 10, QChar('0')).arg(sung[i]).toUtf8());
+    lrc.close();
+  }
+  b->importLyrics(QUrl::fromLocalFile(lrc.fileName()), "motionbusy1");
+  c.check(c.until([&] { return b->lyricLines().size() == sung.size(); }), "timed lyrics are imported for the song");
+  auto *lyricSlot = named(player, "motionLyricSlot");
+  auto *lyricLine = named(player, "motionLyric");
+  const auto lineAt = [&](int ms, const QString &expected) {
+    b->seek(ms);
+    return c.until([&] { return lyricLine && lyricLine->property("text").toString() == expected
+                                && (expected.isEmpty() || lyricLine->opacity() > 0.99); }, 4000);
+  };
+  c.check(lyricSlot && lyricSlot->isVisible(), "Motion shows the line being sung, on by default");
+  c.check(lineAt(2500, sung[0]), "the first line shows");
+  c.check(lineAt(6500, sung[1]), "and gives way to the next when it is sung");
+  auto *titleNow = shown(player, "immersiveTitle");
+  const qreal titleY = titleNow ? titleNow->mapToScene(QPointF()).y() : -1;
+  c.check(lineAt(18500, sung[4]), "a long line shows");
+  c.check(lyricLine && lyricLine->property("lineCount").toInt() >= 2 && lyricLine->property("lineCount").toInt() <= 3,
+          QString("and wraps to at most three lines (%1)").arg(lyricLine ? lyricLine->property("lineCount").toInt() : 0));
+  c.check(titleNow && qAbs(titleNow->mapToScene(QPointF()).y() - titleY) < 0.5, "without moving the title under it");
+  auto *bottomVeil = named(player, "motionBottomScrim");
+  if (lyricLine && bottomVeil) {
+    // The scrim's flat, full-strength part starts a third of the way down it.
+    const qreal full = bottomVeil->mapToScene(QPointF(0, bottomVeil->height() / 3)).y();
+    const qreal top = lyricLine->mapToScene(QPointF()).y();
+    c.check(full <= top + 1, QString("the scrim holds its full strength behind the whole line (%1 above %2)").arg(full).arg(top));
+  }
+  c.shot("08-motion-lyrics");
+  c.check(lineAt(10500, ""), "an instrumental gap shows no line");
+  c.check(lyricSlot && lyricSlot->isVisible() && lyricLine && !lyricLine->isVisible(), "and leaves nothing over the picture");
+  c.check(lineAt(14500, sung[3]), "the next sung line comes back");
+  // Left alone, the controls leave; the line and its scrim stay.
+  QTest::mouseMove(w, QPoint(w->width() / 2, w->height() / 3));
+  c.check(c.until([&] { return !player->property("controlsShown").toBool(); }, 6000), "the controls hide");
+  auto *topVeil = named(player, "motionTopScrim");
+  auto *lyricVeil = named(player, "motionLyricScrim");
+  c.check(c.until([&] { return bottomVeil && bottomVeil->opacity() < 0.01 && topVeil && topVeil->opacity() < 0.01
+                               && lyricVeil && lyricVeil->opacity() > 0.99; }),
+          "the controls' scrims leave with them and the line keeps one of its own");
+  if (lyricVeil && lyricLine) {
+    // Full strength across the middle half of the band, where the line is.
+    const qreal fullTop = lyricVeil->mapToScene(QPointF(0, lyricVeil->height() / 4)).y();
+    const qreal fullBottom = lyricVeil->mapToScene(QPointF(0, lyricVeil->height() * 3 / 4)).y();
+    const QRectF line = lyricLine->mapRectToScene(lyricLine->boundingRect());
+    c.check(fullTop <= line.top() + 1 && fullBottom >= line.bottom() - 1,
+            QString("the line sits inside its scrim's full strength (%1-%2 within %3-%4)")
+                .arg(line.top()).arg(line.bottom()).arg(fullTop).arg(fullBottom));
+    c.check(lyricVeil->mapToScene(QPointF(0, lyricVeil->height())).y() < w->height() - 60,
+            "and the picture below it is left clear");
+  }
+  c.check(c.until([&] { return lyricLine && lyricLine->isVisible() && lyricLine->opacity() > 0.99; }, 3000), "and the line stays");
+  c.shot("09-motion-lyrics-idle");
+  // Turned off in the menu, the way a person turns it off.
+  QTest::mouseMove(w, QPoint(w->width() / 2 + 30, w->height() / 3 + 10));
+  c.check(c.until([&] { return player->property("controlsShown").toBool(); }), "the pointer brings the controls back");
+  c.click("immersiveLayoutButton");
+  auto *lyricToggle = shown(w->contentItem(), "immersiveMotionLyrics");
+  c.check(lyricToggle && lyricToggle->isEnabled() && lyricToggle->property("checked").toBool()
+              && lyricToggle->property("text").toString() == "Lyrics over video",
+          "the menu offers Lyrics over video, on");
+  c.shot("11-motion-lyrics-menu-on");
+  c.click("immersiveMotionLyrics");
+  c.check(c.until([&] { return lyricSlot && !lyricSlot->isVisible() && !player->property("motionLyrics").toBool(); }),
+          "turning it off takes the line away");
+  c.check(c.until([&] { return b->motionArtQuality() == "1920"; }), "and leaves the cover as it was");
+  c.shot("10-motion-lyrics-off");
+  c.click("immersiveLayoutButton");
+  auto *lyricToggleOff = shown(w->contentItem(), "immersiveMotionLyrics");
+  c.check(lyricToggleOff && !lyricToggleOff->property("checked").toBool(), "the menu shows it off");
+  c.shot("12-motion-lyrics-menu-off");
+  c.click("immersiveMotionLyrics");
+  c.check(c.until([&] { return lyricSlot && lyricSlot->isVisible() && player->property("motionLyrics").toBool(); }),
+          "and on again brings it back");
+  // With animation off the next line is simply there.
+  b->setMotion(false);
+  b->seek(6500);
+  QTest::qWait(120);
+  c.check(lyricLine && lyricLine->property("text").toString() == sung[1] && lyricLine->opacity() > 0.99,
+          "reduced motion swaps the line at once");
+  b->setMotion(true);
+  c.check(c.until([&] { return backdrop->property("moving").toBool(); }), "the animated cover returns with motion");
+
   // A different song crossfades to its own cover.
   qputenv("SUNG_MOTION_FIXTURE", fractal.toUtf8());
   qputenv("SUNG_MOTION_FIXTURE_1920", fractal.toUtf8());
@@ -323,6 +414,19 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   QTest::mouseMove(w, QPoint(w->width() / 2 - 40, w->height() / 2 - 20));
   QTest::qWait(900);
   c.shot("03-motion-second-song");
+  c.check(c.until([&] { return b->lyricLines().isEmpty(); }) && lyricSlot && !lyricSlot->isVisible(),
+          "a song without timed lyrics shows no line");
+  // Lyrics for this song too, so the light theme and the narrow window are
+  // seen with a line over them.
+  QFile deep(c.directory + "/deep.lrc");
+  if (deep.open(QIODevice::WriteOnly)) {
+    for (int i = 0; i < 30; ++i) deep.write(QString("[00:%1.00]Down through the colours, deeper still\n").arg(i * 2, 2, 10, QChar('0')).toUtf8());
+    deep.close();
+  }
+  b->importLyrics(QUrl::fromLocalFile(deep.fileName()), "motionfrac1");
+  c.check(c.until([&] { return lyricLine && lyricLine->isVisible() && lyricLine->opacity() > 0.99
+                               && lyricLine->property("text").toString().startsWith("Down through"); }),
+          "and one with them shows its line");
 
   // What it costs to draw the video in Motion against drawing it as the
   // cover in the Artwork layout, over the same five seconds of playback.
@@ -369,6 +473,18 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
     const QRectF at = title->mapRectToScene(title->boundingRect());
     c.check(at.right() <= 480 && at.left() >= 0, "the title stays inside a narrow window");
   }
+  QTest::mouseMove(w, QPoint(200, 300));
+  QTest::mouseMove(w, QPoint(210, 310));
+  c.check(c.until([&] { return player->property("controlsShown").toBool() && lyricLine && lyricLine->opacity() > 0.99; }),
+          "the controls and the line show in a narrow window");
+  if (lyricLine) {
+    const QRectF line = lyricLine->mapRectToScene(lyricLine->boundingRect());
+    auto *topRow = named(player, "immersiveTopControls");
+    const qreal topBottom = topRow ? topRow->mapToScene(QPointF(0, topRow->height())).y() : 0;
+    c.check(lyricLine->property("typeRole").toString() == "headlineMedium", "a compact window sets the line in headline medium");
+    c.check(line.left() >= 0 && line.right() <= 480, "the line stays inside a narrow window");
+    c.check(line.top() >= topBottom, QString("and below the top controls (%1 under %2)").arg(line.top()).arg(topBottom));
+  }
   c.shot("06-motion-narrow");
   w->resize(1280, 800);
   c.check(c.until([&] { return b->motionArtQuality() == "1920"; }, 3000), "a wide window goes back to the square cover");
@@ -379,6 +495,11 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   c.check(c.until([&] { return !scene->isVisible(); }), "leaving Motion fades the backdrop out");
   c.check(c.until([&] { return !backdrop->property("ready").toBool(); }), "and lets its pictures go");
   c.check(cover && c.until([&] { return cover->isVisible(); }), "the cover returns in Artwork");
+  c.click("immersiveLayoutButton");
+  auto *lyricsElsewhere = shown(w->contentItem(), "immersiveMotionLyrics");
+  c.check(lyricsElsewhere && !lyricsElsewhere->isEnabled(), "outside Motion the lyrics choice waits, disabled");
+  QTest::keyClick(w, Qt::Key_Escape);
+  QTest::qWait(300);
   c.check(c.until([&] { return b->motionArtQuality() == "standard" && motion->maximumSize() == 800 && !b->currentMotionArt().contains("-1920"); }, 12000),
           "and the shared cover goes back to the small one");
   fprintf(stdout, "RESULT %d failures\n", c.failures);
