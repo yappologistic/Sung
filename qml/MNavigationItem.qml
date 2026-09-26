@@ -62,7 +62,7 @@ AbstractButton {
             objectName: "navigationFocusRing"
             anchors.fill: parent; anchors.margins: 2; radius: Theme.shapeLarge
             anchors.leftMargin: control.expanded ? control.itemPadding+2 : 2
-            color: "transparent"; border.color: Theme.focusRing; border.width: 2
+            color: "transparent"; border.color: Theme.focusRing; border.width: Theme.focusRingWidth
             visible: control.visualFocus
         }
     }

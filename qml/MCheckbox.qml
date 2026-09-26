@@ -37,6 +37,16 @@ AbstractButton {
             opacity: control.down ? Theme.pressedOpacity : control.visualFocus ? Theme.focusOpacity : control.hovered ? Theme.hoverOpacity : 0
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
+        // material-web draws the checkbox's focus ring as a 44dp circle
+        // centred on the control (checkbox/internal/_checkbox.scss:65-69,
+        // radio/internal/_radio.scss:74-78), at the ring's usual width.
+        Rectangle {
+            objectName: "checkboxFocusRing"
+            anchors.centerIn: parent
+            width: 44; height: width; radius: Theme.shapeFull(width)
+            color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing
+            visible: control.visualFocus
+        }
     }
     contentItem: Item {
         Rectangle {

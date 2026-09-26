@@ -158,10 +158,15 @@ ItemDelegate {
         // same role that marks a chosen anything else. Picking rows out is not
         // an action, so it does not take the accent an action is offered in.
         color: row.carried ? Theme.primaryContainer : row.selected ? Theme.secondaryContainer : row.motionRaised ? Theme.container : row.active ? Theme.high : row.hovered ? Theme.container : row.segmented ? Theme.container : "transparent"
-        border.width: row.keyboardCurrent ? 2 : 0; border.color: Theme.focusRing
-        Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-        Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
-        Behavior on bottomLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
+        // Rows meet their neighbours, so the ring is drawn on the row's own
+        // edge rather than outside it, at Material's focus-ring width.
+        border.width: row.keyboardCurrent ? Theme.focusRingWidth : 0; border.color: Theme.focusRing
+        // ListItem.kt:1502-1505 animates an interactive item's colour on
+        // DefaultEffects and its shape on FastSpatial: the corners move, so
+        // they may ring; the colour may not.
+        Behavior on color { ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+        Behavior on topLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
+        Behavior on bottomLeftRadius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         // A row being carried is lifted, not only tinted.
         MElevation { anchors.fill: parent; radius: parent.topLeftRadius; level: row.motionRaised || row.dragging ? 4 : 0 }
         // A row the list is moving for you takes Material's dragged state

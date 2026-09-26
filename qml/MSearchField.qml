@@ -14,11 +14,12 @@ TextField {
     verticalAlignment: TextInput.AlignVCenter
     font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge
     color: Theme.text; placeholderTextColor: Theme.muted
-    selectionColor: Theme.primary; selectedTextColor: Theme.primaryText
+    selectionColor: Theme.textSelection; selectedTextColor: Theme.text
+    cursorDelegate: MCaret {}
     Accessible.name: placeholderText
     background: Rectangle {
         radius: height / 2; color: Theme.high
-        border.width: field.activeFocus ? 2 : 0; border.color: Theme.focusRing
+        border.width: field.activeFocus ? Theme.focusRingWidth : 0; border.color: Theme.focusRing
         // SearchBarDefaults.ShadowElevation in SearchBar.kt:2000 is Level0,
         // overriding SearchBarTokens.ContainerElevation's generated Level3.
     }

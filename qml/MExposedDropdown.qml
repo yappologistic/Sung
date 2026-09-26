@@ -70,13 +70,9 @@ Item {
                 Behavior on rotation { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
             }
         }
-        Rectangle {
+        MFocusRing {
             objectName: "dropdownFocusRing"
-            anchors.fill: field; anchors.margins: -3
-            // MButton's keyboard ring sits 3px outside at 2px, while the
-            // field's own focused primary border stays on its boundary.
-            radius: Theme.shapeInside(Theme.shapeExtraSmall, -3)
-            color: "transparent"; border.width: 2; border.color: Theme.focusRing
+            target: field; targetRadius: Theme.shapeExtraSmall
             visible: field.visualFocus
         }
     }

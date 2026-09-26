@@ -124,27 +124,11 @@ Flickable {
                         }
                     }
                 }
-                Rectangle {
+                // Tabs meet edge to edge, so the ring is drawn inside the tab.
+                MFocusRing {
                     objectName: "tabFocusRing"
-                    anchors.fill: parent; anchors.margins: 2; anchors.bottomMargin: 6; radius: Theme.shapeSmall
-                    color: "transparent"; border.width: 2; border.color: Theme.focusRing
+                    inward: true; targetRadius: Theme.shapeSmall
                     visible: tab.visualFocus
-                }
-                Rectangle {
-                    objectName: "tabIndicator"
-                    anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-                    // A primary tab's indicator is as wide as its label and
-                    // never under 24dp; a secondary tab's spans the whole tab
-                    // (TabRow.kt, contentWidth and matchContentSize = false).
-                    width: tabs.secondary ? tab.width : Math.max(24, label.implicitWidth)
-                    height: tabs.secondary ? Theme.tabIndicatorSecondary : Theme.tabIndicatorPrimary
-                    // It sits on the divider, so it rounds at the top and stays
-                    // square where the two meet.
-                    topLeftRadius: height; topRightRadius: height
-                    bottomLeftRadius: 0; bottomRightRadius: 0
-                    color: Theme.primary
-                    opacity: tab.selected ? 1 : 0
-                    Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
                 }
             }
         }

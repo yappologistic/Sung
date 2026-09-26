@@ -27,11 +27,7 @@ Switch {
         border.width: control.checked ? 0 : 2
         border.color: control.dimmed ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledSurfaceOpacity) : Theme.outline
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-        Rectangle {
-            anchors.fill: parent; anchors.margins: -4; radius: Theme.shapeLargeIncreased
-            color: "transparent"; border.width: 2; border.color: Theme.focusRing
-            visible: control.visualFocus
-        }
+        MFocusRing { objectName: "switchFocusRing"; targetRadius: parent.radius; visible: control.visualFocus }
         Rectangle {
             x: (control.checked ? 36 : 16) - width/2
             anchors.verticalCenter: parent.verticalCenter

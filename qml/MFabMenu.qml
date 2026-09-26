@@ -144,11 +144,9 @@ Item {
                     }
                     // MenuTokens.FocusIndicatorColor is Secondary. Match
                     // MButton's ring outside this item's full shape.
-                    Rectangle {
+                    MFocusRing {
                         objectName: "fabMenuItemFocusRing"
-                        anchors.fill: entry.background; anchors.margins: -3
-                        radius: Theme.shapeInside(Theme.shapeFull(Math.min(width, height)), -3)
-                        color: "transparent"; border.width: 2; border.color: Theme.focusRing
+                        target: entry.background; targetRadius: Theme.shapeFull(Math.min(entry.background.width, entry.background.height))
                         visible: entry.visualFocus
                     }
                     contentItem: Row {
@@ -199,11 +197,9 @@ Item {
         }
         // The FAB uses Theme.focusRing, the Secondary ring used for menu focus
         // (MenuTokens.FocusIndicatorColor), outside its current shape.
-        Rectangle {
+        MFocusRing {
             objectName: "fabFocusRing"
-            anchors.fill: fab.background; anchors.margins: -3
-            radius: Theme.shapeInside(fab.background.radius, -3)
-            color: "transparent"; border.width: 2; border.color: Theme.focusRing
+            target: fab.background; targetRadius: fab.background.radius
             visible: fab.visualFocus
         }
         // A control stretches its content item to fill it, so the glyph needs a

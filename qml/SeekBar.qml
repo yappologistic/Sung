@@ -140,11 +140,9 @@ Slider {
             color: s.enabled ? Theme.primary : Theme.sliderQuiet(Theme.disabledContentOpacity)
             Behavior on width { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
         }
-        Rectangle {
+        MFocusRing {
             objectName: "sliderFocusRing"
-            anchors.centerIn: parent
-            width: parent.width+12; height: parent.height+4; radius: Theme.shapeSmall
-            color: "transparent"; border.width: 2; border.color: Theme.focusRing
+            targetRadius: Theme.shapeFull(parent.width)
             visible: s.visualFocus
         }
     }

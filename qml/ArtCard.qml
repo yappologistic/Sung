@@ -43,9 +43,10 @@ Item {
         anchors.fill: art
         Accessible.name: card.track.title || "Open collection"
         onClicked: {if(card.openHandler)card.openHandler(card.track,art);else app.open(card.track);}
-        background: Rectangle { radius: art.radius; border.width: openCard.activeFocus?3:0; border.color: Theme.focusRing; color: "transparent"; opacity: 1; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } }
+        // A click leaves no ring: only keyboard focus draws one.
+        background: Item { MFocusRing { objectName: "cardFocusRing"; targetRadius: art.radius; visible: openCard.visualFocus } }
     }
-    MButton { id: cardAction; objectName: "cardAction"; anchors.right: art.right; anchors.bottom: art.bottom; anchors.margins: 12; busy: card.loadingCover; symbol: card.playableCover ? "play" : "chevron"; tip: (card.playableCover ? "Play " : "Open ") + (card.track.title || ""); filled: true; opacity: hover.hovered || openCard.activeFocus || cardAction.activeFocus || card.loadingCover ? 1 : 0; visible: opacity>0; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } onClicked: {if(card.playableCover)app.playCover(card.track);else app.open(card.track);} }
+    MButton { id: cardAction; objectName: "cardAction"; anchors.right: art.right; anchors.bottom: art.bottom; anchors.margins: 12; busy: card.loadingCover; symbol: card.playableCover ? "play" : "chevron"; tip: (card.playableCover ? "Play " : "Open ") + (card.track.title || ""); filled: true; opacity: hover.hovered || openCard.visualFocus || cardAction.visualFocus || card.loadingCover ? 1 : 0; visible: opacity>0; Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } } onClicked: {if(card.playableCover)app.playCover(card.track);else app.open(card.track);} }
     MButton {
         objectName: "cardPinAction"
         anchors.right: art.right; anchors.top: art.top; anchors.margins: 12

@@ -80,6 +80,17 @@ Item {
                 opacity: action.down || action.visualFocus ? Theme.pressedOpacity : action.hovered ? Theme.hoverOpacity : 0
                 Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
             }
+            // The focus ring follows this half's own corners, Theme.focusRingOffset
+            // clear of it; a 10% layer alone barely shows on the filled button.
+            Rectangle {
+                objectName: "splitActionFocusRing"
+                x: -Theme.focusRingOutset; y: -Theme.focusRingOutset
+                width: parent.width+Theme.focusRingOutset*2; height: parent.height+Theme.focusRingOutset*2
+                topLeftRadius: parent.topLeftRadius+Theme.focusRingOutset; bottomLeftRadius: parent.bottomLeftRadius+Theme.focusRingOutset
+                topRightRadius: parent.topRightRadius+Theme.focusRingOutset; bottomRightRadius: parent.bottomRightRadius+Theme.focusRingOutset
+                color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing
+                visible: action.visualFocus
+            }
         }
         // Laid out the way every other button in the app lays out, so a split
         // button reads as one of them rather than as a lookalike.
@@ -143,6 +154,17 @@ Item {
                 color: control.filled ? Theme.primaryText : Theme.primary
                 opacity: reveal.down || reveal.visualFocus ? Theme.pressedOpacity : reveal.hovered ? Theme.hoverOpacity : 0
                 Behavior on opacity { NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
+            }
+            // The focus ring follows this half's own corners, Theme.focusRingOffset
+            // clear of it; a 10% layer alone barely shows on the filled button.
+            Rectangle {
+                objectName: "splitMenuFocusRing"
+                x: -Theme.focusRingOutset; y: -Theme.focusRingOutset
+                width: parent.width+Theme.focusRingOutset*2; height: parent.height+Theme.focusRingOutset*2
+                topLeftRadius: parent.topLeftRadius+Theme.focusRingOutset; bottomLeftRadius: parent.bottomLeftRadius+Theme.focusRingOutset
+                topRightRadius: parent.topRightRadius+Theme.focusRingOutset; bottomRightRadius: parent.bottomRightRadius+Theme.focusRingOutset
+                color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing
+                visible: reveal.visualFocus
             }
         }
         contentItem: Item {

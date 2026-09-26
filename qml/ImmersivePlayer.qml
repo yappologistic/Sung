@@ -252,8 +252,8 @@ Item {
                         url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; opacity: player.coverHidden?0:1; radius: Theme.shapeExtraLarge; pixels: 850; highResolution: true; fit:app.currentArtworkFit
                         AbstractButton {anchors.fill:parent;Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:player.artworkRequested()
                             background:Item {
-                                Rectangle {anchors.fill:parent;visible:!immersiveArt.shape;color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.parent.visualFocus?2:0;border.color:Theme.focusRing}
-                                MShape {objectName:"immersiveArtworkFocusRing";anchors.fill:parent;visible:!!immersiveArt.shape && parent.parent.visualFocus;shape:immersiveArt.shape||"circle";toShape:immersiveArt.toShape;progress:immersiveArt.morph;color:"transparent";strokeColor:Theme.focusRing;strokeWidth:2}
+                                MFocusRing {visible:!immersiveArt.shape && parent.parent.visualFocus;targetRadius:Theme.shapeExtraLarge}
+                                MShape {objectName:"immersiveArtworkFocusRing";anchors.fill:parent;anchors.margins:-Theme.focusRingOutset;visible:!!immersiveArt.shape && parent.parent.visualFocus;shape:immersiveArt.shape||"circle";toShape:immersiveArt.toShape;progress:immersiveArt.morph;color:"transparent";strokeColor:Theme.focusRing;strokeWidth:Theme.focusRingWidth}
                             }}
                     }
                 }
@@ -317,9 +317,9 @@ Item {
                         onClicked: player.collectionRequested(player.artistTarget)
                         contentItem:SungText {text:presentation.shown.artist || "";font.pixelSize:Theme.bodyLarge;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
                         background:Item {Rectangle {y:parent.parent.topPadding;width:parent.width;height:32;color:parent.parent.down?Theme.high:parent.parent.hovered&&parent.parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}}
-                        // MButton's ring sits 3px outside the container and
-                        // follows its shape, with a 2px Theme.focusRing stroke.
-                        Rectangle { objectName: "immersiveArtistFocusRing"; x: -3; y: parent.topPadding-3; width: parent.width+6; height: 38; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                        // The focus ring stands Theme.focusRingOffset outside
+                        // the 32dp container and follows its shape.
+                        Rectangle { objectName: "immersiveArtistFocusRing"; x: -Theme.focusRingOutset; y: parent.topPadding-Theme.focusRingOutset; width: parent.width+Theme.focusRingOutset*2; height: 32+Theme.focusRingOutset*2; radius: Theme.shapeMedium+Theme.focusRingOutset; color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing; visible: parent.visualFocus }
                     }
                 }
                 Item {
@@ -342,7 +342,7 @@ Item {
                         onClicked: player.collectionRequested(player.albumTarget)
                         contentItem:SungText {text:presentation.shown.album || "";font.pixelSize:Theme.labelLarge;labelRole:true;color:parent.hovered&&parent.enabled?Theme.primary:Theme.muted;opacity:presentation.fade*player.detailsOpacity}
                         background:Item {Rectangle {y:parent.parent.topPadding;width:parent.width;height:32;color:parent.parent.down?Theme.high:parent.parent.hovered&&parent.parent.enabled?Qt.rgba(Theme.primary.r,Theme.primary.g,Theme.primary.b,Theme.hoverOpacity):"transparent";radius:Theme.shapeMedium}}
-                        Rectangle { objectName: "immersiveAlbumFocusRing"; x: -3; y: parent.topPadding-3; width: parent.width+6; height: 38; radius: Theme.shapeMedium+3; color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: parent.visualFocus }
+                        Rectangle { objectName: "immersiveAlbumFocusRing"; x: -Theme.focusRingOutset; y: parent.topPadding-Theme.focusRingOutset; width: parent.width+Theme.focusRingOutset*2; height: 32+Theme.focusRingOutset*2; radius: Theme.shapeMedium+Theme.focusRingOutset; color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing; visible: parent.visualFocus }
                     }
                 }
             }

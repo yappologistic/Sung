@@ -6016,12 +6016,12 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
       c.check(ring && ring->property("border").value<QObject *>()->property("color").value<QColor>() ==
                   c.themeColor("secondary"),
               "the remove ring uses the secondary role");
-      c.check(ring && icon && qAbs(ring->width() - 24) < 0.5 &&
-                  qAbs(ring->height() - 24) < 0.5 &&
-                  qAbs(ring->property("radius").toDouble() - 12) < 0.5 &&
+      c.check(ring && icon && qAbs(ring->width() - 28) < 0.5 &&
+                  qAbs(ring->height() - 28) < 0.5 &&
+                  qAbs(ring->property("radius").toDouble() - 14) < 0.5 &&
                   (ring->mapToScene(ring->boundingRect().center()) -
                    icon->mapToScene(icon->boundingRect().center())).manhattanLength() < 0.5,
-              "the 2px focus ring circles the icon 3px outside it");
+              "the 3px focus ring circles the icon 2px clear of it");
       c.shotNow("06a-chip-remove-focus");
       QSignalSpy chipClicks(input, SIGNAL(clicked()));
       QSignalSpy removals(input, SIGNAL(removed()));
@@ -6738,8 +6738,9 @@ void runMaterialControlsTests(Backend *b, QQuickWindow *w) {
       QTest::qWait(100);
       auto ring = anyItem(sort, "dropdownFocusRing");
       auto border = field->property("background").value<QQuickItem *>();
-      c.check(ring && ring->isVisible() && qAbs(ring->width()-field->width()-6) < 0.1 &&
-                  QQmlProperty::read(ring, "border.width", qmlContext(ring)).toInt() == 2 &&
+      // md.sys.state.focus-indicator: 3px thick, 2px outside the field.
+      c.check(ring && ring->isVisible() && qAbs(ring->width()-field->width()-10) < 0.1 &&
+                  QQmlProperty::read(ring, "border.width", qmlContext(ring)).toInt() == 3 &&
                   border && QQmlProperty::read(border, "border.width", qmlContext(border)).toInt() == 2,
               "keyboard focus keeps the outside ring and the field border");
       auto action = accessible ? accessible->actionInterface() : nullptr;

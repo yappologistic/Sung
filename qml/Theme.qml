@@ -446,6 +446,15 @@ QtObject {
     // it in secondary rather than primary, so it still reads as a ring when it
     // lands on something already painted in the accent.
     readonly property color focusRing: secondary
+    // Selected text sits on primary at 40% and keeps its own colour
+    // (MaterialTheme.kt:276-287, TextSelectionBackgroundOpacity 0.4).
+    readonly property color textSelection: Qt.rgba(primary.r, primary.g, primary.b, 0.4)
+    // Its geometry: 3dp thick, 2dp clear of the control (material-web,
+    // md.sys.state.focus-indicator thickness 3px and outer-offset 2px).
+    // MFocusRing draws it; a shaped ring reads the same numbers.
+    readonly property int focusRingWidth: 3
+    readonly property int focusRingOffset: 2
+    readonly property int focusRingOutset: focusRingWidth + focusRingOffset
 
     // Material's four state layers, and what it does to a disabled control: the
     // container drops to a tenth of onSurface and the content to 38%, rather

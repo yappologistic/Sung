@@ -28,7 +28,7 @@ MDialog {
                             required property var modelData
                             Layout.fillWidth: true; spacing: 4
                             SungText { text: modelData.label; color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true }
-                            TextEdit { Layout.fillWidth: true; text: modelData.value; textFormat: TextEdit.PlainText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.Wrap; color: Theme.text; selectionColor: Theme.primary; selectedTextColor: Theme.primaryText; font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge; Accessible.name: modelData.label+": "+modelData.value }
+                            TextEdit { Layout.fillWidth: true; text: modelData.value; textFormat: TextEdit.PlainText; readOnly: true; selectByMouse: true; wrapMode: TextEdit.Wrap; color: Theme.text; selectionColor: Theme.textSelection; selectedTextColor: Theme.text; font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge; Accessible.name: modelData.label+": "+modelData.value }
                         }
                     }
                 }
