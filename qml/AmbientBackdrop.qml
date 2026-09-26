@@ -39,9 +39,12 @@ Item {
     readonly property bool reactive: animating && app.backdropPulse && app.playing
     readonly property real level: reactive ? Math.max(app.audioLevels[0] || 0, app.audioLevels[1] || 0) : 0
     property real pulse: level
-    // This 220ms smoothing follows decoded audio, not a control state. Reduced
-    // motion disables the Behavior so its last level change settles at once.
-    Behavior on pulse { enabled: app.motion; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+    // The swell follows decoded audio on SlowEffects, the critically damped
+    // spring that settles nearest the smoothing it replaces (about 235ms at
+    // 1.0/800): a level that keeps moving retargets it before it settles, and
+    // being an effects spring it cannot overshoot the level it is chasing.
+    // Reduced motion disables the Behavior so the last change lands at once.
+    Behavior on pulse { enabled: app.motion; NumberAnimation { duration: Theme.springSlowEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSlowEffects } }
     // Qt Quick Item visibility stops drawing immediately. Keep the last
     // cover visible until SlowEffects reaches zero, including coverless tracks.
     visible: active || opacity > 0

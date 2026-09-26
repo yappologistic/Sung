@@ -37,16 +37,12 @@ Popup {
     }
     contentItem: Item { id: body }
 
+    // NavigationDrawer.kt:351-355 opens the drawer on DefaultSpatial and
+    // closes it on FastEffects. It slides; the container does not fade.
     enter: Transition {
-        ParallelAnimation {
-            NumberAnimation { property: "x"; from: -drawer.width; to: 0; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
-            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve }
-        }
+        NumberAnimation { property: "x"; from: -drawer.width; to: 0; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
     }
     exit: Transition {
-        ParallelAnimation {
-            NumberAnimation { property: "x"; to: -drawer.width; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
-            NumberAnimation { property: "opacity"; to: 0; duration: Theme.exitDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.exitCurve }
-        }
+        NumberAnimation { property: "x"; to: -drawer.width; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
     }
 }

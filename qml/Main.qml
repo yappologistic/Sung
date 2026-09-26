@@ -619,8 +619,9 @@ ApplicationWindow {
         Overlay.modal:Rectangle {color:Theme.scrimColor()}
         // PaneMotion.kt:155-177 uses a spatial spring for entering bounds.
         enter:Transition {NumberAnimation {property:"position";to:1;duration:app.motion?Theme.springFastSpatialMs:0;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}
-        // FastSpatial closes the position of this screen sheet.
-        exit:Transition {NumberAnimation {objectName:"mainSheetExitMotion";property:"position";to:0;duration:Theme.springFastSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastSpatial}}
+        // A modal sheet closes the way a modal drawer does, on FastEffects
+        // (NavigationDrawer.kt:355), so it cannot overshoot on its way out.
+        exit:Transition {NumberAnimation {objectName:"mainSheetExitMotion";property:"position";to:0;duration:Theme.springFastEffectsMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springFastEffects}}
         onOpened:{if(immersiveQueueLoader.item)immersiveQueueLoader.item.revealCurrent();}
         onClosed:{trackDrag.cancel();if(immersiveLoader.item){immersiveLoader.item.forceActiveFocus(Qt.PopupFocusReason);immersiveLoader.item.wake();}}
         contentItem:ColumnLayout {spacing:16

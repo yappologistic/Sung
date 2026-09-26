@@ -54,13 +54,19 @@ AbstractButton {
             radius: Theme.shapeFull(width)
             color: "transparent"
             border.width: 2; border.color: control.mark
+            // RadioButton.kt:144-151 crosses the colour on DefaultEffects, and
+            // snaps it when the control is disabled.
+            Behavior on border.color { enabled: app.motion && control.enabled; ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Rectangle {
                 objectName: "radioDot"
                 anchors.centerIn: parent
                 width: control.checked ? Theme.radioSize/2 : 0
                 height: width
                 radius: Theme.shapeFull(width)
+                // RadioButton.kt:189 draws the dot at 12dp less the 2dp stroke,
+                // which is 10dp across.
                 color: control.mark
+                Behavior on color { enabled: app.motion && control.enabled; ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
                 // RadioButton.kt:137-142 grows the dot on FastSpatial.
                 Behavior on width { enabled: app.motion; NumberAnimation { id: radioDotSpring; objectName: "radioDotSpring"; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             }
