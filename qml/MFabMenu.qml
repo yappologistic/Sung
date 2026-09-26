@@ -31,11 +31,13 @@ Item {
         enabled: app.motion
         NumberAnimation { duration: Theme.springSlowEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSlowEffects }
     }
-    // Material's small FAB, which is the size it gives a secondary action:
-    // 40dp at the medium corner, still carrying a 24dp glyph. Adding to the
-    // library is not the screen's primary action, and at 56dp the FAB outweighed
-    // everything around it.
-    readonly property real fabSize: 40
+    // Material's baseline FAB: 56dp at the large corner with a 24dp glyph
+    // (FabBaselineTokens). M3 Expressive deprecates the small 40dp FAB
+    // (FloatingActionButton.md, "Deprecated small FAB size"), and Compose's
+    // FAB menu only starts from the baseline, medium or large FAB, never the
+    // small one (FloatingActionButtonMenu.kt:711-733, FabInitialSize and
+    // FabInitialCornerRadius 16dp).
+    readonly property real fabSize: 56
     // Open, it becomes the menu's close button: 56dp, full round, a 20dp
     // glyph, on the primary role rather than its container
     // (FabMenuBaselineTokens.CloseButton*, and the final colours of
@@ -182,12 +184,13 @@ Item {
         background: Rectangle {
             objectName: "fabShape"
             color: root.open ? Theme.primary : Theme.primaryContainer
-            // A small FAB rests at the medium shape step and morphs to full
-            // when it becomes the menu's close button.
-            radius: root.open ? Theme.shapeFull(fab.height) : root.extended ? Theme.shapeLarge : Theme.shapeMedium
+            // The FAB rests at the large shape step and morphs to full when it
+            // becomes the menu's close button.
+            radius: root.open ? Theme.shapeFull(fab.height) : Theme.shapeLarge
             Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             Behavior on color { ColorAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
-            MElevation { anchors.fill: parent; radius: parent.radius; level: 3 }
+            // FabPrimaryContainerTokens: Level3 at rest, Level4 hovered.
+            MElevation { anchors.fill: parent; radius: parent.radius; level: fab.hovered && !fab.down ? 4 : 3 }
             Rectangle {
                 anchors.fill: parent; radius: parent.radius
                 color: root.open ? Theme.primaryText : Theme.containerText

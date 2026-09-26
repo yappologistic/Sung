@@ -18,7 +18,7 @@ MDialog {
     modal: true
     closePolicy: Popup.NoAutoClose
     anchors.centerIn: parent
-    width: Math.min(640,parent ? parent.width-48 : 640)
+    width: fitWidth(560)
     standardButtons: Dialog.NoButton
     function finish() {
         app.onboarded=true;

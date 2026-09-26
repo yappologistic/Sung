@@ -29,7 +29,7 @@ ListView {
     flickDeceleration: 2400
     reuseItems: true
     cacheBuffer: Math.round(cellWidth*2)
-    ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+    ScrollBar.horizontal: MScrollBar {}
 
     delegate: Item {
         id: cell

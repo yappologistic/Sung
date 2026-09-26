@@ -87,6 +87,11 @@ ItemDelegate {
     // room in a 72dp row, so it hung below the container.
     topPadding: 8
     bottomPadding: 8
+    // ListTokens.ItemLeadingSpace and ItemTrailingSpace are 16dp
+    // (ListItem.kt:1279-1281 agrees); Basic's 12dp set the cover and the
+    // trailing action closer to the edge than a Material list item has them.
+    leftPadding: 16
+    rightPadding: 16
     // ListItem.kt:1172 sizes an item as the larger of its container token and
     // its padded content. ListTokens.ItemOneLineContainerHeight is 56dp when
     // the album heading already supplies the artist, but the 56dp cover then

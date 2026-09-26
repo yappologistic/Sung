@@ -111,7 +111,9 @@ ColumnLayout {
             objectName: "navPin_"+index
             expanded: true
             Layout.alignment: Qt.AlignLeft
-            Layout.preferredWidth: rail.shownWidth-rail.itemInset; Layout.preferredHeight: 48
+            // A pinned destination is a rail item like the rest, 56dp tall
+            // (NavigationRailHorizontalItemTokens.ActiveIndicatorHeight).
+            Layout.preferredWidth: rail.shownWidth-rail.itemInset; Layout.preferredHeight: implicitHeight
             itemPadding: rail.itemInset
             artUrl: modelData.art || ""; text: modelData.title || ""
             selected: rail.current==="library" && !!modelData.id && rail.pinSelected(modelData)

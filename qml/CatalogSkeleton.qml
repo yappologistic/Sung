@@ -27,20 +27,30 @@ Item {
         return 0.55 + 0.35*(0.5 + 0.5*Math.sin(skeleton.wave - 2*Math.PI*(x+y)/skeleton.diagonal))
     }
 
+    // A placeholder row is laid out as TrackRow lays out a real one: the
+    // ListTokens 16dp leading space, the row's cover at its size and corner,
+    // 12dp to the text, and the list's 4dp between rows. When the songs
+    // arrive they land where their placeholders were instead of shifting.
+    readonly property int rowStride: Theme.rowHeight + 4
+    readonly property int textStart: 16 + Theme.rowArtwork + 12
     Item {
         id: shapes; anchors.fill: parent
         Repeater {
-            model: skeleton.cards?Math.min(8,Math.max(1,Math.floor(skeleton.width/180))*2):Math.min(8,Math.ceil(skeleton.height/80))
+            model: skeleton.cards?Math.min(8,Math.max(1,Math.floor(skeleton.width/180))*2):Math.min(8,Math.ceil(skeleton.height/skeleton.rowStride))
             Item {
                 required property int index
                 readonly property int columns: Math.max(1,Math.floor(skeleton.width/180))
                 x: skeleton.cards?(index%columns)*(skeleton.width/columns):0
-                y: skeleton.cards?Math.floor(index/columns)*230:index*80
-                width: skeleton.cards?skeleton.width/columns-20:skeleton.width; height: skeleton.cards?210:72
+                y: skeleton.cards?Math.floor(index/columns)*230:index*skeleton.rowStride
+                width: skeleton.cards?skeleton.width/columns-20:skeleton.width; height: skeleton.cards?210:Theme.rowHeight
                 opacity: skeleton.animating ? skeleton.pulseAt(x,y) : 0.7
-                Rectangle { width: skeleton.cards?Math.min(parent.width,180):52; height: width; radius: skeleton.cards?20:12; color: Theme.high }
-                Rectangle { x: skeleton.cards?0:68; y: skeleton.cards?Math.min(parent.width,180)+14:14; width: skeleton.cards?parent.width*0.72:parent.width*0.38; height: 12; radius: Theme.shapeSmall; color: Theme.high }
-                Rectangle { x: skeleton.cards?0:68; y: skeleton.cards?Math.min(parent.width,180)+36:38; width: skeleton.cards?parent.width*0.45:parent.width*0.23; height: 9; radius: Theme.shapeExtraSmall; color: Theme.high }
+                Rectangle {
+                    x: skeleton.cards?0:16; y: skeleton.cards?0:(parent.height-height)/2
+                    width: skeleton.cards?Math.min(parent.width,180):Theme.rowArtwork; height: width
+                    radius: skeleton.cards?Theme.shapeLargeIncreased:Theme.shapeSmall; color: Theme.high
+                }
+                Rectangle { x: skeleton.cards?0:skeleton.textStart; y: skeleton.cards?Math.min(parent.width,180)+14:parent.height/2-14; width: skeleton.cards?parent.width*0.72:parent.width*0.38; height: 12; radius: Theme.shapeSmall; color: Theme.high }
+                Rectangle { x: skeleton.cards?0:skeleton.textStart; y: skeleton.cards?Math.min(parent.width,180)+36:parent.height/2+6; width: skeleton.cards?parent.width*0.45:parent.width*0.23; height: 9; radius: Theme.shapeExtraSmall; color: Theme.high }
             }
         }
     }
