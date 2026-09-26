@@ -20,16 +20,11 @@ Item {
     property real drift: 1
     readonly property bool active: allowed && app.ambientBackdrop && !!url
     onActiveChanged: if (active) heldUrl = url
-    // MCU color_spec_2021.ts:241-248 gives onSurfaceVariant a surface
-    // contrast curve. The cover is part of that surface, so the decoded
-    // pixels determine the smallest scrim meeting the same text target.
-    // color_spec_2021.ts:247 gives 4.5:1 at standard, 7:1 at medium and
-    // 11:1 at high. Keep dim whenever the decoded cover already passes.
-    readonly property real inkTarget: app.colorContrast <= 0.5
-        ? 4.5 + 5 * app.colorContrast
-        : 7 + 8 * (app.colorContrast - 0.5)
+    // The cover is part of the surface text sits on, so the decoded pixels
+    // determine the smallest scrim meeting Theme.textContrast. Keep dim
+    // whenever the decoded cover already passes.
     readonly property real effectiveDim: art.ready
-        ? art.minimumScrim(scrim, Theme.muted, dim, inkTarget) : dim
+        ? art.minimumScrim(scrim, Theme.muted, dim, Theme.textContrast) : dim
     readonly property bool drifts: corner <= 0
     readonly property bool animating: drifts && active && visible && app.motion && Window.window && Window.window.visible && Window.window.visibility!==Window.Minimized
     // The decoded low end already drives the playing indicator. Reusing it here
