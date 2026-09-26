@@ -1683,7 +1683,9 @@ void runInteractionTests(Backend *b,QQuickWindow *w) {
   // :262-280 waits for the next pointer Enter before showing it again.
   if(label){
     const auto point=label->mapToScene(QPointF(40,label->height()/2)).toPoint();
-    auto showing=[&]{auto tip=label->findChild<QObject*>("fullTitleTip");return tip&&tip->property("visible").toBool();};
+    // The tooltip closes with a transition and stays visible while it plays;
+    // it is dismissed once it is no longer opened.
+    auto showing=[&]{auto tip=label->findChild<QObject*>("fullTitleTip");return tip&&tip->property("opened").toBool();};
     QTest::mouseClick(w,Qt::LeftButton,Qt::NoModifier,point);QTest::qWait(80);
     check(!showing(),"pressing the track title dismisses its reveal");
     QTest::qWait(750);
