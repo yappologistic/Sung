@@ -6405,6 +6405,10 @@ void runMaterialAnatomyTests(Backend *b, QQuickWindow *w) {
               c.clickWithin(rows, "ambientBackdropSwitch");
               c.until([&] { return !sw->property("checked").toBool(); }, 2000);
             }
+            // At rest: a hovered handle steps to onSurfaceVariant
+            // (SwitchTokens.UnselectedHoverHandleColor), so the pointer leaves.
+            QTest::mouseMove(w, QPoint(8, w->height() - 8));
+            QTest::qWait(250);
             auto track = anyItem(sw, "switchTrack");
             auto handle = anyItem(sw, "switchHandle");
             c.check(!sw->property("checked").toBool(), "a switch can be turned off");
