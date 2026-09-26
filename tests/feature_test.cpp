@@ -3450,13 +3450,27 @@ void runMaterialDetailTests(Backend *b, QQuickWindow *w) {
             "and so is the secondary set's");
     c.check(secondaryTabs->height() >= 47.5,
             QString("which is as tall as the primary one (%1)").arg(secondaryTabs->height()));
+    // The divider spans the row, not only the tabs in it.
+    c.check(divider && qAbs(divider->width() - primaryTabs->width()) < 0.5,
+            QString("the divider runs the width of the row (%1 of %2)")
+                .arg(divider ? divider->width() : 0, 0, 'f', 0).arg(primaryTabs->width(), 0, 'f', 0));
     auto primaryTab = shownItem(primaryTabs, "localFilesTab");
     auto secondaryTab = shownItem(secondaryTabs, "localView_files");
     c.check(primaryTab && secondaryTab, "both mark Local files as chosen");
     if (primaryTab && secondaryTab) {
-      auto primaryMark = anyItem(primaryTab, "tabIndicator");
-      auto secondaryMark = anyItem(secondaryTab, "tabIndicator");
+      // One indicator per row, which travels to the chosen tab.
+      auto primaryMark = anyItem(primaryTabs, "tabIndicator");
+      auto secondaryMark = anyItem(secondaryTabs, "tabIndicator");
       c.check(primaryMark && secondaryMark, "and both draw an indicator");
+      if (primaryMark && secondaryMark) {
+        const auto under = [](QQuickItem *mark, QQuickItem *tab) {
+          const QRectF m = mark->mapRectToScene(mark->boundingRect());
+          const QRectF t = tab->mapRectToScene(tab->boundingRect());
+          return qAbs(m.center().x() - t.center().x()) < 1;
+        };
+        c.check(under(primaryMark, primaryTab) && under(secondaryMark, secondaryTab),
+                "each standing under its chosen tab");
+      }
       if (primaryMark && secondaryMark) {
         c.check(primaryMark->height() == 3 && primaryMark->width() < primaryTab->width() - 8,
                 QString("the primary indicator is 3 tall and sits under the label alone (%1 of %2)")
