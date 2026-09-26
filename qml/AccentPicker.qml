@@ -36,11 +36,7 @@ Flow {
                 color: swatch.modelData ? swatch.modelData : Theme.high
                 border.width: swatch.modelData ? 0 : 2
                 border.color: Theme.outline
-                Rectangle {
-                    anchors.fill: parent; anchors.margins: -4; radius: Theme.shapeExtraLarge
-                    color: "transparent"; border.width: 2; border.color: Theme.focusRing
-                    visible: swatch.visualFocus
-                }
+                MFocusRing { targetRadius: parent.radius; visible: swatch.visualFocus }
                 Rectangle {
                     anchors.fill: parent; radius: Theme.shapeLargeIncreased
                     color: Theme.text

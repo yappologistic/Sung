@@ -58,7 +58,7 @@ Item {
                 Accessible.name: "View artist picture"
                 focusPolicy: Qt.StrongFocus
                 onClicked: artworkViewer.inspect(app.cover)
-                background: Rectangle { color: "transparent"; radius: width/2; border.width: parent.visualFocus?2:0; border.color: Theme.focusRing }
+                background: Item { MFocusRing { targetRadius: width/2; visible: parent.parent.visualFocus } }
             }
         }
 

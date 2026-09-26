@@ -52,11 +52,7 @@ AbstractButton {
             opacity: control.down || control.visualFocus ? Theme.pressedOpacity : control.hovered ? Theme.hoverOpacity : 0
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
-        Rectangle {
-            anchors.fill: parent; anchors.margins: -3; radius: Theme.shapeMedium
-            color: "transparent"; border.width: 2; border.color: Theme.focusRing
-            visible: control.visualFocus
-        }
+        MFocusRing { objectName: "chipFocusRing"; targetRadius: parent.radius; visible: control.visualFocus }
     }
     contentItem: Item {
         opacity: control.dimmed ? Theme.disabledContentOpacity : 1
@@ -99,8 +95,8 @@ AbstractButton {
                 Rectangle {
                     objectName: "chipRemoveFocusRing"
                     anchors.centerIn: removeIcon
-                    width: removeIcon.width + 6; height: width; radius: width / 2
-                    color: "transparent"; border.width: 2; border.color: Theme.focusRing
+                    width: removeIcon.width + Theme.focusRingOutset*2; height: width; radius: width / 2
+                    color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing
                     visible: removeAction.visualFocus
                 }
             }

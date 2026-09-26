@@ -46,7 +46,8 @@ TextField {
     font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge
     color: dimmed ? onSurface(Theme.disabledContentOpacity) : Theme.text
     placeholderTextColor: dimmed ? onSurface(Theme.disabledContentOpacity) : Theme.muted
-    selectionColor: Theme.primary; selectedTextColor: Theme.primaryText
+    selectionColor: Theme.textSelection; selectedTextColor: Theme.text
+    cursorDelegate: MCaret {}
     // Material reserves the supporting line so a field does not jump when an
     // error arrives.
     bottomInset: supportLine.visible ? -supportLine.height-4 : 0

@@ -192,7 +192,7 @@ Rectangle {
                     objectName: "navBarFocusRing_" + destination.modelData.key
                     anchors.fill: parent; anchors.margins: 2
                     radius: Theme.shapeFull(height)
-                    color: "transparent"; border.width: 2; border.color: Theme.focusRing
+                    color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing
                     visible: destination.visualFocus
                 }
             }

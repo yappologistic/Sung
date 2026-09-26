@@ -216,13 +216,11 @@ AbstractButton {
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         }
     }
-    Rectangle {
+    // The ring sits outside the button, so optical roundness adds the gap
+    // between them rather than repeating the button's own radius.
+    MFocusRing {
         objectName: "buttonFocusRing"
-        anchors.fill: control.background; anchors.margins: -3
-        // The ring sits outside the button, so optical roundness adds the gap
-        // between them rather than repeating the button's own radius.
-        radius: Theme.shapeInside(control.background.radius, -3); color: "transparent"
-        border.width: 2; border.color: Theme.focusRing
+        target: control.background; targetRadius: control.background.radius
         visible: control.visualFocus && !control.shaped
     }
     // A shaped container takes the rectangle's colour and state layer and
@@ -253,7 +251,7 @@ AbstractButton {
             // It exists only while focused: an outline that pulses with the
             // music is rebuilt every frame, and a hidden one would be too.
             Loader {
-                anchors.fill: parent; anchors.margins: -3
+                anchors.fill: parent; anchors.margins: -Theme.focusRingOutset
                 active: control.visualFocus
                 sourceComponent: MShape {
                     objectName: "buttonShapeFocusRing"
@@ -261,7 +259,7 @@ AbstractButton {
                     toShape: control.selectedMaterialShape || control.materialShape
                     progress: parent.parent.morph
                     pulse: control.shapePulse*parent.parent.morph
-                    color: "transparent"; strokeColor: Theme.focusRing; strokeWidth: 2
+                    color: "transparent"; strokeColor: Theme.focusRing; strokeWidth: Theme.focusRingWidth
                 }
             }
         }

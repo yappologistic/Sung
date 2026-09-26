@@ -1147,10 +1147,11 @@ void runImmersivePolishTests(Backend *b,QQuickWindow *w) {
     auto button=visibleItem(w->contentItem(),pair.first);
     auto ring=w->findChild<QQuickItem*>(pair.second);
     if(button)button->forceActiveFocus(Qt::TabFocusReason);
-    check(button&&ring&&waitFor([&]{return ring->isVisible();})&&qAbs(ring->x()+3)<0.5&&
-          qAbs(ring->width()-button->width()-6)<0.5&&ring->property("radius").toDouble()>12&&
-          QQmlProperty::read(ring,"border.width",qmlContext(ring)).toInt()==2,
-          qPrintable(QString("%1 uses an external 2px shaped focus ring").arg(pair.first)));
+    // md.sys.state.focus-indicator: 3px thick, 2px clear of the control.
+    check(button&&ring&&waitFor([&]{return ring->isVisible();})&&qAbs(ring->x()+5)<0.5&&
+          qAbs(ring->width()-button->width()-10)<0.5&&ring->property("radius").toDouble()>12&&
+          QQmlProperty::read(ring,"border.width",qmlContext(ring)).toInt()==3,
+          qPrintable(QString("%1 uses an external 3px shaped focus ring 2px out").arg(pair.first)));
     check(button&&button->property("leftPadding").toDouble()==12&&
           button->property("rightPadding").toDouble()==12&&button->height()>=48,
           qPrintable(QString("%1 gives its label Material text-button padding in a 48dp target").arg(pair.first)));

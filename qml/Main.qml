@@ -923,7 +923,7 @@ ApplicationWindow {
                             PlaylistCover { objectName:"collectionPlaylistCover"; visible:app.page==="local" && !app.cover; artworks:parent.playlistData.artworks || []; radius:Theme.shapeExtraLarge; Layout.preferredWidth:content.headerExtent; Layout.preferredHeight:content.headerExtent }
                             Artwork { id:collectionArtwork;objectName:"collectionArtwork";opacity:window.albumFlying?0:1;visible: !!app.cover; url: app.cover; Layout.preferredWidth: content.headerExtent; Layout.preferredHeight: content.headerExtent; radius: (app.page==="artist" || app.page==="local-artist") ? width/2 : app.albumInfo.summary?24:12; shape: (app.page==="artist" || app.page==="local-artist") ? "cookie9Sided" : ""; pixels: app.albumInfo.summary?384:180
                                 AbstractButton {anchors.fill:parent;objectName:"inspectCollectionArtwork";Accessible.name:"View artwork";focusPolicy:Qt.StrongFocus;onClicked:artworkViewer.inspect(app.cover)
-                                    background:Rectangle {color:"transparent";radius:Theme.shapeExtraLarge;border.width:parent.visualFocus?2:0;border.color:Theme.primary}
+                                    background:Item {MFocusRing {targetRadius:collectionArtwork.radius;visible:parent.parent.visualFocus}}
                                 }
                             }
                             ColumnLayout {
@@ -1106,7 +1106,7 @@ ApplicationWindow {
                                 id: collectionSearch; objectName: "collectionSearch"; Layout.fillWidth: true; implicitHeight: 44
                                 font.family: Theme.fontFamily; font.pixelSize: Theme.bodyMedium; color: Theme.text
                                 placeholderText: "Find in this list"; placeholderTextColor: Theme.muted
-                                selectionColor: Theme.primaryContainer; selectedTextColor: Theme.text
+                                selectionColor: Theme.textSelection; selectedTextColor: Theme.text; cursorDelegate: MCaret {}
                                 leftPadding: 14; rightPadding: 14; selectByMouse: true
                                 text: app.collection.query
                                 onTextEdited: app.collection.query=text
@@ -1345,8 +1345,8 @@ ApplicationWindow {
                                     required property var modelData; width: localPlaylists.width; height:app.viewCompactDensity?64:76; radius: Theme.shapeLarge; color: Theme.container
                                     RowLayout {
                                         anchors.fill: parent; anchors.margins: 12; spacing: 12
-                                        AbstractButton { Layout.preferredWidth: 48; Layout.preferredHeight: 48; focusPolicy: Qt.StrongFocus; Accessible.name: "Open "+modelData.title; contentItem: PlaylistCover { artworks: modelData.artworks || [] } background: Rectangle { color: "transparent"; radius: Theme.shapeMedium; border.width: parent.activeFocus?2:0; border.color: Theme.focusRing } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} }
-                                        AbstractButton { Layout.fillWidth: true; Layout.fillHeight: true; focusPolicy: Qt.StrongFocus; Accessible.name: modelData.title; background: Rectangle { color: "transparent"; radius: Theme.shapeSmall; border.width: parent.activeFocus?2:0; border.color: Theme.focusRing } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} contentItem: Column { spacing: 4; SungText { text: modelData.title; font.pixelSize: Theme.bodyLarge; width: parent.width } SungText { text: modelData.smart?"Smart playlist":window.countText(modelData.count); color: Theme.muted; font.pixelSize: Theme.bodySmall } } }
+                                        AbstractButton { Layout.preferredWidth: 48; Layout.preferredHeight: 48; focusPolicy: Qt.StrongFocus; Accessible.name: "Open "+modelData.title; contentItem: PlaylistCover { artworks: modelData.artworks || [] } background: Item { MFocusRing { targetRadius: Theme.shapeMedium; visible: parent.parent.visualFocus } } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} }
+                                        AbstractButton { Layout.fillWidth: true; Layout.fillHeight: true; focusPolicy: Qt.StrongFocus; Accessible.name: modelData.title; background: Item { MFocusRing { targetRadius: Theme.shapeSmall; visible: parent.parent.visualFocus } } onClicked: {window.localPlaylist=modelData.id;app.openPlaylist(modelData.id);} contentItem: Column { spacing: 4; SungText { text: modelData.title; font.pixelSize: Theme.bodyLarge; width: parent.width } SungText { text: modelData.smart?"Smart playlist":window.countText(modelData.count); color: Theme.muted; font.pixelSize: Theme.bodySmall } } }
                                         MButton { symbol: "more"; tip: "Playlist actions"; onClicked: {window.editPlaylistId=modelData.id;playlistName.text=modelData.title;playlistActions.popup(this,width-playlistActions.width,height+4);} }
                                     }
                                 }
@@ -1490,14 +1490,14 @@ ApplicationWindow {
                             id: playerLeftRow; anchors.fill: parent; spacing: 16
                             AbstractButton { id: nowButton; objectName: "nowButton"; Layout.preferredWidth: 64; Layout.preferredHeight: 64; enabled: app.currentIndex>=0; focusPolicy: Qt.StrongFocus; Accessible.name: "Now playing"; onClicked: window.activateSide("now")
                                 contentItem: Artwork { id: nowArtwork; objectName: "nowArtwork"; url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; radius: Theme.shapeMedium; pixels: 150; fit:app.currentArtworkFit; opacity: window.coverFlying?0:1 }
-                                background: Rectangle { anchors.fill: parent; anchors.margins: -3; color: "transparent"; radius: Theme.shapeLarge; border.width: parent.activeFocus?2:0; border.color: Theme.focusRing }
+                                background: Item { MFocusRing { targetRadius: Theme.shapeMedium; visible: nowButton.visualFocus } }
                             }
                             ColumnLayout {
                                 id: nowDetails
                                 Layout.fillWidth: true; Layout.minimumWidth: 100; Layout.maximumWidth: 220
                                 spacing: 6; opacity: nowPresentation.fade*window.coverDetailsOpacity; transform: Translate { x: nowPresentation.offset }
-                                AbstractButton { objectName: "nowTitle"; Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.title || "Nothing playing"; font.pixelSize: Theme.titleMedium; font.weight: Font.DemiBold } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
-                                AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open(window.relatedItem(app.current,"artist")); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.artist || ""; color: Theme.muted; font.pixelSize: Theme.bodyMedium } background: Rectangle { color: "transparent"; radius: Theme.shapeExtraSmall; border.width: parent.activeFocus?1:0; border.color: Theme.focusRing } }
+                                AbstractButton { objectName: "nowTitle"; Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: app.currentIndex>=0; Accessible.name: "Now playing: " + (app.current.title || "Nothing playing"); onClicked: window.activateSide("now"); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.title || "Nothing playing"; font.pixelSize: Theme.titleMedium; emphasized: true } background: Item { MFocusRing { targetRadius: Theme.shapeExtraSmall; visible: parent.parent.visualFocus } } }
+                                AbstractButton { Layout.fillWidth: true; implicitHeight: 24; focusPolicy: Qt.StrongFocus; enabled: !!app.current.artistId; Accessible.name: "Go to " + (app.current.artist || "artist"); onClicked: app.open(window.relatedItem(app.current,"artist")); contentItem: MatchText { revealFocused: parent.activeFocus; sourceText: nowPresentation.shown.artist || ""; color: Theme.muted; font.pixelSize: Theme.bodyMedium } background: Item { MFocusRing { targetRadius: Theme.shapeExtraSmall; visible: parent.parent.visualFocus } } }
                             }
                             MButton { id: likeButton; symbol: "heart"; tip: app.liked?"Unlike":"Like"; toggle: true; selected: app.liked; enabled: app.currentIndex>=0; visible: playerLayout.showLike; onClicked: app.toggleLike(app.current) }
                         }
@@ -1636,7 +1636,7 @@ ApplicationWindow {
         // Material's search bar sits on surfaceContainerHigh whether
         // or not it holds focus; the focus ring does the rest.
         color: Theme.high; radius: Theme.shapeExtraLarge
-        border.width: searchField.activeFocus?2:0; border.color: Theme.focusRing
+        border.width: searchField.activeFocus?Theme.focusRingWidth:0; border.color: Theme.focusRing
         Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
         // SearchBarDefaults.ShadowElevation in SearchBar.kt:2000 is Level0,
         // overriding SearchBarTokens.ContainerElevation's generated Level3.
@@ -1649,7 +1649,7 @@ ApplicationWindow {
             TextField {
                 font.family: Theme.fontFamily; id: searchField; objectName: "searchField"; Layout.fillWidth: true; Layout.fillHeight: true
                 placeholderText: app.page==="server"?"Search server":"Search music"; placeholderTextColor: Theme.muted
-                color: Theme.text; selectionColor: Theme.primaryContainer; selectedTextColor: Theme.text
+                color: Theme.text; selectionColor: Theme.textSelection; selectedTextColor: Theme.text; cursorDelegate: MCaret {}
                 font.pixelSize: Theme.bodyLarge; background: null; selectByMouse: true
                 Accessible.name: app.page==="server"?"Search music server":"Search songs, albums, artists, playlists, or paste a YouTube link"
                 property var suggestions: []
