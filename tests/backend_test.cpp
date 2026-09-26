@@ -466,6 +466,41 @@ private slots:
     b.importLocalFiles(urls);b.cancelLocalImport();QTest::qWait(150);QVERIFY(!b.importingLocal());
     b.stop();b.deletePlaylist(playlist);b.m_localTracks.clear();b.clearQueue();b.setLyricsFallback(true);b.setAutoplay(true);
   }
+  // The play log keeps 20,000 rows. The listening graph keeps every day's
+  // total besides, so a heavy listener's earlier months stay on it, and a day
+  // whose plays have gone still reports its time and count.
+  void listeningGraphOutlivesThePlayLog() {
+    Backend b;
+    b.clearListeningStats();
+    const QDate old = QDate::currentDate().addDays(-400);
+    const qint64 at = QDateTime(old, QTime(9, 0)).toSecsSinceEpoch();
+    b.m_plays.append(QVariantMap{{"at", at}, {"id", "early"}, {"title", "Early"}, {"artist", "Dawn"}, {"seconds", 240}});
+    b.countListeningDay(at, 240);
+    QCOMPARE(b.listeningStatsOn(old.toString(Qt::ISODate)).value("topSongs").toList().size(), 1);
+    auto today = track("today0001");
+    today["seconds"] = 180;
+    for (int i = 0; i < 20000; ++i) b.recordPlay(today);
+    QCOMPARE(b.m_plays.size(), 20000);
+    QVERIFY(b.m_plays.first().toMap().value("id").toString() != "early");
+    const auto day = b.listeningStatsOn(old.toString(Qt::ISODate));
+    QCOMPARE(day.value("seconds").toLongLong(), 240);
+    QCOMPARE(day.value("plays").toInt(), 1);
+    QVERIFY(day.value("totalOnly").toBool());
+    QVERIFY(day.value("topSongs").toList().isEmpty());
+    const auto calendar = b.listeningCalendar(old.year());
+    bool found = false;
+    for (const auto &v : calendar.value("days").toList())
+      if (v.toMap().value("date") == old.toString(Qt::ISODate))
+        found = v.toMap().value("seconds").toLongLong() == 240 && v.toMap().value("level").toInt() > 0;
+    QVERIFY(found);
+    QVERIFY(calendar.value("years").toList().contains(old.year()));
+    const auto now = b.listeningCalendar(0).value("days").toList().last().toMap();
+    QCOMPARE(now.value("plays").toInt(), 20000);
+    QCOMPARE(now.value("level").toInt(), 4);
+    QVERIFY(b.libraryDocument().value("listeningDays").toMap().contains(old.toString(Qt::ISODate)));
+    b.clearListeningStats();
+    QVERIFY(b.m_listeningDays.isEmpty());
+  }
   void listeningFeatures() {
     const auto oldHelper=qgetenv("SUNG_HELPER"),oldPython=qgetenv("SUNG_PYTHON");
     qputenv("SUNG_HELPER",qgetenv("SUNG_FIXTURE_HELPER"));qputenv("SUNG_PYTHON","/usr/bin/python3");qputenv("SUNG_BUFFER_FIXTURE","1");

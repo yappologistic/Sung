@@ -6,7 +6,10 @@
 #include <QStandardPaths>
 #include <QDateTime>
 #include <QHash>
+#include <QLocale>
 #include <algorithm>
+#include <functional>
+#include <limits>
 
 QVariantMap Backend::albumInfo() const {
   if(m_page!="album" && m_page!="local-album" && !(m_page=="server" && m_request.value("mode")=="album"))return {};
@@ -150,7 +153,10 @@ void Backend::updateFolderWatches(const QStringList &paths){
 #include <QCryptographicHash>
 #include <QUuid>
 #include <cmath>
+#include <QLocale>
 #include <algorithm>
+#include <functional>
+#include <limits>
 
 // Group by album artist (where tagged), not the individual song performer.
 static QString groupArtist(const QVariantMap &t) {
@@ -361,19 +367,31 @@ void Backend::recordPlay(const QVariantMap &track) {
   if(m_historyPaused)return;
   const auto id=track.value("id").toString();
   if(id.isEmpty())return;
-  m_plays.append(QVariantMap{{"at",QDateTime::currentSecsSinceEpoch()},
+  const auto at=QDateTime::currentSecsSinceEpoch();
+  m_plays.append(QVariantMap{{"at",at},
                              {"id",id},
                              {"title",track.value("title")},
                              {"artist",track.value("artist")},
                              {"album",track.value("album")},
                              {"seconds",track.value("seconds")}});
+  countListeningDay(at,track.value("seconds").toLongLong());
   // Roughly a decade of ordinary listening, then the oldest fall away.
   while(m_plays.size()>20000)m_plays.removeFirst();
 }
 
+void Backend::countListeningDay(qint64 at, qint64 seconds) {
+  if(seconds<0 || seconds>86400)seconds=0;
+  const auto key=QDateTime::fromSecsSinceEpoch(at).date().toString(Qt::ISODate);
+  const auto day=m_listeningDays.value(key).toList();
+  m_listeningDays.insert(key,QVariantList{day.value(0).toLongLong()+seconds,day.value(1).toInt()+1});
+  // Ten years of days. The keys sort as dates, so the first is the oldest.
+  while(m_listeningDays.size()>3660)m_listeningDays.remove(m_listeningDays.firstKey());
+}
+
 void Backend::clearListeningStats() {
-  if(m_plays.isEmpty())return;
+  if(m_plays.isEmpty() && m_listeningDays.isEmpty())return;
   m_plays.clear();
+  m_listeningDays.clear();
   emit libraryChanged();
   m_saveTimer.start();
   emit toast("Listening statistics cleared");
@@ -381,20 +399,35 @@ void Backend::clearListeningStats() {
 
 QVariantMap Backend::listeningStats(int days) const {
   const qint64 now=QDateTime::currentSecsSinceEpoch();
-  const qint64 from=days>0?now-qint64(days)*86400:0;
+  return statsBetween(days>0?now-qint64(days)*86400:0,std::numeric_limits<qint64>::max());
+}
+
+QVariantMap Backend::listeningStatsOn(const QString &date) const {
+  const auto day=QDate::fromString(date,Qt::ISODate);
+  if(!day.isValid())return {};
+  auto stats=statsBetween(day.startOfDay().toSecsSinceEpoch(),day.addDays(1).startOfDay().toSecsSinceEpoch());
+  // A day older than the play log still has its total: the rankings for it
+  // are gone, the time and the count are not.
+  const auto total=m_listeningDays.value(day.toString(Qt::ISODate)).toList();
+  if(stats.value("plays").toInt()==0 && !total.isEmpty()){
+    stats["seconds"]=total.value(0).toLongLong();
+    stats["plays"]=total.value(1).toInt();
+    stats["totalOnly"]=true;
+  }
+  return stats;
+}
+
+QVariantMap Backend::statsBetween(qint64 from, qint64 to) const {
   struct Tally { qint64 seconds=0; int plays=0; QString subtitle; };
   QHash<QString,Tally> artists,albums,songs;
   QSet<QString> distinctSongs;
   qint64 total=0;
   int plays=0;
-  // One bucket per day, oldest first, for the shape of the period.
-  const int buckets=days>0?qMin(days,90):0;
-  QList<qint64> daily(buckets,0);
   const QChar separator(0x1f);
   for(const auto &v:m_plays){
     const auto play=v.toMap();
     const auto at=play.value("at").toLongLong();
-    if(at<from)continue;
+    if(at<from || at>=to)continue;
     auto seconds=play.value("seconds").toLongLong();
     if(seconds<0 || seconds>86400)seconds=0;
     total+=seconds;
@@ -406,10 +439,6 @@ QVariantMap Backend::listeningStats(int days) const {
     if(!artist.isEmpty()){auto &t=artists[artist];t.seconds+=seconds;++t.plays;}
     if(!album.isEmpty()){auto &t=albums[album];t.seconds+=seconds;++t.plays;if(t.subtitle.isEmpty())t.subtitle=artist;}
     if(!title.isEmpty()){auto &t=songs[title+separator+artist];t.seconds+=seconds;++t.plays;t.subtitle=artist;}
-    if(buckets>0){
-      const int bucket=buckets-1-int((now-at)/86400);
-      if(bucket>=0 && bucket<buckets)daily[bucket]+=seconds;
-    }
   }
   // Most time first, with the name breaking ties so the order never wobbles.
   const auto rank=[separator](const QHash<QString,Tally> &source,bool joinedKey){
@@ -428,10 +457,6 @@ QVariantMap Backend::listeningStats(int days) const {
     });
     return rows.mid(0,10);
   };
-  QVariantList dailyRows;
-  for(int i=0;i<buckets;++i)
-    dailyRows.append(QVariantMap{{"day",QDateTime::fromSecsSinceEpoch(now-qint64(buckets-1-i)*86400).date().toString("ddd")},
-                                 {"seconds",daily[i]}});
   return {{"plays",plays},
           {"seconds",total},
           {"songs",distinctSongs.size()},
@@ -439,8 +464,64 @@ QVariantMap Backend::listeningStats(int days) const {
           {"albums",albums.size()},
           {"topArtists",rank(artists,false)},
           {"topAlbums",rank(albums,false)},
-          {"topSongs",rank(songs,true)},
-          {"daily",dailyRows}};
+          {"topSongs",rank(songs,true)}};
+}
+
+// The listening graph is GitHub's contribution calendar with time listened in
+// place of commits: a column per week, a row per weekday starting where the
+// locale starts its week, and each day shaded by which quarter of the listened
+// days it falls in, as GitHub shades by quartile. Days before the range that
+// share its first week are returned as padding so the columns line up.
+QVariantMap Backend::listeningCalendar(int year) const {
+  const QDate today=QDate::currentDate();
+  const QDate from=year>0?QDate(year,1,1):today.addDays(-364);
+  const QDate to=year>0?qMin(QDate(year,12,31),today):today;
+  if(!from.isValid() || from>to)return {};
+  const int weekStart=int(QLocale::system().firstDayOfWeek());
+  const QDate first=from.addDays(-((from.dayOfWeek()-weekStart+7)%7));
+  QList<qint64> listened;
+  qint64 total=0;
+  for(QDate d=from;d<=to;d=d.addDays(1)){
+    const qint64 seconds=m_listeningDays.value(d.toString(Qt::ISODate)).toList().value(0).toLongLong();
+    if(seconds>0){listened.append(seconds);total+=seconds;}
+  }
+  std::sort(listened.begin(),listened.end());
+  const auto quartile=[&](int q){return listened.isEmpty()?0:listened[qMin(listened.size()-1,listened.size()*q/4)];};
+  const qint64 low=quartile(1),middle=quartile(2),high=quartile(3);
+  QVariantList days;
+  for(QDate d=first;d<=to;d=d.addDays(1)){
+    const auto day=d<from?QVariantList{}:m_listeningDays.value(d.toString(Qt::ISODate)).toList();
+    const qint64 seconds=day.value(0).toLongLong();
+    // Counted from the top, so the busiest days are always the darkest, a
+    // single day of music included.
+    const int level=seconds<=0?0:seconds>=high?4:seconds>=middle?3:seconds>=low?2:1;
+    days.append(QVariantMap{{"date",d.toString(Qt::ISODate)},{"seconds",seconds},{"plays",day.value(1).toInt()},
+                            {"level",level},{"padding",d<from}});
+  }
+  // A streak is still alive until a whole day passes without music, so one
+  // that reached yesterday counts while today is still young.
+  const auto listenedOn=[this](const QDate &d){return m_listeningDays.value(d.toString(Qt::ISODate)).toList().value(0).toLongLong()>0;};
+  int streak=0;
+  for(QDate d=listenedOn(today)?today:today.addDays(-1);listenedOn(d);d=d.addDays(-1))++streak;
+  int longest=0,run=0;
+  QDate previous;
+  QSet<int> years;
+  for(auto i=m_listeningDays.constBegin();i!=m_listeningDays.constEnd();++i){
+    if(i.value().toList().value(0).toLongLong()<=0)continue;
+    const auto d=QDate::fromString(i.key(),Qt::ISODate);
+    run=previous.isValid() && previous.addDays(1)==d?run+1:1;
+    longest=qMax(longest,run);
+    previous=d;
+    years.insert(d.year());
+  }
+  years.insert(today.year());
+  QList<int> sortedYears(years.begin(),years.end());
+  std::sort(sortedYears.begin(),sortedYears.end(),std::greater<int>());
+  QVariantList yearList;
+  for(int y:sortedYears)yearList.append(y);
+  return {{"from",from.toString(Qt::ISODate)},{"to",to.toString(Qt::ISODate)},{"days",days},
+          {"seconds",total},{"active",listened.size()},{"streak",streak},{"longest",longest},
+          {"years",yearList},{"weekStart",weekStart}};
 }
 
 // --- Playlist versions -------------------------------------------------------

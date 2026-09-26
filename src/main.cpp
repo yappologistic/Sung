@@ -167,6 +167,11 @@ int main(int argc, char **argv) {
   // 370.0 ms.
   // https://doc.qt.io/qt-6/qqmlcomponent.html#CompilationMode-enum
   QQmlComponent interfaceTypes(&engine, QUrl("qrc:/qml/Main.qml"), QQmlComponent::Asynchronous);
+#ifdef SUNG_DIAGNOSTICS
+  // The listening graph needs a year of plays, more than a stage can play.
+  // They go where a saved library lives, before the backend reads it.
+  if (args.contains("--listening-stats-test") && args.contains("--isolated")) seedListeningHistory();
+#endif
   Backend &backend = backendStorage.emplace();
 #ifdef SUNG_DIAGNOSTICS
   // The footprint stage reads this: whether the interface was already on its

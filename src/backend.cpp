@@ -1392,6 +1392,11 @@ void Backend::load() {
   refreshRecentlyPlayed();
   m_lastPlayed=d.value("lastPlayed").toMap();
   m_plays=d.value("plays").toList();
+  m_listeningDays=d.value("listeningDays").toMap();
+  // A library saved before the daily totals has only the play log to go on.
+  if(!d.contains("listeningDays"))
+    for(const auto &v:std::as_const(m_plays))
+      countListeningDay(v.toMap().value("at").toLongLong(),v.toMap().value("seconds").toLongLong());
   m_playlistVersions=d.value("playlistVersions").toMap();
   // Legacy history proves a play, but provides no trustworthy date.
   for(const auto &v:m_history)if(!m_lastPlayed.contains(itemId(v)))m_lastPlayed[itemId(v)]=0;
@@ -1405,7 +1410,7 @@ void Backend::load() {
 }
 QVariantMap Backend::libraryDocument() const {
   return {{"musicFolders",m_musicFolders},{"localTracks",m_localTracks},{"favorites", m_favorites},
-          {"history", m_history},{"lastPlayed",m_lastPlayed},{"plays",m_plays},{"playlistVersions",m_playlistVersions},
+          {"history", m_history},{"lastPlayed",m_lastPlayed},{"plays",m_plays},{"listeningDays",m_listeningDays},{"playlistVersions",m_playlistVersions},
           {"sessions",m_sessions},{"playlists", m_playlists},{"pins",m_pins},{"lyricOffsets",m_lyricOffsets},
           {"queue", m_queue.rows},
           {"index", m_index},{"position",position()}};

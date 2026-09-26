@@ -14,16 +14,24 @@ MDialog {
     title: "Listening"
     modal: true
     width: fitWidth(560)
-    height: Math.min(700, parent ? parent.height-48 : 700)
+    // Tall enough for the figures, the listening graph and a ranking you can
+    // read on an ordinary window; a shorter one scrolls (statsScroll).
+    height: Math.min(780, parent ? parent.height-48 : 780)
     standardButtons: Dialog.Close
 
     property int days: 7
+    // A day picked on the listening graph, which the figures and rankings
+    // then show in place of the period.
+    property string day: ""
     property var stats: ({})
     readonly property var periods: [{key:7,label:"Week"},{key:30,label:"Month"},{key:365,label:"Year"},{key:0,label:"All time"}]
     property string ranking: "artists"
 
-    function refresh() { stats = app.listeningStats(days) }
-    onAboutToShow: refresh()
+    function refresh() {
+        stats = day ? app.listeningStatsOn(day) : app.listeningStats(days)
+        calendar.refresh()
+    }
+    onAboutToShow: { day = ""; refresh() }
     Connections { target: app; function onLibraryChanged() { if (dialog.visible) dialog.refresh() } }
 
     // Hours and minutes, because a listening total in seconds means nothing.
@@ -35,10 +43,24 @@ MDialog {
     }
 
     // Laid out as a child filling the dialog, the way the other dialogs are, so
-    // the ranking list is given the height that is left over.
-    ColumnLayout {
-        objectName: "statsBody"
+    // the ranking list is given the height that is left over. A window too
+    // short for the figures, the graph and a readable ranking scrolls the
+    // whole body instead of letting the list run under the buttons.
+    Flickable {
+        id: bodyScroll
+        objectName: "statsScroll"
         anchors.fill: parent
+        contentHeight: body.height
+        interactive: contentHeight > height
+        clip: interactive
+        boundsBehavior: Flickable.StopAtBounds
+        ScrollBar.vertical: MScrollBar { visible: bodyScroll.interactive }
+    ColumnLayout {
+        id: body
+        objectName: "statsBody"
+        // Clear of the scroll bar when there is one.
+        width: bodyScroll.width - (bodyScroll.interactive ? bodyScroll.ScrollBar.vertical.width + Theme.spaceSmall : 0)
+        height: Math.max(bodyScroll.height, implicitHeight)
         spacing: 12
 
         MSegmentedControl {
@@ -46,8 +68,9 @@ MDialog {
             Layout.fillWidth: true
             accessibleName: "Period"
             options: dialog.periods.map(p => ({key:p.key, label:p.label, name:"statsPeriod_"+p.key}))
-            value: dialog.days
-            onChosen: key => { dialog.days = key; dialog.refresh() }
+            // No period is chosen while a single day is.
+            value: dialog.day ? undefined : dialog.days
+            onChosen: key => { dialog.day = ""; dialog.days = key; dialog.refresh() }
         }
 
         // The headline figures.
@@ -95,55 +118,12 @@ MDialog {
             }
         }
 
-        // The shape of the period, one bar per day.
-        ColumnLayout {
-            objectName: "statsDaily"
+        ListeningCalendar {
+            id: calendar
             Layout.fillWidth: true
-            visible: (dialog.stats.daily || []).length > 1
-            spacing: 6
-            SungText { text: "By day"; color: Theme.muted; font.pixelSize: Theme.labelMedium }
-            RowLayout {
-                objectName: "statsDailyBars"
-                Layout.fillWidth: true
-                Layout.preferredHeight: 72
-                // The bars carry the whole point of the row, so they keep a
-                // floor rather than collapsing into a rule.
-                Layout.minimumHeight: 56
-                spacing: 4
-                Repeater {
-                    model: (dialog.stats.daily || []).slice(-14)
-                    ColumnLayout {
-                        required property var modelData
-                        readonly property real peak: Math.max(1, ...(dialog.stats.daily || [{seconds:1}]).slice(-14).map(d => d.seconds))
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        spacing: 4
-                        Item {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            Rectangle {
-                                objectName: "statsBar"
-                                anchors.bottom: parent.bottom
-                                width: parent.width
-                                // A day with nothing in it still shows a floor,
-                                // so the row reads as a scale rather than a gap.
-                                height: Math.max(3, parent.height*modelData.seconds/parent.parent.peak)
-                                radius: Theme.shapeSmall
-                                color: modelData.seconds > 0 ? Theme.primary : Theme.outlineVariant
-                                // MotionSchemeKeyTokens.kt:25 FastSpatial moves this
-                                // short bar by one spring pair as its height changes.
-                                Behavior on height { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
-                            }
-                        }
-                        SungText {
-                            text: modelData.day
-                            color: Theme.muted
-                            font.pixelSize: Theme.labelSmall
-                            Layout.alignment: Qt.AlignHCenter
-                        }
-                    }
-                }
-            }
+            selected: dialog.day
+            spell: dialog.spell
+            onChosen: date => { dialog.day = date; dialog.refresh() }
         }
 
         MSegmentedControl {
@@ -217,9 +197,12 @@ MDialog {
                 objectName: "statsEmpty"
                 anchors.centerIn: parent
                 visible: rankings.count === 0
-                text: dialog.days > 0 ? "Nothing played in this period" : "Nothing played yet"
+                text: dialog.stats.totalOnly ? "Only the total is kept for this day"
+                    : dialog.day ? "Nothing played on this day"
+                    : dialog.days > 0 ? "Nothing played in this period" : "Nothing played yet"
                 color: Theme.muted
             }
         }
+    }
     }
 }

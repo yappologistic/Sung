@@ -72,6 +72,9 @@ void runCrossfadeUiTests(Backend*,QQuickWindow*);
 void runTrackDetailsTests(Backend*,QQuickWindow*);
 void runQueueHistoryTests(Backend*,QQuickWindow*);
 void runListeningStatsTests(Backend*,QQuickWindow*);
+// Writes a year of plays where the saved library lives, for the backend to
+// load as it would a real one. Only into an isolated, empty profile.
+void seedListeningHistory();
 void runPlaylistVersionsTests(Backend*,QQuickWindow*);
 void runWindowWashTests(Backend*,QQuickWindow*);
 void runMaterialFoundationTests(Backend*,QQuickWindow*);

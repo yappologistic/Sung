@@ -13,6 +13,9 @@
 #include <QDir>
 #include <QFile>
 #include <QImage>
+#include <QJsonDocument>
+#include <QStandardPaths>
+#include <QDateTime>
 #include <QPainter>
 #include <QPointer>
 #include <QProcess>
@@ -1703,6 +1706,41 @@ void runQueueHistoryTests(Backend *b, QQuickWindow *w) {
   c.finish();
 }
 
+// A year and a bit of listening, the same on every run. Each entry is one
+// play. Days 1 to 9 before today are the running streak and day 10 is silent;
+// days 180 to 200 always have music. The rest leave four days in ten silent.
+struct FixturePlay { qint64 at; qint64 seconds; QString title, artist; };
+static QList<FixturePlay> listeningFixture() {
+  QList<FixturePlay> plays;
+  quint32 state = 12345;
+  const auto next = [&] { state = state * 1103515245u + 12345u; return int((state >> 16) & 0x7fff); };
+  const QStringList titles{"Tidal", "Low sun", "Paper boats", "Glasshouse", "North road", "Undertow"};
+  const QStringList artists{"Marble Coast", "Rill", "Hollow Pine"};
+  const QDate today = QDate::currentDate();
+  for (int ago = 1; ago <= 420; ++ago) {
+    int count = next() % 10 < 4 ? 0 : 1 + next() % 12;
+    if (ago <= 9 || (ago >= 180 && ago <= 200)) count = qMax(count, 2);
+    if (ago == 10) count = 0;
+    const qint64 noon = QDateTime(today.addDays(-ago), QTime(12, 0)).toSecsSinceEpoch();
+    for (int i = 0; i < count; ++i)
+      plays.append({noon + i * 240, 150 + (next() % 5) * 30, titles[next() % titles.size()], artists[next() % artists.size()]});
+  }
+  return plays;
+}
+
+void seedListeningHistory() {
+  const QString folder = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  QFile file(folder + "/library.json");
+  if (file.exists() || !QDir().mkpath(folder) || !file.open(QIODevice::WriteOnly)) return;
+  QVariantList plays;
+  int n = 0;
+  for (const auto &play : listeningFixture())
+    plays.append(QVariantMap{{"at", play.at}, {"id", QString("fixture-%1").arg(n++ % 40)}, {"title", play.title},
+                             {"artist", play.artist}, {"album", "Fixture year"}, {"seconds", play.seconds}});
+  // No daily totals: an older library, which the backend fills them in for.
+  file.write(QJsonDocument::fromVariant(QVariantMap{{"plays", plays}}).toJson(QJsonDocument::Compact));
+}
+
 void runListeningStatsTests(Backend *b, QQuickWindow *w) {
   Check c{b, w, qEnvironmentVariable("SUNG_TEST_OUTPUT")};
   QDir().mkpath(c.directory + "/music");
@@ -1718,6 +1756,247 @@ void runListeningStatsTests(Backend *b, QQuickWindow *w) {
   b->setOnlineArtwork(false);
   b->setLyricsFallback(false);
   b->setCrossfadeSeconds(0);
+  // --- The listening graph, over a year loaded from disk ---
+  // What the fixture says each day holds, to hold the graph to.
+  QMap<QString, QPair<qint64, int>> fixtureDays;
+  for (const auto &play : listeningFixture()) {
+    auto &day = fixtureDays[QDateTime::fromSecsSinceEpoch(play.at).date().toString(Qt::ISODate)];
+    day.first += play.seconds;
+    day.second += 1;
+  }
+  const QDate today = QDate::currentDate();
+  int fixtureLongest = 0, run = 0;
+  for (QDate d = today.addDays(-430); d <= today; d = d.addDays(1)) {
+    run = fixtureDays.contains(d.toString(Qt::ISODate)) ? run + 1 : 0;
+    fixtureLongest = qMax(fixtureLongest, run);
+  }
+  const auto year = b->listeningCalendar(0);
+  const auto yearDays = year.value("days").toList();
+  QVariantList shownDays;
+  for (const auto &v : yearDays)
+    if (!v.toMap().value("padding").toBool()) shownDays.append(v);
+  c.check(shownDays.size() == 365, QString("the past year is 365 days (%1)").arg(shownDays.size()));
+  c.check(!shownDays.isEmpty() && shownDays.first().toMap().value("date") == today.addDays(-364).toString(Qt::ISODate)
+              && shownDays.last().toMap().value("date") == today.toString(Qt::ISODate),
+          "and ends today");
+  c.check(!yearDays.isEmpty() && QDate::fromString(yearDays.first().toMap().value("date").toString(), Qt::ISODate).dayOfWeek()
+              == int(QLocale::system().firstDayOfWeek()),
+          "its first column starts on the locale's first weekday");
+  bool daysMatch = true, levelsOrdered = true;
+  qint64 previousSeconds = -1;
+  int previousLevel = 0, fixtureActive = 0;
+  QList<QPair<qint64, int>> byTime;
+  for (const auto &v : shownDays) {
+    const auto day = v.toMap();
+    const auto expected = fixtureDays.value(day.value("date").toString());
+    daysMatch = daysMatch && day.value("seconds").toLongLong() == expected.first && day.value("plays").toInt() == expected.second;
+    if (expected.first > 0) ++fixtureActive;
+    const int level = day.value("level").toInt();
+    levelsOrdered = levelsOrdered && (level == 0) == (expected.first == 0) && level >= 0 && level <= 4;
+    byTime.append({day.value("seconds").toLongLong(), level});
+  }
+  std::sort(byTime.begin(), byTime.end());
+  for (const auto &[seconds, level] : byTime) {
+    levelsOrdered = levelsOrdered && (seconds == previousSeconds || level >= previousLevel);
+    previousSeconds = seconds;
+    previousLevel = level;
+  }
+  c.check(daysMatch, "every day holds the time and plays the saved plays add up to");
+  c.check(levelsOrdered, "a day with more time is never lighter, and only a silent day is empty");
+  c.check(year.value("active").toInt() == fixtureActive,
+          QString("the days listened are counted (%1, expected %2)").arg(year.value("active").toInt()).arg(fixtureActive));
+  c.check(year.value("streak").toInt() == 9,
+          QString("a streak that reached yesterday is still running (%1)").arg(year.value("streak").toInt()));
+  c.check(year.value("longest").toInt() == fixtureLongest,
+          QString("the longest run is found (%1, expected %2)").arg(year.value("longest").toInt()).arg(fixtureLongest));
+  const auto years = year.value("years").toList();
+  c.check(years.contains(today.year()) && years.contains(today.year() - 1), "both years with music are offered");
+
+  auto graphStats = c.dialog("listeningStatsDialog");
+  c.check(graphStats, "the statistics dialog opens on the year");
+  if (!graphStats)
+    return c.finish();
+  auto grid = shownItem(w->contentItem(), "calendarGrid");
+  auto scroll = shownItem(w->contentItem(), "calendarScroll");
+  c.check(grid && scroll && !scroll->property("interactive").toBool(), "the year fits the dialog without scrolling");
+  int squaresShown = 0;
+  if (grid)
+    for (auto child : grid->childItems())
+      if (child->objectName().startsWith("calendarDay_") && child->isVisible()) ++squaresShown;
+  c.check(squaresShown == 365, QString("a square for every day (%1)").arg(squaresShown));
+  auto summary = shownItem(w->contentItem(), "calendarSummary");
+  c.check(summary && summary->property("text").toString().contains("9-day streak")
+              && summary->property("text").toString().contains(QString("longest %1 days").arg(fixtureLongest)),
+          QString("the summary gives the streaks (%1)").arg(summary ? summary->property("text").toString() : QString()));
+  auto ranking = shownItem(w->contentItem(), "statsRankingList");
+  c.check(ranking && ranking->height() > 100,
+          QString("the rankings keep room below the graph (%1px)").arg(ranking ? ranking->height() : 0));
+  c.shot("05-listening-graph");
+  // Each shade must read apart from the next, measured on the drawn pixels:
+  // a day of a little music must not look like a silent one.
+  const auto shadeSteps = [&](const QString &theme) {
+    const QImage frame = w->grabWindow();
+    QList<double> luminance;
+    for (int level = 0; level <= 4; ++level) {
+      QQuickItem *found = nullptr;
+      for (const auto &v : shownDays)
+        if (v.toMap().value("level").toInt() == level) {
+          found = shownItem(w->contentItem(), "calendarDay_" + v.toMap().value("date").toString());
+          break;
+        }
+      if (!found) { c.check(false, QString("a day at level %1 to measure").arg(level)); return; }
+      const QColor ink = frame.pixelColor(found->mapToScene(found->boundingRect().center()).toPoint() * frame.devicePixelRatio());
+      const auto channel = [](double v) { return v <= 0.04045 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+      luminance.append(0.2126 * channel(ink.redF()) + 0.7152 * channel(ink.greenF()) + 0.0722 * channel(ink.blueF()));
+    }
+    QStringList steps;
+    double least = 100;
+    for (int i = 1; i < luminance.size(); ++i) {
+      const double ratio = (qMax(luminance[i], luminance[i - 1]) + 0.05) / (qMin(luminance[i], luminance[i - 1]) + 0.05);
+      least = qMin(least, ratio);
+      steps << QString::number(ratio, 'f', 2);
+    }
+    c.check(least >= 1.3, QString("in %1, every shade steps apart from the next (%2)").arg(theme, steps.join(", ")));
+  };
+  shadeSteps("dark");
+
+  // The pointer names a day, and choosing it shows that day.
+  const QString yesterday = today.addDays(-1).toString(Qt::ISODate);
+  const auto yesterdayTotals = fixtureDays.value(yesterday);
+  auto square = shownItem(w->contentItem(), "calendarDay_" + yesterday);
+  c.check(square && square->width() >= 7, "yesterday has a square of its own");
+  auto tip = w->findChild<QObject *>("calendarTip");
+  if (square) {
+    const auto point = square->mapToScene(square->boundingRect().center()).toPoint();
+    QTest::mouseMove(w, point - QPoint(0, 3));
+    QTest::mouseMove(w, point);
+    c.check(tip && c.until([&] { return tip->property("opened").toBool(); }), "hovering a day shows its tooltip");
+    const auto said = tip ? tip->property("text").toString() : QString();
+    c.check(said.contains(QString("%1 plays").arg(yesterdayTotals.second)),
+            QString("and it names the day's plays (%1)").arg(said));
+    c.check(QQmlProperty(square, "border.width").read().toInt() == 1, "the square under the pointer is outlined");
+    c.shot("06-listening-graph-tooltip");
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);
+    QTest::qWait(350);
+  }
+  c.check(graphStats->property("day").toString() == yesterday, "clicking a day chooses it");
+  c.check(summary && summary->property("text").toString().contains(QString("%1 plays").arg(yesterdayTotals.second)),
+          QString("the chosen day is named above the graph (%1)").arg(summary ? summary->property("text").toString() : QString()));
+  auto clickedRing = grid ? anyItem(grid, "calendarCursor") : nullptr;
+  c.check(clickedRing && clickedRing->childItems().value(0) && !clickedRing->childItems().value(0)->isVisible(),
+          "a click shows no focus ring");
+  auto dayPlays = shownItem(w->contentItem(), "statsPlaysValue");
+  c.check(dayPlays && dayPlays->property("text").toString() == QString::number(yesterdayTotals.second),
+          QString("the figures become that day's (%1, expected %2)")
+              .arg(dayPlays ? dayPlays->property("text").toString() : QString()).arg(yesterdayTotals.second));
+  auto period = shownItem(w->contentItem(), "statsPeriod");
+  c.check(period && !period->property("value").isValid(), "and no period is shown as chosen");
+  c.check(ranking && ranking->property("count").toInt() > 0, "the day's music is ranked");
+  c.shot("07-listening-graph-day");
+
+  // The keyboard walks the days: a week back, then choose it.
+  QTest::keyClick(w, Qt::Key_Left);
+  QTest::keyClick(w, Qt::Key_Return);
+  QTest::qWait(350);
+  const QString weekEarlier = today.addDays(-8).toString(Qt::ISODate);
+  c.check(graphStats->property("day").toString() == weekEarlier,
+          QString("Left and Enter choose the same weekday a week earlier (%1)").arg(graphStats->property("day").toString()));
+  auto cursor = grid ? anyItem(grid, "calendarCursor") : nullptr;
+  auto ring = cursor ? cursor->childItems().value(0) : nullptr;
+  c.check(ring && ring->isVisible(), "the keyboard's day is ringed");
+  auto spoken = grid ? QAccessible::queryAccessibleInterface(grid) : nullptr;
+  const auto told = spoken ? spoken->text(QAccessible::Description) : QString();
+  c.check(grid && grid->property("activeFocus").toBool() && spoken && spoken->role() == QAccessible::Chart
+              && spoken->text(QAccessible::Name) == "Listening graph"
+              && told.contains(QString("%1 plays").arg(fixtureDays.value(weekEarlier).second)),
+          QString("and a screen reader is told what it holds (%1)").arg(told));
+  c.shot("08-listening-graph-keyboard");
+
+  // Each square owns the half gap on either side of it: a click just left
+  // of a day's edge still picks that day, not the one before.
+  const QString twoDaysAgo = today.addDays(-2).toString(Qt::ISODate);
+  auto edgeSquare = shownItem(w->contentItem(), "calendarDay_" + twoDaysAgo);
+  if (edgeSquare) {
+    const auto edge = edgeSquare->mapToScene(QPointF(-1, edgeSquare->height() / 2)).toPoint();
+    QTest::mouseMove(w, edge);
+    QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, edge);
+    QTest::qWait(350);
+  }
+  c.check(edgeSquare && graphStats->property("day").toString() == twoDaysAgo,
+          QString("a click in the gap beside a day picks that day (%1)").arg(graphStats->property("day").toString()));
+
+  // Tab reaches the graph after the year buttons, skipping the disabled
+  // one, and shows the ring; the next Tab moves on to the rankings.
+  auto earlierButton = shownItem(w->contentItem(), "calendarEarlier");
+  if (earlierButton) earlierButton->forceActiveFocus(Qt::TabFocusReason);
+  QTest::keyClick(w, Qt::Key_Tab);
+  QTest::qWait(150);
+  c.check(grid && grid->hasActiveFocus(), "Tab from Earlier lands on the graph, past the disabled Later");
+  c.check(ring && ring->isVisible(), "and the ring shows for Tab focus");
+  QTest::keyClick(w, Qt::Key_Tab);
+  QTest::qWait(150);
+  auto rankingControl = shownItem(w->contentItem(), "statsRanking");
+  bool inRanking = false;
+  for (auto item = w->activeFocusItem(); item; item = item->parentItem()) inRanking = inRanking || item == rankingControl;
+  c.check(inRanking, "the next Tab goes on to the rankings");
+  QTest::keyClick(w, Qt::Key_Tab, Qt::ShiftModifier);
+  QTest::qWait(150);
+  c.check(grid && grid->hasActiveFocus(), "and Shift+Tab comes back to the graph");
+
+  // A period takes over again.
+  c.click("statsPeriod_7");
+  c.check(graphStats->property("day").toString().isEmpty() && graphStats->property("days").toInt() == 7,
+          "choosing a period lets the day go");
+
+  // Earlier years, and back.
+  auto title = shownItem(w->contentItem(), "calendarTitle");
+  c.click("calendarEarlier");
+  c.check(title && title->property("text").toString() == QString::number(today.year()), "Earlier shows this calendar year");
+  c.click("calendarEarlier");
+  c.check(title && title->property("text").toString() == QString::number(today.year() - 1), "then the one before");
+  squaresShown = 0;
+  if (grid)
+    for (auto child : grid->childItems())
+      if (child->objectName().startsWith("calendarDay_") && child->isVisible()) ++squaresShown;
+  c.check(squaresShown == QDate(today.year() - 1, 1, 1).daysInYear(), QString("a whole year of squares (%1)").arg(squaresShown));
+  auto earlier = shownItem(w->contentItem(), "calendarEarlier");
+  c.check(earlier && !earlier->isEnabled(), "and no earlier year than the music goes back");
+  c.shot("09-listening-graph-last-year");
+  c.click("calendarLater");
+  c.click("calendarLater");
+  c.check(title && title->property("text").toString() == "Past year", "Later returns to the past year");
+
+  b->setTheme("light");
+  c.shot("10-listening-graph-light");
+  shadeSteps("light");
+  b->setTheme("dark");
+  w->resize(480, 620);
+  QTest::qWait(500);
+  scroll = shownItem(w->contentItem(), "calendarScroll");
+  c.check(scroll && (!scroll->property("interactive").toBool()
+                     || scroll->property("contentX").toReal() + scroll->width() >= scroll->property("contentWidth").toReal() - 1),
+          "a narrow window scrolls the graph and keeps today in view");
+  c.shot("11-listening-graph-narrow");
+  // The keyboard's ring on the last day, where a scrolled grid could clip it.
+  auto narrowGrid = shownItem(w->contentItem(), "calendarGrid");
+  auto narrowEarlier = shownItem(w->contentItem(), "calendarEarlier");
+  if (narrowEarlier) narrowEarlier->forceActiveFocus(Qt::TabFocusReason);
+  QTest::keyClick(w, Qt::Key_Tab);
+  QTest::keyClick(w, Qt::Key_Right);
+  QTest::qWait(250);
+  auto narrowCursor = narrowGrid ? anyItem(narrowGrid, "calendarCursor") : nullptr;
+  auto narrowRing = narrowCursor ? narrowCursor->childItems().value(0) : nullptr;
+  if (narrowRing && scroll) {
+    const QRectF ringArea = narrowRing->mapRectToItem(scroll, narrowRing->boundingRect());
+    c.check(narrowRing->isVisible() && ringArea.right() <= scroll->width() + 0.5 && ringArea.left() >= -0.5,
+            QString("at a narrow width the ring stays inside the scrolled graph (%1..%2 of %3)")
+                .arg(ringArea.left()).arg(ringArea.right()).arg(scroll->width()));
+  } else c.check(false, "the narrow graph has a keyboard ring");
+  c.shot("12-listening-graph-narrow-keyboard");
+  w->resize(1320, 900);
+  QTest::qWait(400);
+  c.closeDialog(graphStats);
+
   b->clearListeningStats();
 
   // --- Nothing has been played ---
@@ -1797,14 +2076,10 @@ void runListeningStatsTests(Backend *b, QQuickWindow *w) {
   // --- The period really narrows things ---
   const auto allTime = b->listeningStats(0);
   c.check(allTime.value("plays").toInt() == 4, "all time sees the same plays here");
-  c.check(allTime.value("daily").toList().isEmpty(),
-          "all time has no day-by-day shape to show");
-  const auto week2 = b->listeningStats(7);
-  c.check(week2.value("daily").toList().size() == 7, "a week is shown as seven days");
-  qint64 dailyTotal = 0;
-  for (const auto &row : week2.value("daily").toList())
-    dailyTotal += row.toMap().value("seconds").toLongLong();
-  c.check(dailyTotal == expectedSeconds, "the days add up to the period");
+  const auto todayOnGraph = b->listeningCalendar(0).value("days").toList().last().toMap();
+  c.check(todayOnGraph.value("seconds").toLongLong() == expectedSeconds && todayOnGraph.value("plays").toInt() == 4
+              && todayOnGraph.value("level").toInt() == 4,
+          "today on the graph holds the same plays, as the darkest square");
 
   // --- A private session records nothing ---
   const int before = b->listeningStats(0).value("plays").toInt();
@@ -1826,19 +2101,10 @@ void runListeningStatsTests(Backend *b, QQuickWindow *w) {
               .arg(time ? time->property("text").toString() : QString()));
   auto plays = shownItem(w->contentItem(), "statsPlaysValue");
   c.check(plays && plays->property("text").toString() == "4", "and the play count is shown");
-  c.check(shownItem(w->contentItem(), "statsDaily"), "the week has a shape");
-  auto bars = shownItem(w->contentItem(), "statsDailyBars");
-  c.check(bars && bars->height() >= 56,
-          QString("the day bars keep their height (%1px)").arg(bars ? bars->height() : 0));
+  c.check(shownItem(w->contentItem(), "calendarDay_" + today.toString(Qt::ISODate)), "today's square is on the graph");
   b->setMotion(true);
   const int fastSpatialMs=c.evaluate("Theme.springFastSpatialMs").toInt();
   const auto fastSpatialCurve=c.evaluate("Theme.springFastSpatial").toList();
-  auto barMotion=bars?anyItem(bars,"statsBar"):nullptr;
-  auto barBehavior=barMotion?barMotion->findChild<QObject*>():nullptr;
-  auto barAnimation=motionObject(barBehavior,"animation");
-  c.check(barAnimation&&barAnimation->property("duration").toInt()==fastSpatialMs&&
-              QQmlProperty(barAnimation,"easing.bezierCurve").read().toList()==fastSpatialCurve,
-          "a daily bar's height uses one FastSpatial duration and curve");
   auto enter=motionObject(stats,"enter");
   auto scaleAnimation=motionAt(enter,{0,1});
   c.check(scaleAnimation&&scaleAnimation->property("property").toString()=="scale"&&
@@ -1874,7 +2140,7 @@ void runListeningStatsTests(Backend *b, QQuickWindow *w) {
   stats->setProperty("days", 0);
   QMetaObject::invokeMethod(stats, "refresh");
   QTest::qWait(400);
-  c.check(!shownItem(w->contentItem(), "statsDaily"), "all time drops the day-by-day row");
+  c.check(shownItem(w->contentItem(), "listeningCalendar"), "the graph stays whatever the period");
   c.shot("03-listening-stats-all-time");
 
   // --- Clearing it empties it ---
@@ -1882,6 +2148,9 @@ void runListeningStatsTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(400);
   c.check(b->listeningStats(0).value("plays").toInt() == 0, "clearing removes every play");
   c.check(shownItem(w->contentItem(), "statsEmpty"), "and the dialog says so plainly");
+  auto emptySummary = shownItem(w->contentItem(), "calendarSummary");
+  c.check(emptySummary && emptySummary->property("text").toString() == "Nothing played in the past year",
+          QString("the graph says so too, without counting zeros (%1)").arg(emptySummary ? emptySummary->property("text").toString() : QString()));
   c.shot("04-listening-stats-cleared");
   c.closeDialog(stats);
 

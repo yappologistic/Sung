@@ -249,6 +249,11 @@ public:
   // days is zero or less. Counted from a log of plays rather than from the
   // recent-history list, which keeps only one row per song.
   Q_INVOKABLE QVariantMap listeningStats(int days) const;
+  // One day's figures and rankings, for a day picked on the listening graph.
+  Q_INVOKABLE QVariantMap listeningStatsOn(const QString &date) const;
+  // The listening graph: a year of days by week, each with its time listened
+  // and a level from 0 to 4. `year` 0 is the 365 days ending today.
+  Q_INVOKABLE QVariantMap listeningCalendar(int year) const;
   Q_INVOKABLE void clearListeningStats();
   // Earlier versions of a playlist, newest first, so an edit can be looked back
   // at and taken back long after the single-step Undo has moved on.
@@ -770,6 +775,12 @@ private:
   void refreshRecentlyPlayed();
   // One row per play, oldest first. A private session records nothing.
   QVariantList m_plays;
+  // Time and plays per local day, "yyyy-MM-dd" to [seconds, plays]. The play
+  // log is capped at 20,000 rows; these few bytes a day are what lets the
+  // listening graph keep a heavy listener's earlier months.
+  QVariantMap m_listeningDays;
+  void countListeningDay(qint64 at, qint64 seconds);
+  QVariantMap statsBetween(qint64 from, qint64 to) const;
   void recordPlay(const QVariantMap &track);
   // Listening history sent onward. A song is reported as it starts, and the
   // listen itself once it has played far enough to count.
