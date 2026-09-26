@@ -40,7 +40,7 @@ Slider {
         onReleased:{if(s.fineSeeking){app.seek(Math.round(s.fineValue));s.fineSeeking=false;}}
         onCanceled:s.fineSeeking=false
     }
-    ToolTip {visible:s.volumeMode&&s.hovered;text:Math.round(app.volume*100)+"%";delay:180}
+    MTooltip {visible:s.volumeMode&&s.hovered;text:Math.round(app.volume*100)+"%";delay:180}
     hoverEnabled: true
     HoverHandler { id: seekHover }
     // Seeking by wheel goes straight to playback: assigning the slider's value

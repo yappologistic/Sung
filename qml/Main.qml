@@ -341,10 +341,7 @@ ApplicationWindow {
         while(view && view.sourceRows===undefined)view=view.parent;
         if(view && view.selection.count>1 && view.sourceRows().indexOf(index)>=0){bulkView=view;bulkActions.popup(anchor,anchor.width-bulkActions.width,anchor.height+4);return;}
         batchItems=[];menuItem=item;menuIndex=index;menuQueue=queueMode;
-        const p=anchor.mapToItem(window.contentItem,anchor.width,anchor.height);
-        actions.x=Math.max(12,Math.min(p.x-actions.width,window.width-actions.width-12));
-        actions.y=Math.max(12,Math.min(p.y,window.height-actions.height-12));
-        actions.open();
+        actions.openUnder(anchor);
     }
     function openMiniPlayer() {
         if(immersive)toggleImmersive();
@@ -2014,18 +2011,12 @@ ApplicationWindow {
         MMenuItem { symbol: "next"; text: "Play selected next"; onTriggered: app.enqueueItems(window.bulkView.selection.items(),true) }
         MMenuItem { symbol: "queue"; text: "Add selected to queue"; onTriggered: app.enqueueItems(window.bulkView.selection.items()) }
         MMenuItem { symbol: "plus"; text: "Add selected to playlist"; onTriggered: window.addBatch(window.bulkView) }
-        MMenuItem { symbol: "remove"; text: "Remove selected"; visible: window.bulkView && (window.bulkView.queueMode || window.editableLocal || app.serverPlaylistEditable); height: visible?44:0; onTriggered: window.bulkView.removeSelected() }
+        MMenuItem { symbol: "remove"; text: "Remove selected"; visible: window.bulkView && (window.bulkView.queueMode || window.editableLocal || app.serverPlaylistEditable); onTriggered: window.bulkView.removeSelected() }
         MMenuItem { symbol: "check"; text: "Select all"; shortcut: "Ctrl+A"; onTriggered: window.bulkView.selection.selectAll() }
         MMenuItem { symbol: "close"; text: "Clear selection"; shortcut: "Esc"; onTriggered: window.bulkView.selection.clear() }
     }
     MMenu {
         id: actions; objectName: "trackActions"
-        // The menu's own group surface, as every other menu has it. Its longest
-        // label, "Remove from server playlist", is 213px of BodyLarge and needs
-        // 273 with the item's padding and leading slot, so this menu takes
-        // DropdownMenuItemDefaultMaxWidth, 280dp (Menu.kt:2390), and no label
-        // is cut short.
-        width: 280
         MMenuItem { text: "Open"; visible: !(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.open(window.menuItem) }
         MMenuItem { objectName: "playKeepQueueAction"; symbol: "play"; text: "Play now, keep queue"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.playKeepingQueue(window.menuItem) }
         MMenuItem { symbol: "next"; text: "Play next"; visible: !!(window.menuItem.videoId || window.menuItem.localPath || window.menuItem.serverSong); onTriggered: app.enqueue(window.menuItem,true) }
@@ -2048,12 +2039,12 @@ ApplicationWindow {
         MMenuItem { symbol: "folder"; text: "Locate file…"; visible: !!window.menuItem.localPath; onTriggered: window.openFileDialog("locate") }
         MMenuItem { text: "Remove from local files"; visible: app.libraryId==="files" && !!window.menuItem.localPath && !window.menuQueue; onTriggered: app.removeLocalFile(window.menuItem.id) }
         MDivider { visible: window.menuQueue || window.editableLocal; height: visible?implicitHeight:0 }
-        MMenuItem { text: "Move up"; visible: window.menuQueue; height: visible?44:0; enabled: window.menuIndex>0; onTriggered: app.moveQueue(window.menuIndex,window.menuIndex-1) }
-        MMenuItem { text: "Move down"; visible: window.menuQueue; height: visible?44:0; enabled: window.menuIndex<app.queue.count-1; onTriggered: app.moveQueue(window.menuIndex,window.menuIndex+1) }
-        MMenuItem { symbol: "remove"; text: "Remove from queue"; visible: window.menuQueue; height: visible?44:0; onTriggered: app.removeQueue(window.menuIndex) }
-        MMenuItem { text: "Move up in playlist"; visible: !window.menuQueue && window.editableLocal; height: visible?44:0; enabled: window.menuIndex>0 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex-1) }
-        MMenuItem { text: "Move down in playlist"; visible: !window.menuQueue && window.editableLocal; height: visible?44:0; enabled: window.menuIndex<app.results.count-1 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex+1) }
-        MMenuItem { text: "Remove from playlist"; visible: !window.menuQueue && window.editableLocal; height: visible?44:0; onTriggered: app.removeFromPlaylist(window.localPlaylist,window.menuIndex) }
+        MMenuItem { text: "Move up"; visible: window.menuQueue; enabled: window.menuIndex>0; onTriggered: app.moveQueue(window.menuIndex,window.menuIndex-1) }
+        MMenuItem { text: "Move down"; visible: window.menuQueue; enabled: window.menuIndex<app.queue.count-1; onTriggered: app.moveQueue(window.menuIndex,window.menuIndex+1) }
+        MMenuItem { symbol: "remove"; text: "Remove from queue"; visible: window.menuQueue; onTriggered: app.removeQueue(window.menuIndex) }
+        MMenuItem { text: "Move up in playlist"; visible: !window.menuQueue && window.editableLocal; enabled: window.menuIndex>0 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex-1) }
+        MMenuItem { text: "Move down in playlist"; visible: !window.menuQueue && window.editableLocal; enabled: window.menuIndex<app.results.count-1 && app.collection.sortKey==="original" && !app.collection.query; onTriggered: app.movePlaylistTrack(window.localPlaylist,window.menuIndex,window.menuIndex+1) }
+        MMenuItem { text: "Remove from playlist"; visible: !window.menuQueue && window.editableLocal; onTriggered: app.removeFromPlaylist(window.localPlaylist,window.menuIndex) }
     }
     MMenu {
         id: playlistActions

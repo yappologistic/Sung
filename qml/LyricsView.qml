@@ -122,6 +122,18 @@ Item {
         onHeightChanged: centerCurrent()
         currentIndex: app.lyricIndex
         property int keyboardIndex: -1
+        // One tooltip serves every line: it follows whichever line is hovered
+        // or chosen from the keyboard, instead of each pooled line keeping a
+        // popup of its own. Qt's attached ToolTip would be the Basic style's,
+        // not the Material plain tooltip.
+        property Item timedLine: null
+        MTooltip {
+            objectName: "lyricLineTime"
+            parent: liveLyrics.timedLine || liveLyrics
+            visible: !!liveLyrics.timedLine
+            delay: 700
+            text: liveLyrics.timedLine ? app.formatTime(Math.max(0,liveLyrics.timedLine.modelData.start-app.lyricOffset)) : ""
+        }
         // Qt ListView is a focus scope; one Tab stop owns keyboard selection.
         // ListView.positionViewAtIndex(..., Center) keeps the chosen lyric in
         // the reading band without guessing contentY for variable text heights.
@@ -202,12 +214,15 @@ Item {
             // still use DefaultEffects when the line is within the viewport.
             Behavior on opacity { enabled: app.motion && lyricLine.edgeOpacity>=1; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Accessible.name: modelData.text || "Instrumental"
-            ToolTip.visible: hovered || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index)
-            ToolTip.delay: 700
-            ToolTip.text: app.formatTime(Math.max(0,modelData.start-app.lyricOffset))
+            // The line's start time shows in the list's one tooltip.
+            readonly property bool showsTime: hovered || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index)
+            onShowsTimeChanged: if(showsTime)liveLyrics.timedLine=lyricLine;else if(liveLyrics.timedLine===lyricLine)liveLyrics.timedLine=null
             HoverHandler { id: lineHover }
             TapHandler { onTapped: {app.seekLyric(lyricLine.modelData.start);lyricPane.following=true;resumeFollow.stop();} }
-            Rectangle { anchors.fill: parent; radius: Theme.shapeMedium; color: lyricLine.hovered ? Theme.high : "transparent"; border.width: liveLyrics.activeFocus && liveLyrics.keyboardIndex===index ? 2 : 0; border.color: Theme.focusRing }
+            Rectangle { anchors.fill: parent; radius: Theme.shapeMedium; color: lyricLine.hovered ? Theme.high : "transparent"
+                // Lines stack edge to edge, so the ring is drawn inside.
+                MFocusRing { inward: true; targetRadius: Theme.shapeMedium; visible: liveLyrics.activeFocus && liveLyrics.keyboardIndex===lyricLine.index }
+            }
             SungText {
                 id: lyricLabel; objectName: "lyricLabel"
                 anchors.fill: parent

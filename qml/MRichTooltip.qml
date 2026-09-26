@@ -21,7 +21,11 @@ ToolTip {
     delay: 500
     timeout: -1
     padding: 16
-    implicitWidth: Math.min(312, Math.max(200, bodyColumn.implicitWidth + padding*2))
+    // TooltipDefaults.richTooltipMaxWidth is 320dp and TooltipMinWidth 40dp
+    // (Tooltip.kt:538, 1452); RichTooltipHorizontalPadding 16dp leaves 288dp
+    // for the text.
+    readonly property real textWidth: 320 - padding*2
+    implicitWidth: Math.min(320, Math.max(40, bodyColumn.implicitWidth + padding*2))
 
     Accessible.role: Accessible.ToolTip
     Accessible.name: subhead
@@ -33,7 +37,7 @@ ToolTip {
         SungText {
             objectName: "richTooltipSubhead"
             visible: tip.subhead.length > 0
-            width: Math.min(280, implicitWidth)
+            width: Math.min(tip.textWidth, implicitWidth)
             text: tip.subhead
             color: Theme.muted
             // RichTooltipTokens.SubheadFont is title small, which carries
@@ -45,7 +49,7 @@ ToolTip {
         SungText {
             objectName: "richTooltipBody"
             visible: tip.supporting.length > 0
-            width: Math.min(280, implicitWidth)
+            width: Math.min(tip.textWidth, implicitWidth)
             text: tip.supporting
             color: Theme.muted
             font.pixelSize: Theme.bodyMedium
@@ -69,7 +73,14 @@ ToolTip {
         radius: Theme.shapeMedium
         MElevation { anchors.fill: parent; radius: parent.radius; level: 2 }
     }
-    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.enterDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-    // Tooltip.kt:215 uses FastEffects for tooltip alpha on both edges.
-    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.exitDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.exitCurve } }
+    // Tooltip.kt:214-235: scale from 0.8 on FastSpatial, alpha on
+    // FastEffects, on both edges.
+    enter: Transition {
+        NumberAnimation { property: "scale"; from: 0.8; to: 1; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+    }
+    exit: Transition {
+        NumberAnimation { property: "scale"; to: 0.8; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+    }
 }
