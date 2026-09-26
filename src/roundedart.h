@@ -10,6 +10,7 @@
 #include <memory>
 #include "m3shape.h"
 #include "motionartwork.h"
+#include "scrimcontrast.h"
 
 class RoundedArt : public QQuickPaintedItem {
   Q_OBJECT
@@ -132,14 +133,12 @@ private:
   void geometryChange(const QRectF &, const QRectF &) override;
   const QImage &shown() const;
   void finishTransition();
-  struct ScrimSample { float red, green, blue, coverage; };
-  static QVector<ScrimSample> sampleScrim(const QImage &image);
   qreal minimumContrast(const QColor &surface, const QColor &ink, qreal alpha) const;
   bool m_crossfade=false,m_previousFit=false;
   qreal m_mix=1;
   QImage m_previous;
   QImage m_softImage,m_softPrevious;
-  mutable QVector<ScrimSample> m_scrimSamples,m_scrimPreviousSamples;
+  mutable QVector<scrimcontrast::Sample> m_scrimSamples,m_scrimPreviousSamples;
   int m_blur=0;
   std::unique_ptr<QVariantAnimation> m_fade;
   bool m_fit=false,m_originalSizeFallback=false;

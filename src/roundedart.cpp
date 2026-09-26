@@ -2,6 +2,7 @@
 #include "artworkurl.h"
 #include "m3shape.h"
 #include "m3motion.h"
+#include "scrimcontrast.h"
 #include "softimage.h"
 #include <QBuffer>
 #include <QFileInfo>
@@ -19,8 +20,6 @@
 #include <QThreadPool>
 #include <QtMath>
 #include <QtConcurrentRun>
-#include <array>
-#include <cmath>
 #include <utility>
 
 std::function<QNetworkRequest(const QUrl &)> RoundedArt::resolveServerArt;
@@ -59,24 +58,6 @@ static QNetworkAccessManager *manager() {
   }
   return n;
 }
-QVector<RoundedArt::ScrimSample> RoundedArt::sampleScrim(const QImage &image) {
-  QVector<ScrimSample> samples;
-  if (image.isNull()) return samples;
-  // AmbientBackdrop.qml blurs a 160px decode at radius 22. A 16 by 16
-  // grid includes the edges and bounds later palette-frame solves to 256
-  // samples, while the blur has already removed detail between grid points.
-  constexpr int side = 16;
-  samples.reserve(side * side);
-  for (int y = 0; y < side; ++y) {
-    const int sy = y * (image.height() - 1) / (side - 1);
-    for (int x = 0; x < side; ++x) {
-      const QRgb pixel = image.pixel(x * (image.width() - 1) / (side - 1), sy);
-      samples.append({float(qRed(pixel) / 255.0), float(qGreen(pixel) / 255.0),
-                      float(qBlue(pixel) / 255.0), float(qAlpha(pixel) / 255.0)});
-    }
-  }
-  return samples;
-}
 RoundedArt::RoundedArt(QQuickItem *p) : QQuickPaintedItem(p) {
   setAntialiasing(true);
   liveArt().insert(this);
@@ -98,14 +79,14 @@ void RoundedArt::setAnimation(MotionArtwork *animation) {
 }
 void RoundedArt::soften() {
   m_softImage = softimage::softened(m_image, m_blur);
-  if (m_blur > 0) m_scrimSamples = sampleScrim(shown());
+  if (m_blur > 0) m_scrimSamples = scrimcontrast::sample(shown());
   else m_scrimSamples.clear();
   // A source change already carries the softened old cover. Blur it again
   // only when the blur radius itself changes.
   if (!m_previous.isNull() && m_softPrevious.isNull())
     m_softPrevious = softimage::softened(m_previous, m_blur);
   if (m_blur > 0 && !m_previous.isNull() && m_scrimPreviousSamples.isEmpty())
-    m_scrimPreviousSamples = sampleScrim(m_softPrevious.isNull() ? m_previous : m_softPrevious);
+    m_scrimPreviousSamples = scrimcontrast::sample(m_softPrevious.isNull() ? m_previous : m_softPrevious);
 }
 const QImage &RoundedArt::shown() const {
   return m_blur > 0 && !m_softImage.isNull() ? m_softImage : m_image;
@@ -331,75 +312,21 @@ void RoundedArt::fitTextureSize() {
   setTextureSize(QSize(qMax(1, full.width() * carried / spans),
                        qMax(1, full.height() * carried / spans)));
 }
-namespace {
-const std::array<double, 256> &linearChannels() {
-  static const auto values = [] {
-    std::array<double, 256> table{};
-    for (int i = 0; i < 256; ++i) {
-      const double value = i / 255.0;
-      table[i] = value <= 0.04045 ? value / 12.92
-                                  : std::pow((value + 0.055) / 1.055, 2.4);
-    }
-    return table;
-  }();
-  return values;
-}
-double channelLinear(double value) {
-  // The palette animates through fractional sRGB values. Interpolate between
-  // 8-bit table entries so a changing role does not invoke pow per pixel.
-  const double entry = qBound(0.0, value * 255.0, 255.0);
-  const int index = int(entry);
-  const double fraction = entry - index;
-  const auto &table = linearChannels();
-  return index == 255 ? table[255]
-                      : table[index] + (table[index + 1] - table[index]) * fraction;
-}
-double luminance(double red, double green, double blue) {
-  return 0.2126 * channelLinear(red) + 0.7152 * channelLinear(green)
-         + 0.0722 * channelLinear(blue);
-}
-}
-
 qreal RoundedArt::minimumContrast(const QColor &surface, const QColor &ink, qreal alpha) const {
-  const double sr = surface.redF(), sg = surface.greenF(), sb = surface.blueF();
-  const double inkL = luminance(ink.redF(), ink.greenF(), ink.blueF());
-  double minimum = 100;
   if (m_scrimSamples.isEmpty() && !shown().isNull())
-    m_scrimSamples = sampleScrim(shown());
+    m_scrimSamples = scrimcontrast::sample(shown());
   const QImage &previous = m_blur > 0 && !m_softPrevious.isNull() ? m_softPrevious : m_previous;
   if (m_scrimPreviousSamples.isEmpty() && !previous.isNull())
-    m_scrimPreviousSamples = sampleScrim(previous);
-  const auto scan = [&](const QVector<ScrimSample> &samples) {
-    for (const auto &pixel : samples) {
-      const double reveal = (1 - alpha) * pixel.coverage;
-      const double washL = luminance(sr + reveal * (pixel.red - sr),
-                                     sg + reveal * (pixel.green - sg),
-                                     sb + reveal * (pixel.blue - sb));
-      const double ratio = (qMax(washL, inkL) + 0.05) / (qMin(washL, inkL) + 0.05);
-      minimum = qMin(minimum, ratio);
-    }
-  };
-  scan(m_scrimSamples);
-  scan(m_scrimPreviousSamples);
-  return minimum == 100 ? (qMax(luminance(sr, sg, sb), inkL) + 0.05) /
-                              (qMin(luminance(sr, sg, sb), inkL) + 0.05) : minimum;
+    m_scrimPreviousSamples = scrimcontrast::sample(previous);
+  return scrimcontrast::minimumContrast({&m_scrimSamples, &m_scrimPreviousSamples}, surface, ink, alpha);
 }
 
 qreal RoundedArt::minimumScrim(const QColor &surface, const QColor &ink,
                                qreal base, qreal target) const {
-  // MCU color_spec_2021.ts:241-248 measures onSurfaceVariant against a
-  // surface. WCAG 1.4.3 requires 4.5:1 body text. The cover changes that
-  // surface. Palette motion can call this each frame; each solve reads at
-  // most two fixed 16 by 16 grids sampled when the covers were decoded.
-  base = qBound(0.0, base, 1.0);
-  if (minimumContrast(surface, ink, base) >= target) return base;
-  qreal low = base, high = 1;
-  for (int i = 0; i < 12; ++i) {
-    const qreal mid = (low + high) / 2;
-    if (minimumContrast(surface, ink, mid) >= target) high = mid;
-    else low = mid;
-  }
-  return high;
+  // Palette motion can call this each frame; each solve reads at most two
+  // fixed 16 by 16 grids sampled when the covers were decoded.
+  minimumContrast(surface, ink, base);
+  return scrimcontrast::minimumScrim({&m_scrimSamples, &m_scrimPreviousSamples}, surface, ink, base, target);
 }
 void RoundedArt::geometryChange(const QRectF &current, const QRectF &previous) {
   QQuickPaintedItem::geometryChange(current, previous);
