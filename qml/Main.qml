@@ -47,7 +47,7 @@ ApplicationWindow {
     // The Motion layout fills the window with the cover, so only there is it
     // fetched and decoded large; every other surface shares the small one.
     readonly property bool motionLayoutShown: immersive && !!immersiveLoader.item && immersiveLoader.item.motionLayout
-    Binding { target: motionArtwork; property: "maximumSize"; value: window.motionLayoutShown ? 2048 : 800 }
+    Binding { target: motionArtwork; property: "maximumSize"; value: window.motionLayoutShown ? 2160 : 800 }
     Binding { target: app; property: "largeMotionArt"; value: window.motionLayoutShown }
     property var fileDialogs: null
     function openFileDialog(kind) {

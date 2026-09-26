@@ -23,13 +23,17 @@ CACHE_LIMIT = 256 * 1024 * 1024
 # asked for only while that layout shows. It takes the largest square Apple
 # offers up to 2048, which a 1080p or 1440p window crops rather than enlarges.
 QUALITIES = {
-    'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes', richest=False),
-    'high': dict(suffix='-hq', largest=2048, target=2048, bandwidth=20000000, limit=64 * 1024 * 1024, bytes='hqBytes', richest=True),
+    'standard': dict(suffix='', largest=800, target=512, bandwidth=3000000, limit=MEDIA_LIMIT, bytes='bytes',
+                     richest=False, codecs=('avc1',), decoders=('h264',)),
+    'high': dict(suffix='-hq', largest=2160, target=2160, bandwidth=25000000, limit=64 * 1024 * 1024, bytes='hqBytes',
+                 richest=True, codecs=('avc1', 'hvc1'), decoders=('h264', 'hevc')),
 }
-# Apple's H.264 ladder for a motion cover stops at 1080 square, in three
-# bitrates; only HEVC goes on to 2160 (Innerlight EP, checked 2026-09). The
-# large cover takes the highest of the three, where the standard one keeps
-# the first listed.
+# Apple's H.264 ladder for a motion cover stops at 1080 square; HEVC goes on
+# to 1920 and 2160, the 2160 in three bitrates (Innerlight EP, checked
+# 2026-09). A 2160 cover fills a 2560px window at 1.2x where the 1080 one
+# was stretched 2.4x, so the large cover takes HEVC, richest first, stepping
+# down whenever a stream would not fit its size limit. The standard cover
+# stays H.264 and keeps the first stream listed at its size.
 HOSTS = {'itunes.apple.com', 'music.apple.com', 'mvod.itunes.apple.com'}
 # A cover on Apple's image service in the shape its search API returns it. The
 # player rewrites the size segment for whatever surface draws it.
@@ -293,7 +297,8 @@ def attributes(line):
     return dict((k, v.strip('"')) for k, v in re.findall(r'([A-Z-]+)=("[^"]*"|[^,]*)', line.partition(':')[2]))
 
 
-def variant_url(raw, base, quality='standard'):
+def variants(raw, base, quality='standard'):
+    """Every acceptable stream, best first."""
     q = QUALITIES[quality]
     lines = raw.decode().splitlines()
     choices = []
@@ -302,23 +307,34 @@ def variant_url(raw, base, quality='standard'):
             continue
         a = attributes(line)
         width, height = map(int, a.get('RESOLUTION', '0x0').split('x'))
-        if (not 128 <= width == height <= q['largest'] or not a.get('CODECS', '').startswith('avc1')
+        if (not 128 <= width == height <= q['largest'] or not a.get('CODECS', '').startswith(q['codecs'])
                 or a.get('VIDEO-RANGE', 'SDR') != 'SDR' or float(a.get('FRAME-RATE', '30')) > 30
                 or int(a.get('BANDWIDTH', '0')) > q['bandwidth'] or lines[i+1].startswith('#')):
             continue
         choices.append((width, safe_url(urljoin(base, lines[i+1].strip())), int(a.get('BANDWIDTH', '0'))))
-    return min(choices, key=lambda x: (abs(x[0]-q['target']), -x[2] if q['richest'] else 0))[1] if choices else ''
+    choices.sort(key=lambda x: (abs(x[0]-q['target']), -x[2] if q['richest'] else 0))
+    return [x[1] for x in choices]
 
 
-def movie_url(raw, base):
+def variant_url(raw, base, quality='standard'):
+    found = variants(raw, base, quality)
+    return found[0] if found else ''
+
+
+def movie_url(raw, base, limit=None):
+    """The one file behind a stream. Its byte ranges say how large it is, so
+    a stream over `limit` is turned down before anything is downloaded."""
     lines = raw.decode().splitlines()
     if '#EXT-X-ENDLIST' not in lines or len(lines) > 512:
         raise ValueError('Not a bounded VOD cover')
-    urls, duration, segments = set(), 0., 0
+    urls, duration, segments, size = set(), 0., 0, 0
     for line in lines:
         if line.startswith('#EXT-X-KEY:') and attributes(line).get('METHOD') != 'NONE':
             raise ValueError('Encrypted cover')
+        if line.startswith('#EXT-X-BYTERANGE:'):
+            size += int(line.split(':', 1)[1].split('@')[0])
         if line.startswith('#EXT-X-MAP:'):
+            size += int(attributes(line).get('BYTERANGE', '0').split('@')[0] or 0)
             urls.add(safe_url(urljoin(base, attributes(line).get('URI', ''))))
         elif line.startswith('#EXTINF:'):
             duration += float(line.split(':')[1].split(',')[0]); segments += 1
@@ -329,6 +345,8 @@ def movie_url(raw, base):
     url = urls.pop()
     if not urlsplit(url).path.endswith('.mp4'):
         raise ValueError('Unsupported cover container')
+    if limit is not None and size > limit:
+        raise ValueError('Cover too large')
     return url
 
 
@@ -341,7 +359,8 @@ def validate_movie(path, quality='standard'):
         capture_output=True, timeout=8, check=True)
     info = json.loads(result.stdout)
     streams = info.get('streams', [])
-    if (len(streams) != 1 or streams[0].get('codec_type') != 'video' or streams[0].get('codec_name') != 'h264'
+    if (len(streams) != 1 or streams[0].get('codec_type') != 'video'
+            or streams[0].get('codec_name') not in QUALITIES[quality]['decoders']
             or not 128 <= streams[0].get('width', 0) == streams[0].get('height', 0) <= QUALITIES[quality]['largest']
             or not 0 < float(Fraction(streams[0].get('r_frame_rate', '0'))) <= 30
             or not 0 < float(info.get('format', {}).get('duration', 0)) <= 60):
@@ -446,10 +465,15 @@ def lookup(req):
                     master = album_motion(fetch(page), candidate)
                     if not master:
                         continue
-                    variant = variant_url(fetch(master, 262144), master, quality)
-                    if not variant:
+                    url = ''
+                    for variant in variants(fetch(master, 262144), master, quality)[:4]:
+                        try:
+                            url = movie_url(fetch(variant, 262144), variant, q['limit'])
+                            break
+                        except ValueError:
+                            continue
+                    if not url:
                         continue
-                    url = movie_url(fetch(variant, 262144), variant)
                     temp = scratch / 'cover.mp4'
                     temp.write_bytes(fetch(url, q['limit']))
                     validate_movie(temp, quality)

@@ -120,9 +120,10 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
                 still = c.directory + "/still.png";
   c.check(c.encode({"-f", "lavfi", "-i", "testsrc2=size=720x720:rate=24:duration=3", "-threads", "1",
                     "-c:v", "libx264", "-pix_fmt", "yuv420p", busy}), "generate a detailed animated cover");
-  // The same picture at the size the Motion layout asks Apple for.
-  c.check(c.encode({"-f", "lavfi", "-i", "testsrc2=size=2048x2048:rate=24:duration=3", "-threads", "1",
-                    "-c:v", "libx264", "-pix_fmt", "yuv420p", large}), "generate a large animated cover");
+  // The same picture as Apple's large covers come: 2160 square, HEVC.
+  c.check(c.encode({"-f", "lavfi", "-i", "testsrc2=size=2160x2160:rate=24:duration=3", "-threads", "1",
+                    "-c:v", "libx265", "-preset", "ultrafast", "-tag:v", "hvc1", "-pix_fmt", "yuv420p", large}),
+          "generate a large animated cover");
   c.check(c.encode({"-f", "lavfi", "-i", "mandelbrot=size=720x720:rate=24", "-t", "3", "-threads", "1",
                     "-c:v", "libx264", "-pix_fmt", "yuv420p", fractal}), "generate a second animated cover");
   c.check(c.encode({"-f", "lavfi", "-i", "gradients=size=800x800:c0=0x2b4a8b:c1=0xe07a3f:n=2:seed=3",
@@ -170,13 +171,13 @@ void runMotionLayoutTests(Backend *b, QQuickWindow *w) {
   if (!scene || !backdrop) { fprintf(stdout, "RESULT %d failures\n", c.failures); QCoreApplication::exit(1); return; }
   c.check(c.until([&] { return backdrop->property("ready").toBool() && backdrop->property("moving").toBool(); }),
           "the backdrop draws the animated cover");
-  c.check(b->largeMotionArt() && motion->maximumSize() == 2048, "Motion asks for the large cover");
-  c.check(c.until([&] { return b->currentMotionArt().endsWith("-hq.mp4") && motion->frame().width() == 2048; }, 12000),
+  c.check(b->largeMotionArt() && motion->maximumSize() == 2160, "Motion asks for the large cover");
+  c.check(c.until([&] { return b->currentMotionArt().endsWith("-hq.mp4") && motion->frame().width() == 2160; }, 12000),
           "the large cover arrives and is drawn at its own size, not scaled down");
   QTest::qWait(1500);
   const double start = cpuSeconds();
   QTest::qWait(5000);
-  fprintf(stdout, "MEASURE cpu%% motion 2048 %.1f\n", (cpuSeconds() - start) / 5 * 100);
+  fprintf(stdout, "MEASURE cpu%% motion 2160 %.1f\n", (cpuSeconds() - start) / 5 * 100);
   c.check(c.until([&] { return scene->opacity() == 1; }), "the backdrop fades all the way in");
   auto *ambient = named(player, "ambientBackdrop");
   c.check(ambient && c.until([&] { return !ambient->isVisible(); }), "the ambient wash steps aside");
