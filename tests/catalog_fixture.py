@@ -46,8 +46,10 @@ elif op=='online-artwork':
         elif r.get('title')=='archive cover': cover='https://coverartarchive.org/release-group/12345678-1234-1234-1234-123456789abc/front'
         data.update(status='unavailable',art=cover,page='https://music.apple.com/us/album/123')
         if r.get('motion'):
-            path=Path(r['artworkCache'])/'123.mp4';path.parent.mkdir(parents=True,exist_ok=True)
-            source=os.environ.get('SUNG_MOTION_FIXTURE')
+            # One file per song, so a change of song is a change of cover.
+            large=r.get('quality')=='high'
+            path=Path(r['artworkCache'])/(r.get('videoId','123')+('-hq' if large else '')+'.mp4');path.parent.mkdir(parents=True,exist_ok=True)
+            source=os.environ.get('SUNG_MOTION_FIXTURE_LARGE' if large else 'SUNG_MOTION_FIXTURE') or os.environ.get('SUNG_MOTION_FIXTURE')
             if source:path.write_bytes(Path(source).read_bytes())
             else:path.write_bytes(b'fixture')
             data.update(status='ready',motionArt=path.as_uri())

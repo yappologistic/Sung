@@ -95,6 +95,8 @@ public:
   MotionArtwork *animation() const { return m_animation; }
   void setAnimation(MotionArtwork *animation);
   bool ready() const { return (m_animation && !m_animation->frame().isNull()) || !m_image.isNull() || !m_previous.isNull(); }
+  // The cover as decoded at `pixels`, before any softening.
+  const QImage &picture() const { return m_image; }
   void paint(QPainter *) override;
   Q_INVOKABLE QColor seedColor() const;
   // The decoded wash is sampled once. Palette animation may call this on

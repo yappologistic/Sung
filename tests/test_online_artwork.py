@@ -176,6 +176,13 @@ large.m3u8
 '''
         self.assertEqual(art.variant_url(raw,self.base),self.base+'small.m3u8')
         self.assertEqual(art.variant_url(b'#EXTM3U',self.base),'')
+        # The large cover takes the biggest square up to 2048, and still no
+        # HDR, HEVC or stream above its bandwidth ceiling.
+        self.assertEqual(art.variant_url(raw,self.base,'high'),self.base+'large.m3u8')
+        huge=raw+b'#EXT-X-STREAM-INF:BANDWIDTH=9000000,CODECS="avc1.640033",RESOLUTION=3840x3840\nhuge.m3u8\n'
+        huge+=b'#EXT-X-STREAM-INF:BANDWIDTH=25000000,CODECS="avc1.640033",RESOLUTION=2048x2048\nheavy.m3u8\n'
+        self.assertEqual(art.variant_url(huge,self.base,'high'),self.base+'large.m3u8')
+        self.assertEqual(art.variant_url(huge,self.base),self.base+'small.m3u8')
 
     def manifest(self):
         return b'#EXTM3U\n#EXT-X-MAP:URI="cover.mp4",BYTERANGE="100@0"\n#EXTINF:2,\n#EXT-X-BYTERANGE:1000@100\ncover.mp4\n#EXT-X-ENDLIST\n'
@@ -213,6 +220,36 @@ large.m3u8
         art.validate_movie(self.root/'cache/123.mp4')
         video.write_bytes(b'not a video')
         with self.assertRaises(ValueError):art.validate_movie(video)
+
+    def test_large_cover_is_kept_beside_the_standard_one(self):
+        small=self.root/'small.mp4';large=self.root/'large.mp4'
+        for path,size in ((small,128),(large,1024)):
+            subprocess.run(['ffmpeg','-nostdin','-v','error','-f','lavfi','-i',f'testsrc2=size={size}x{size}:rate=10:duration=0.5','-threads','1','-c:v','libx264',str(path)],capture_output=True,check=True)
+        master=(b'#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=10000,CODECS="avc1.64001F",RESOLUTION=128x128\nsmall.m3u8\n'
+                b'#EXT-X-STREAM-INF:BANDWIDTH=8000000,CODECS="avc1.640032",RESOLUTION=1024x1024\nlarge.m3u8\n')
+        calls=[]
+        def fetch(url,limit=0):
+            calls.append(url)
+            if '/search?' in url:return json.dumps(dict(results=[self.candidate])).encode()
+            if 'music.apple.com/' in url:return self.page()
+            if url.endswith('master.m3u8'):return master
+            if url.endswith('.m3u8'):return self.manifest().replace(b'cover.mp4',url.rsplit('/',1)[1].replace('.m3u8','.mp4').encode())
+            self.assertEqual(limit,art.QUALITIES['high' if url.endswith('large.mp4') else 'standard']['limit'])
+            return (large if url.endswith('large.mp4') else small).read_bytes()
+        with patch.object(art,'fetch',side_effect=fetch):
+            standard=art.lookup(self.track)
+            high=art.lookup(dict(self.track,quality='high'))
+            self.assertTrue(standard['motionArt'].endswith('/123.mp4'))
+            self.assertTrue(high['motionArt'].endswith('/123-hq.mp4'))
+            fetched=len(calls)
+            # Each size now answers from the cache without a request.
+            self.assertEqual(art.lookup(self.track),standard)
+            self.assertEqual(art.lookup(dict(self.track,quality='high')),high)
+            self.assertEqual(len(calls),fetched)
+        info=json.loads(subprocess.run(['ffprobe','-v','error','-show_entries','stream=width','-of','json',str(self.root/'cache/123-hq.mp4')],capture_output=True,check=True).stdout)
+        self.assertEqual(info['streams'][0]['width'],1024)
+        with self.assertRaises(ValueError):art.validate_movie(large)
+        art.validate_movie(large,'high')
 
     def test_negative_cache_and_failure_backoff(self):
         # Both providers must answer from fixtures. Leaving the archive side
