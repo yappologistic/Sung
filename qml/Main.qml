@@ -383,8 +383,9 @@ ApplicationWindow {
     // their keyboard line, not the playing one).
     function revealFocus(item) {
         if(!item || !item.activeFocusOnTab || item.focusReason===Qt.MouseFocusReason)return;
-        // MButton's focus ring sits 3px outside the control; keep it in view.
-        const ring=4;
+        // The focus ring stands Theme.focusRingOutset outside the control;
+        // keep it in view.
+        const ring=Theme.focusRingOutset;
         // What the window really shows of a scroller: its own rectangle cut by
         // every clipping ancestor and by the window. A list can run on under
         // a pane's edge or a sheet's foot, so its own height is not enough.
