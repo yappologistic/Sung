@@ -215,7 +215,8 @@ Item {
             Behavior on opacity { enabled: app.motion && lyricLine.edgeOpacity>=1; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
             Accessible.name: modelData.text || "Instrumental"
             // The line's start time shows in the list's one tooltip.
-            readonly property bool showsTime: hovered || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index)
+            // An untimed line (start below zero) has no time to show.
+            readonly property bool showsTime: modelData.start>=0 && (hovered || (liveLyrics.activeFocus && liveLyrics.keyboardIndex===index))
             onShowsTimeChanged: if(showsTime)liveLyrics.timedLine=lyricLine;else if(liveLyrics.timedLine===lyricLine)liveLyrics.timedLine=null
             HoverHandler { id: lineHover }
             TapHandler { onTapped: {app.seekLyric(lyricLine.modelData.start);lyricPane.following=true;resumeFollow.stop();} }
