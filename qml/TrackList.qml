@@ -302,7 +302,7 @@ ListView {
         else if((event.key===Qt.Key_Return||event.key===Qt.Key_Enter)&&currentIndex>=0){list.activate(currentIndex,model.get(currentIndex));event.accepted=true;}
         else if(list.typeAheadKey(event))event.accepted=true;
     }
-    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+    ScrollBar.vertical: MScrollBar {}
     MSmoothWheel { flick: list }
     delegate: TrackRow {
         required property var entry; required property int index

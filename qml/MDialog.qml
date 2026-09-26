@@ -36,7 +36,21 @@ T.Dialog {
     // it everything; otherwise it floats inside a 24dp inset up to what it asks
     // for. Dialogs that size themselves go through these rather than repeating
     // the arithmetic.
+    //
+    // A basic dialog is held between DialogMinWidth 280dp and DialogMaxWidth
+    // 560dp (AlertDialog.kt:409-412), whatever it asks for.
+    readonly property real minimumWidth: 280
+    readonly property real maximumWidth: 560
     function fitWidth(preferred) {
+        if (!parent) return Math.min(preferred, maximumWidth)
+        const room = parent.width-48
+        return fullScreen ? parent.width : Math.min(room, Math.max(minimumWidth, Math.min(preferred, maximumWidth)))
+    }
+    // A dialog that holds a whole task in panes, as Settings does, is the
+    // kind Material makes a full-screen dialog (Dialog.md, "Full-screen
+    // dialogs"). It is full screen in a compact window; in a wider desktop
+    // window it floats at the size it asks for instead of taking the screen.
+    function fitPanes(preferred) {
         if (!parent) return preferred
         return fullScreen ? parent.width : Math.min(parent.width-48, preferred)
     }

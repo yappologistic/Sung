@@ -13,7 +13,7 @@ MDialog {
     objectName: "listeningStatsDialog"
     title: "Listening"
     modal: true
-    width: fitWidth(640)
+    width: fitWidth(560)
     height: Math.min(700, parent ? parent.height-48 : 700)
     standardButtons: Dialog.Close
 

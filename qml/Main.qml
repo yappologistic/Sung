@@ -1085,7 +1085,10 @@ ApplicationWindow {
                             }
                             Item { Layout.fillWidth: true }
                             MButton { objectName: "collectionToolsButton"; symbol: "filter"; tip: "Find and sort songs"; selected: window.collectionTools || !!app.collection.query || app.collection.sortKey!=="original"; onClicked: {window.collectionTools=!window.collectionTools;if(window.collectionTools)Qt.callLater(()=>collectionSearch.forceActiveFocus());} }
-                            SungText { objectName:"collectionTrackCount"; visible: !app.albumInfo.summary || content.compactHeader || !!app.collection.query; text: app.collection.query ? app.collection.count+" / "+app.results.count : window.countText(app.results.count); color: Theme.muted; font.pixelSize: Theme.bodySmall }
+                            // A playlist's header already counts its songs, so the
+                            // count here returns only once that header has folded away
+                            // or a filter makes it a different number.
+                            SungText { objectName:"collectionTrackCount"; visible: (!app.albumInfo.summary && app.page!=="local") || content.compactHeader || !!app.collection.query; text: app.collection.query ? app.collection.count+" / "+app.results.count : window.countText(app.results.count); color: Theme.muted; font.pixelSize: Theme.bodySmall }
                             // Qt Quick Layouts' fillWidth shrinks this row down to
                             // MAppBarRow's one-button minimum after the spacer yields.
                             // AppBarDsl.kt:312-346 keeps overflow reachable; Play,
@@ -1225,7 +1228,7 @@ ApplicationWindow {
                                 visible: window.homeSections.length>0 && !(window.destination==="library"&&window.libraryTab==="playlists")
                                 clip: true; spacing: window.paneGutter+2; reuseItems: true; cacheBuffer: 0
                                 model: window.homeSections; boundsBehavior: Flickable.StopAtBounds
-                                ScrollBar.vertical: ScrollBar {}
+                                ScrollBar.vertical: MScrollBar {}
                                 MSmoothWheel { flick: shelves }
                                 delegate: ColumnLayout {
                                     required property var modelData
@@ -1266,7 +1269,7 @@ ApplicationWindow {
                                 Behavior on cellWidth {id:localGroupsWidthBehavior;enabled:app.motion && localGroups.visible;NumberAnimation {objectName:"localGroupsWidthMotion";duration:Theme.springSpatialMs;easing.type:Easing.BezierSpline;easing.bezierCurve:Theme.springSpatial}}
                                 cellHeight: coverExtent+64
                                 readonly property real coverExtent:Math.min(cellWidth-16,Math.max(96,height-64))
-                                ScrollBar.vertical: ScrollBar {}
+                                ScrollBar.vertical: MScrollBar {}
                                 MSmoothWheel { flick: localGroups }
                                 delegate: ArtCard {required property var entry; width: localGroups.coverExtent; track: entry;openHandler:window.openCollection}
                                 SungText {anchors.centerIn: parent; visible: localGroups.count===0; text:app.collection.query?"No matches":"Import music to browse here"; color:Theme.muted}
@@ -1716,23 +1719,28 @@ ApplicationWindow {
             }
             contentItem: ListView {
                 id: suggestionList; objectName: "suggestionList"; clip: true; model: searchField.suggestions; currentIndex: searchField.highlighted
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: MScrollBar {}
                 delegate: Item {
                     id: suggestionRow
                     readonly property bool highlighted: index===searchField.highlighted
                     required property var modelData; required property int index
                     // The first row of a category carries its label.
                     readonly property bool opensGroup: !!modelData.group && (index===0 || searchField.suggestions[index-1].group!==modelData.group)
-                    width: suggestionList.width; height: 56+(opensGroup?28:0)
+                    // Each suggestion is a Material list item (ListItem.kt,
+                    // ListTokens): 56dp on one line and 72dp on two, with the
+                    // 16dp ItemLeadingSpace, a 40dp leading element and 16dp
+                    // to the text (LeadingContentEndPadding).
+                    readonly property int rowHeight: modelData.origin ? 72 : 56
+                    width: suggestionList.width; height: rowHeight+(opensGroup?28:0)
                     SungText {
                         objectName: "suggestionGroup_"+index
                         visible: suggestionRow.opensGroup
-                        x: 12; width: parent.width-24; height: 28
+                        x: 16; width: parent.width-32; height: 28
                         verticalAlignment: Text.AlignVCenter
-                        text: modelData.group || ""; font.pixelSize: Theme.labelMedium; color: Theme.muted
+                        text: modelData.group || ""; font.pixelSize: Theme.labelMedium; labelRole: true; color: Theme.muted
                     }
                     Item {
-                        anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 56
+                        anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: suggestionRow.rowHeight
                         Rectangle { anchors.fill: parent; radius: Theme.shapeMedium; color: suggestionRow.highlighted?Theme.secondaryContainer:"transparent" }
                         Rectangle {
                             objectName: "suggestionStateLayer"; anchors.fill: parent; radius: Theme.shapeMedium
@@ -1743,7 +1751,7 @@ ApplicationWindow {
                         AbstractButton {
                             id: suggestionButton; objectName: "suggestion_"+index; hoverEnabled: true
                             anchors.fill: parent; anchors.rightMargin: modelData.recent?40:0; focusPolicy: Qt.NoFocus
-                            leftPadding: 64; rightPadding: 12
+                            leftPadding: 72; rightPadding: 16
                             Accessible.name: modelData.title+(modelData.artist?", "+modelData.artist:"")+(modelData.origin?", "+modelData.origin:"")
                             Accessible.selected: suggestionRow.highlighted
                             onClicked: searchField.choose(index)
@@ -1751,8 +1759,8 @@ ApplicationWindow {
                                 Column {
                                     objectName: "suggestionLabels"
                                     width: parent.width; anchors.verticalCenter: parent.verticalCenter; spacing: 2
-                                    SungText { width: parent.width; text: modelData.title; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.text; font.pixelSize: Theme.bodyMedium }
-                                    SungText { width: parent.width; visible: !!modelData.origin; text: (modelData.artist?modelData.artist+" · ":"")+(modelData.origin||""); font.pixelSize: Theme.bodySmall; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted }
+                                    SungText { width: parent.width; text: modelData.title; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.text; font.pixelSize: Theme.bodyLarge }
+                                    SungText { width: parent.width; visible: !!modelData.origin; text: (modelData.artist?modelData.artist+" · ":"")+(modelData.origin||""); font.pixelSize: Theme.bodyMedium; color: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted }
                                 }
                             }
                         }
@@ -1761,7 +1769,7 @@ ApplicationWindow {
                         // icon for what the row is where there is not.
                         Item {
                             objectName: "suggestionLeading_"+index
-                            x: 12; anchors.verticalCenter: parent.verticalCenter; width: 40; height: 40
+                            x: 16; anchors.verticalCenter: parent.verticalCenter; width: 40; height: 40
                             Artwork { anchors.fill: parent; visible: !!modelData.art; radius: Theme.shapeSmall; pixels: 120; url: modelData.art || "" }
                             Icon {
                                 anchors.centerIn: parent; visible: !modelData.art
@@ -1769,7 +1777,7 @@ ApplicationWindow {
                                 ink: suggestionRow.highlighted?Theme.secondaryContainerText:Theme.muted
                             }
                         }
-                        MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; implicitWidth: 36; implicitHeight: 36; symbol: "close"; tip: "Remove recent search · Shift+Delete"; focusPolicy: Qt.NoFocus; visible: modelData.recent===true; onClicked: app.removeRecentSearch(modelData.title) }
+                        MButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; size: "xsmall"; symbol: "close"; tip: "Remove recent search · Shift+Delete"; focusPolicy: Qt.NoFocus; visible: modelData.recent===true; onClicked: app.removeRecentSearch(modelData.title) }
                     }
                 }
             }
@@ -2069,7 +2077,7 @@ ApplicationWindow {
             ListView {
                 objectName: "musicFoldersList"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                 model: musicFoldersDialog.visible?app.musicFolders:[]; reuseItems: true
-                ScrollBar.vertical: ScrollBar {}
+                ScrollBar.vertical: MScrollBar {}
                 delegate: RowLayout {
                     required property string modelData; width: ListView.view.width; height: 64; spacing: 8
                     // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
@@ -2135,7 +2143,7 @@ ApplicationWindow {
     MDialog {
         id: cleanupDialog; objectName: "cleanupDialog"; property string playlistId
         anchors.centerIn: parent; title: "Clean up playlist"; modal: true
-        width: Math.min(620,window.width-48); height: Math.min(560,window.height-48,244+80*Math.max(1,app.cleanupItems.length))
+        width: fitWidth(560); height: Math.min(560,window.height-48,244+80*Math.max(1,app.cleanupItems.length))
         onClosed: app.closePlaylistCleanup()
         Loader {
             anchors.fill: parent; active: cleanupDialog.visible
@@ -2154,7 +2162,7 @@ ApplicationWindow {
                 ListView {
                     objectName: "cleanupList"; Layout.fillWidth: true; Layout.fillHeight: true; clip: true; reuseItems: true; spacing: 4
                     model: app.cleanupItems
-                    ScrollBar.vertical: ScrollBar {}
+                    ScrollBar.vertical: MScrollBar {}
                     delegate: RowLayout {
                         required property var modelData; width: ListView.view.width; height: 76; spacing: 12
                         // Hidden while pooled: a culled delegate still takes Tab (TrackRow.qml).
@@ -2241,7 +2249,7 @@ ApplicationWindow {
     }
     ServerConnection { id: serverConnection }
     MDialog {
-        id: settingsDialog; objectName: "settingsDialog"; width: fitWidth(880); height: fitHeight(740); modal: true; title: "Settings"
+        id: settingsDialog; objectName: "settingsDialog"; width: fitPanes(880); height: fitHeight(740); modal: true; title: "Settings"
         padding: 24
         palette.windowText: Theme.text; palette.buttonText: Theme.text; palette.text: Theme.text
         standardButtons: Dialog.Close
@@ -2529,8 +2537,12 @@ ApplicationWindow {
     }
     Rectangle {
         id: errorBar; objectName: "errorBar"
-        anchors.bottom: parent.bottom; anchors.bottomMargin: 140; anchors.horizontalCenter: parent.horizontalCenter
-        width: Math.min(window.width-120,errorText.implicitWidth+(app.canRetry?180:100)); height: Math.min(150,errorText.implicitHeight+32)
+        // It stands where the snackbar does, above the playback bar and any
+        // FAB (Scaffold.kt stacks the snackbar on the FAB), rather than at a
+        // fixed height that ran into the transport in narrow and immersive
+        // layouts.
+        anchors.bottom: parent.bottom; anchors.bottomMargin: 16 + window.snackbarFloor; anchors.horizontalCenter: parent.horizontalCenter
+        width: Math.min(window.width-48,600,errorText.implicitWidth+(app.canRetry?180:100)); height: Math.min(150,errorText.implicitHeight+32)
         // Material has a pair of roles for this and nothing else in the app
         // wears them: an error is the one thing on screen that should not look
         // like everything else.
@@ -2560,7 +2572,8 @@ ApplicationWindow {
         anchors.bottom: parent.bottom; anchors.bottomMargin: 16 + window.snackbarFloor; anchors.horizontalCenter: parent.horizontalCenter; z: 40
         Behavior on anchors.bottomMargin { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         id: toastBar; objectName: "toastBar"
-        width: Math.min(window.width-48,720,toastLabel.implicitWidth+(window.toastHasUndo?168:40))
+        // Snackbar.kt:603-604, ContainerMaxWidth: 600dp at most.
+        width: Math.min(window.width-48,600,toastLabel.implicitWidth+(window.toastHasUndo?168:40))
         // Material brings a component in by expanding it away from the edge it
         // sits against rather than by scaling it, because scale reads as a
         // change of elevation. A snackbar sits at the bottom, so it grows
@@ -2594,7 +2607,9 @@ ApplicationWindow {
         MButton { id: toastDismiss; objectName: "toastDismiss"; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: (toastBar.restingHeight-height)/2; symbol: "close"; tip: "Dismiss notification"; ink: Theme.inverseSurfaceText; visible: window.toastHasUndo; onClicked: window.toastPending=false }
         SungText { id: toastLabel; anchors.bottom: parent.bottom; anchors.bottomMargin: (toastBar.restingHeight-height)/2; anchors.left: parent.left; anchors.leftMargin: 16; anchors.right: parent.right; anchors.rightMargin: window.toastHasUndo?148:16; wrapMode: Text.Wrap; maximumLineCount: 2; text: window.toastText; font.pixelSize: Theme.bodyMedium; color: Theme.inverseSurfaceText }
     }
-    Timer { id: toastTimer; interval: 5000; running: window.toastPending && !window.toastHasUndo && !app.error && !window.modalOpen && !toastHover.hovered && !toastUndo.activeFocus && !toastDismiss.activeFocus; onTriggered: window.toastPending=false }
+    // SnackbarDuration.Short is 4000ms (SnackbarHost.kt:305-306); a
+    // snackbar with an action stays until it is dismissed.
+    Timer { id: toastTimer; interval: 4000; running: window.toastPending && !window.toastHasUndo && !app.error && !window.modalOpen && !toastHover.hovered && !toastUndo.activeFocus && !toastDismiss.activeFocus; onTriggered: window.toastPending=false }
     Connections { target: app; function onToast(message){window.toastPending=false;window.toastText=message;window.toastPending=true;} function onTrackChanged(){if(window.coverFlying)window.cancelCoverFlight();if(window.side==="lyrics" || window.compactMode || window.immersive)app.fetchLyrics();}
         function onViewAboutToChange(){window.rememberView();if(!window.albumOpening)window.cancelAlbumFlight();}
         function onCatalogChanged(){
@@ -2642,7 +2657,7 @@ ApplicationWindow {
             sourceComponent: Component {
         ListView {
             anchors.fill: parent; clip: true; spacing: 4; model: app.audioDevices
-            ScrollBar.vertical: ScrollBar {}
+            ScrollBar.vertical: MScrollBar {}
             delegate: MButton {
                 required property var modelData
                 objectName: "audioDeviceChoice"; width: ListView.view.width; height: 52
