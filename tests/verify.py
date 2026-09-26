@@ -109,6 +109,7 @@ if ready:
                       ("window-wash","--window-wash-test"),
                       ("material-foundations","--material-foundations-test"),
                       ("material-components","--material-components-test"),
+                      ("material-conformance","--material-conformance-test"),
                       ("material-detail","--material-detail-test"),
                       ("material-expressive","--material-expressive-test"),
                       ("material-sizing","--material-sizing-test"),

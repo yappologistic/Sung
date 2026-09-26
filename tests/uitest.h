@@ -75,6 +75,7 @@ void runPlaylistVersionsTests(Backend*,QQuickWindow*);
 void runWindowWashTests(Backend*,QQuickWindow*);
 void runMaterialFoundationTests(Backend*,QQuickWindow*);
 void runMaterialComponentTests(Backend*,QQuickWindow*);
+void runMaterialConformanceTests(Backend*,QQuickWindow*);
 void runMaterialDetailTests(Backend*,QQuickWindow*);
 void runMaterialExpressiveTests(Backend*,QQuickWindow*);
 void runMaterialSizingTests(Backend*,QQuickWindow*);
