@@ -31,4 +31,16 @@ ToolTip {
         color: Theme.inverseSurface
         radius: Theme.shapeExtraSmall
     }
+    // Tooltip.kt:214-235 grows the tooltip from 0.8 to 1 on FastSpatial and
+    // fades it on FastEffects, both ways, about its centre: a plain tooltip
+    // has no caret, so its transform origin stays the default. Qt's Basic
+    // tooltip has no transition of its own, so without these it popped.
+    enter: Transition {
+        NumberAnimation { property: "scale"; from: 0.8; to: 1; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+    }
+    exit: Transition {
+        NumberAnimation { property: "scale"; to: 0.8; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+    }
 }

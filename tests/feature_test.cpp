@@ -2704,7 +2704,9 @@ void runMaterialComponentTests(Backend *b, QQuickWindow *w) {
       button->setProperty("tip", QString("Tooltip fixture"));
       const auto point = button->mapToScene(button->boundingRect().center()).toPoint();
       auto tip = [&] { return button->findChild<QObject *>("buttonTip"); };
-      auto showing = [&] { auto popup = tip(); return popup && popup->property("visible").toBool(); };
+      // A tooltip closes with a transition (Tooltip.kt:214-235), and stays
+      // visible while it plays; it is dismissed once it is no longer opened.
+      auto showing = [&] { auto popup = tip(); return popup && popup->property("opened").toBool(); };
       QTest::mouseMove(w, point);
       c.check(c.until(showing, 3000), "hover shows the button tooltip after its delay");
       QTest::mouseClick(w, Qt::LeftButton, Qt::NoModifier, point);

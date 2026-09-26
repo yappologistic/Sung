@@ -48,7 +48,13 @@ MenuItem {
 
     readonly property bool showsTick: checkable && checked
     readonly property bool hasLeading: showsTick || symbol.length > 0
-    readonly property real leadingSpace: 32
+    // Menu.kt:2376-2385 lays an item out as its 4dp Surface inset, then
+    // DropdownMenuItemHorizontalPadding 12dp, the 20dp leading icon
+    // (SegmentedMenuTokens.ItemLeadingIconSize) and an 8dp gap to the label
+    // (DropdownMenuIconTextPadding). The icon starts at 16 and the label at
+    // 44; the label keeps that start whether or not the item has an icon.
+    readonly property real leadingSpace: 28
+    readonly property real shortcutGap: 12
 
     // No menu here opens a submenu, and the style's arrow for one is built for
     // every item unless the item says it has none.
@@ -57,7 +63,7 @@ MenuItem {
     // Menu.kt:2374-2375 gives a menu item a 48dp container height.
     implicitHeight: 48
     height: visible ? implicitHeight : 0
-    leftPadding: 14; rightPadding: 14
+    leftPadding: 16; rightPadding: 16
     palette.windowText: control.ink
     // The leading glyph stays a plain Icon rather than going behind a holder:
     // the menu reads the indicator's own ink and size, and a holder in front of
@@ -78,7 +84,7 @@ MenuItem {
             objectName: "menuItemLabel"
             anchors.verticalCenter: parent.verticalCenter
             x: control.mirrored ? 0 : control.leadingSpace
-            width: parent.width-control.leadingSpace-(shortcutLabel.visible ? shortcutLabel.width+12 : 0)
+            width: parent.width-control.leadingSpace-(shortcutLabel.visible ? shortcutLabel.width+control.shortcutGap : 0)
             // SegmentedMenuTokens.ItemLabelTextFont is BodyLarge; Menu.kt:2053
             // still uses labelLarge under a TODO, so the token sets the style.
             text: control.text; color: control.ink; font.pixelSize: Theme.bodyLarge
@@ -92,7 +98,8 @@ MenuItem {
             visible: control.shortcut.length > 0
             text: control.shortcut
             color: Theme.muted
-            font.pixelSize: Theme.labelMedium
+            // SegmentedMenuTokens.ItemTrailingSupportingTextFont is LabelSmall.
+            font.pixelSize: Theme.labelSmall; labelRole: true
             Accessible.ignored: true
         }
       }

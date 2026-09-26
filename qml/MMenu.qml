@@ -30,8 +30,99 @@ Menu {
     // MenuDefaults.DropdownMenuGroupContentPadding is 0dp horizontally and
     // 2dp vertically (MenuDefaults.kt:886, Menu.kt:2378-2379). Each item
     // supplies its own 4dp horizontal Surface inset (Menu.kt:2038-2046).
-    width: 244; padding: 0; topPadding: 2; bottomPadding: 2; margins: 12
-    height: Math.min(implicitHeight, Math.max(100, (Overlay.overlay ? Overlay.overlay.height : 600)-24))
+    //
+    // A menu is as wide as its widest item, held between
+    // DropdownMenuItemDefaultMinWidth 112dp and DropdownMenuItemDefaultMaxWidth
+    // 280dp (Menu.kt:2386-2389). A caller that sets a width, such as a
+    // dropdown matching its field, keeps it.
+    //
+    // It keeps MenuHorizontalMargin 8dp and MenuVerticalMargin 48dp from the
+    // window's edges (Menu.kt:2324, 2371), so a long menu never runs into the
+    // edge of the window.
+    readonly property real minimumWidth: 112
+    readonly property real maximumWidth: 280
+    property real widestItem: 0
+    // An item builds its label only once it is first shown, so the menu reads
+    // the text itself, in the item's own styles, before it opens.
+    TextMetrics {
+        id: labelMetrics
+        font.family: Theme.fontFamily; font.pixelSize: Theme.bodyLarge
+        font.weight: Theme.weightFor(false, false, Theme.bodyLarge, "bodyLarge")
+        font.letterSpacing: Theme.trackingFor(Theme.bodyLarge, false, "bodyLarge", false)
+    }
+    TextMetrics {
+        id: shortcutMetrics
+        font.family: Theme.fontFamily; font.pixelSize: Theme.labelSmall
+        font.weight: Theme.weightFor(false, true, Theme.labelSmall, "labelSmall")
+        font.letterSpacing: Theme.trackingFor(Theme.labelSmall, true, "labelSmall", false)
+    }
+    function measure() {
+        let widest = 0
+        for (let i = 0; i < menu.count; ++i) {
+            const item = menu.itemAt(i)
+            if (!item || !item.visible || item.leadingSpace === undefined) continue
+            labelMetrics.text = item.text
+            let w = item.leftPadding + item.leadingSpace + labelMetrics.advanceWidth + item.rightPadding
+            if (item.shortcut) {
+                shortcutMetrics.text = item.shortcut
+                w += item.shortcutGap + shortcutMetrics.advanceWidth
+            }
+            widest = Math.max(widest, w)
+        }
+        widestItem = Math.ceil(widest)
+    }
+    // Opens the menu under its anchor, its end lined up with the anchor's
+    // end, as a menu dropped from an overflow button is. The menu is measured
+    // and placed as it is about to show, because an item only reports itself
+    // visible once its menu is open; the menu's margins then keep it inside
+    // the window.
+    property bool alignToAnchorEnd: false
+    function openUnder(anchor) {
+        anchorItem = anchor
+        alignToAnchorEnd = true
+        open()
+    }
+    onAboutToShow: {
+        measure()
+        if (alignToAnchorEnd && anchorItem && parent) {
+            const p = anchorItem.mapToItem(parent, anchorItem.width, anchorItem.height)
+            x = p.x - width
+            y = p.y
+        }
+    }
+    width: Math.max(minimumWidth, Math.min(maximumWidth, widestItem))
+    padding: 0; topPadding: 2; bottomPadding: 2
+    leftMargin: 8; rightMargin: 8; topMargin: 48; bottomMargin: 48
+    height: Math.min(implicitHeight, Math.max(100, (Overlay.overlay ? Overlay.overlay.height : 600)-topMargin-bottomMargin))
+
+    // The item the menu belongs to. Menus opened with popup(item, ...) already
+    // have it as their parent; one placed by hand names it here.
+    property Item anchorItem: null
+    // Menu.kt:2216-2242, calculateTransformOrigin: the menu grows from the
+    // side it shares with its anchor. It is left or right when it clears the
+    // anchor sideways, and otherwise the middle of the span the two share;
+    // the same rule settles top or bottom. Qt takes one of nine points
+    // rather than a fraction, so the fraction is read to its nearest third.
+    function pivotFor(ax, ay, aw, ah) {
+        function third(f) { return f < 1/3 ? 0 : f > 2/3 ? 2 : 1 }
+        function axis(start, size, anchorStart, anchorSize) {
+            if (start >= anchorStart+anchorSize) return 0
+            if (start+size <= anchorStart) return 2
+            if (size <= 0) return 0
+            return third(((Math.max(anchorStart,start)+Math.min(anchorStart+anchorSize,start+size))/2-start)/size)
+        }
+        const origins = [[Item.TopLeft, Item.Top, Item.TopRight],
+                         [Item.Left, Item.Center, Item.Right],
+                         [Item.BottomLeft, Item.Bottom, Item.BottomRight]]
+        return origins[axis(y, height, ay, ah)][axis(x, width, ax, aw)]
+    }
+    transformOrigin: {
+        const anchor = anchorItem || parent
+        if (!anchor || !parent) return Item.Top
+        const r = anchor === parent ? Qt.rect(0, 0, anchor.width, anchor.height)
+                                    : anchor.mapToItem(parent, 0, 0, anchor.width, anchor.height)
+        return pivotFor(r.x, r.y, r.width, r.height)
+    }
     delegate: MMenuItem {}
     contentItem: ListView {
         implicitHeight: contentHeight
@@ -49,6 +140,17 @@ Menu {
         radius: Theme.shapeLarge
         MElevation { anchors.fill: parent; radius: parent.radius; level: 2 }
     }
-    enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.enterDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-    exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: Theme.exitDuration; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+    // Menu.kt:1829-1851 opens and closes the menu on one transition: its
+    // scale between ClosedScaleTarget 0.8 and 1 on FastSpatial, and its alpha
+    // between 0 and 1 on FastEffects (Menu.kt:2402-2405). Spatial because the
+    // menu grows out of its anchor; effects for the alpha so it cannot pass
+    // through a wrong opacity.
+    enter: Transition {
+        NumberAnimation { property: "scale"; from: 0.8; to: 1; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+    }
+    exit: Transition {
+        NumberAnimation { property: "scale"; to: 0.8; duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial }
+        NumberAnimation { property: "opacity"; to: 0; duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects }
+    }
 }
