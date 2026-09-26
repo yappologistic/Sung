@@ -24,6 +24,13 @@ QtObject {
     // color_spec_2021.ts:130-739 supplies the alternate variant and contrast
     // tones for every role, including anchors the desktop file supplied.
     readonly property bool desktopStandard: desktopPalette && app.colorVariant === "tonalSpot" && app.colorContrast === 0
+    // What secondary text (onSurfaceVariant) must reach against a surface a
+    // picture shows through. MCU color_spec_2021.ts:241-248 gives the role a
+    // contrast curve, and :247 gives 4.5:1 at standard, 7:1 at medium and
+    // 11:1 at high contrast.
+    readonly property real textContrast: app.colorContrast <= 0.5
+        ? 4.5 + 5 * app.colorContrast
+        : 7 + 8 * (app.colorContrast - 0.5)
     readonly property string schemeKey: dark + "/" + app.colorVariant + "/" + app.colorContrast
     readonly property string modeKey: app.artworkAccent + "/" + app.accentColor + "/" + followDesktop
     // MotionScheme.kt:155-159 reads StandardMotionTokens.kt:22-23 for the

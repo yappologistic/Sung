@@ -8,6 +8,7 @@
 #include <QGuiApplication>
 #include <QImage>
 #include <QPainter>
+#include <QQmlEngine>
 #include <QPointer>
 #include <QProcess>
 #include <QQmlComponent>
@@ -473,7 +474,8 @@ void runAmbientImmersiveTests(Backend *b, QQuickWindow *w) {
   QTest::qWait(400);
   c.shot("04-backdrop-light");
   b->setColorContrast(1);
-  c.check(backdrop && qAbs(backdrop->property("inkTarget").toReal() - 11) < 0.001,
+  auto *theme = qmlEngine(w) ? qmlEngine(w)->singletonInstance<QObject *>("SungUi", "Theme") : nullptr;
+  c.check(backdrop && theme && qAbs(theme->property("textContrast").toReal() - 11) < 0.001,
           "high contrast uses the onSurfaceVariant 11:1 target");
   c.shot("04b-backdrop-light-high");
   b->setColorContrast(0);
