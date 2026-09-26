@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="assets/readme-banner.png" alt="Sung showing music collections and synchronized lyrics" width="100%">
+<img src="assets/readme-banner.png" alt="Sung playing a song, the cover in a flower shape ringed by the visualizer" width="100%">
 
 <a href="https://buymeacoffee.com/e_gurl">
   <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Support Sung on Buy Me a Coffee" width="217" height="60">
