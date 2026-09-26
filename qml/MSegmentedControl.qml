@@ -124,12 +124,12 @@ Item {
                     spacing: 8
                     // ButtonGroupSamples.kt:155-190 shows choice by filled colour
                     // and shape; its icons only swap variants when an icon exists.
-                    SungText { text: button.text; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium; color: button.selected ? Theme.primaryText : Theme.muted; elide: Text.ElideRight; width: Math.min(implicitWidth, button.width-24) }
+                    SungText { text: button.text; font.pixelSize: Theme.labelLarge; labelRole: true; color: button.selected ? Theme.primaryText : Theme.muted; elide: Text.ElideRight; width: Math.min(implicitWidth, button.width-24) }
                 }
             }
             Rectangle {
                 anchors.fill: parent; anchors.margins: 2; radius: Theme.shapeSmall
-                color: "transparent"; border.width: 2; border.color: Theme.focusRing; visible: button.visualFocus
+                color: "transparent"; border.width: Theme.focusRingWidth; border.color: Theme.focusRing; visible: button.visualFocus
             }
         }
     }

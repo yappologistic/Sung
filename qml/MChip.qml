@@ -67,7 +67,7 @@ AbstractButton {
         }
         SungText {
             id: label; x: control.leads || control.removable ? control.leadRoom : (parent.width-implicitWidth)/2
-            text: control.text; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium; labelRole: true
+            text: control.text; font.pixelSize: Theme.labelLarge; labelRole: true
             color: control.selected ? Theme.secondaryContainerText : Theme.muted; anchors.verticalCenter: parent.verticalCenter
             Behavior on x { NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
         }

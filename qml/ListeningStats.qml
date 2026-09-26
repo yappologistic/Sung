@@ -195,7 +195,7 @@ MDialog {
                     ColumnLayout {
                         Layout.fillWidth: true
                         spacing: 0
-                        SungText { text: parent.parent.parent.modelData.name; Layout.fillWidth: true; elide: Text.ElideRight; font.weight: Font.Medium }
+                        SungText { text: parent.parent.parent.modelData.name; Layout.fillWidth: true; elide: Text.ElideRight; emphasized: true }
                         SungText {
                             text: parent.parent.parent.modelData.subtitle || ""
                             visible: !!text

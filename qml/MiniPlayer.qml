@@ -43,7 +43,7 @@ Window {
                 Artwork { url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: Theme.shapeMedium; pixels: 128; fit:app.currentArtworkFit }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 4
-                    SungText { objectName:"miniTitle"; text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; font.weight: Font.DemiBold }
+                    SungText { objectName:"miniTitle"; text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; emphasized: true }
                     SungText { text: presentation.shown.artist || ""; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.bodyMedium; color: Theme.muted }
                 }
                 MButton { objectName: "miniPinButton"; symbol: "pin"; toggle: true; selected: app.miniPinned; visible: app.canPinWindows; tip: app.miniPinned?"Let other windows cover this":"Keep above other windows"; onClicked: app.miniPinned=!app.miniPinned }

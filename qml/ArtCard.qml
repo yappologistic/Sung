@@ -57,6 +57,6 @@ Item {
         visible: !String(card.track.kind).startsWith("local-") && !(card.track.videoId || card.track.localPath) && (hover.hovered || openCard.activeFocus || cardAction.activeFocus || activeFocus || selected)
         onClicked: app.togglePin(card.track)
     }
-    MatchText { anchors.top: art.bottom; anchors.topMargin: 12; width: parent.width; revealFocused: openCard.activeFocus; sourceText: card.track.title || ""; font.pixelSize: Theme.bodyLarge; font.weight: Font.Medium }
+    MatchText { anchors.top: art.bottom; anchors.topMargin: 12; width: parent.width; revealFocused: openCard.activeFocus; sourceText: card.track.title || ""; font.pixelSize: Theme.bodyLarge; emphasized: true }
     MatchText { objectName: "cardSubtitle"; anchors.top: art.bottom; anchors.topMargin: 36; width: parent.width; sourceText: card.countLabel ? ((card.track.artist?card.track.artist+" · ":"")+card.countLabel) : card.track.artist || (card.track.smart ? "Smart playlist" : card.track.kind === "album" ? "Album" : (card.track.kind === "artist" || card.track.kind === "local-artist") ? "Artist" : "Playlist"); font.pixelSize: Theme.bodySmall; color: Theme.muted }
 }

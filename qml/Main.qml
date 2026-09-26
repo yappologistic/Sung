@@ -164,7 +164,7 @@ ApplicationWindow {
         }
         visible: Drag.active
         Drag.source: trackDrag; Drag.keys: ["sung-tracks"]; Drag.hotSpot.x: 0; Drag.hotSpot.y: 0
-        SungText { x: 80; width: 90; anchors.verticalCenter: parent.verticalCenter; text: window.countText(trackDrag.items.length); color: Theme.text; font.pixelSize: Theme.labelLarge }
+        SungText { x: 80; width: 90; anchors.verticalCenter: parent.verticalCenter; text: window.countText(trackDrag.items.length); color: Theme.text; font.pixelSize: Theme.labelLarge; labelRole: true }
     }
     function countText(n) { return n + (n === 1 ? " track" : " tracks"); }
     TrackPresentation { id: nowPresentation; visible: !window.immersive && !window.compactMode }
@@ -1237,9 +1237,9 @@ ApplicationWindow {
                                     ListView.onReused: pooled=false
                                     RowLayout {
                                         Layout.fillWidth: true
-                                        SungText { heading: true; text: modelData.title; font.pixelSize: Theme.titleLarge; font.weight: Font.Medium; Layout.fillWidth: true }
-                                        MButton { symbol: "back"; tip: "Previous covers"; enabled: !shelf.atXBeginning; implicitWidth: 40; implicitHeight: 40; onClicked: shelf.flick(1300,0) }
-                                        MButton { symbol: "chevron"; tip: "More covers"; enabled: !shelf.atXEnd; implicitWidth: 40; implicitHeight: 40; onClicked: shelf.flick(-1300,0) }
+                                        SungText { heading: true; text: modelData.title; font.pixelSize: Theme.titleLarge; emphasized: true; Layout.fillWidth: true }
+                                        MButton { symbol: "back"; tip: "Previous covers"; enabled: !shelf.atXBeginning; onClicked: shelf.flick(1300,0) }
+                                        MButton { symbol: "chevron"; tip: "More covers"; enabled: !shelf.atXEnd; onClicked: shelf.flick(-1300,0) }
                                     }
                                     MCarousel {
                                         id: shelf
@@ -1953,7 +1953,7 @@ ApplicationWindow {
             ColumnLayout {
                 width: nowScroll.availableWidth; spacing: 16
                 Artwork { Layout.alignment: Qt.AlignHCenter; Layout.preferredWidth: Math.min(320,nowScroll.availableWidth); Layout.preferredHeight: width; url: app.current.art || ""; motionUrl: app.currentMotionArt || ""; radius: Theme.shapeExtraLarge; pixels: 650; highResolution:true;crossfade:true; fit:app.currentArtworkFit }
-                SungText { text: app.current.title || "Nothing playing"; Layout.fillWidth: true; font.pixelSize: Theme.headlineSmall; font.weight: Font.Medium; wrapMode: Text.Wrap; elide: Text.ElideNone }
+                SungText { text: app.current.title || "Nothing playing"; Layout.fillWidth: true; font.pixelSize: Theme.headlineSmall; emphasized: true; wrapMode: Text.Wrap; elide: Text.ElideNone }
                 SungText { text: app.current.artist || ""; Layout.fillWidth: true; font.pixelSize: Theme.bodyLarge; color: Theme.muted }
                 RowLayout {
                     Layout.fillWidth: true
@@ -1980,7 +1980,7 @@ ApplicationWindow {
         RowLayout {
             Layout.fillWidth: true
             // The segments name their own views; the pane keeps one Queue name.
-            SungText {heading: true; objectName: "sidePanelTitle"; text: window.side==="queue"?"Queue":window.side==="lyrics"?"Lyrics":"Now playing"; font.pixelSize: Theme.titleLarge; font.weight: Font.Medium; Layout.fillWidth: true }
+            SungText {heading: true; objectName: "sidePanelTitle"; text: window.side==="queue"?"Queue":window.side==="lyrics"?"Lyrics":"Now playing"; font.pixelSize: Theme.titleLarge; emphasized: true; Layout.fillWidth: true }
             MButton { objectName: "revealPlayingButton"; text: "Playing"; tip: "Show playing song · Ctrl+J"; visible: window.side==="queue" && window.queueTab==="next"; enabled: app.currentIndex>=0; onClicked: window.revealPlaying() }
             MButton { objectName: "lyricSearchButton"; symbol: "search"; tip: "Find in lyrics"; visible: window.side==="lyrics"; enabled: !!app.lyrics; onClicked: {if(sideLoader.item)sideLoader.item.openSearch();} }
             MButton { objectName: "lyricTimingButton"; symbol: "settings"; tip: "Lyric timing · saved for this song"; visible: window.side==="lyrics" && !!app.current.id; onClicked: lyricTimingDialog.open() }
@@ -2309,7 +2309,7 @@ ApplicationWindow {
                     // parent disappears before Settings can show the match.
                     property bool hasMatches: settingsDialog.matches("Navigation top bar sidebar rail destinations") || settingsDialog.matches("Appearance theme system Noctalia light dark") || settingsDialog.matches("Appearance artwork accent color") || settingsDialog.matches("Accent color source palette") || settingsDialog.matches("Ambient artwork backdrop immersive now playing") || settingsDialog.matches("Backdrop follows the music audio") || settingsDialog.matches("Album covers for music videos YouTube Apple Music") || settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content") || settingsDialog.matches("Contrast standard medium high accessibility") || settingsDialog.matches("Density compact comfortable spacing") || settingsDialog.matches("Pointer density precise mouse touch target") || settingsDialog.matches("Current view layout density grid list") || (!!app.current.id && settingsDialog.matches("Current artwork")) || settingsDialog.matches("Animated album artwork") || settingsDialog.matches("Online animated covers YouTube Apple Music") || settingsDialog.matches("Animations") || settingsDialog.matches("Poster-style lyrics Google Sans Flex stretch font current line")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===0
-                    SungText {objectName:"settingsAppearanceHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Appearance";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
+                    SungText {objectName:"settingsAppearanceHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Appearance";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options0;objectName:"settingsRows0";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 // Two arrangements of the same three destinations. The option
                 // labels name where they go, so the control needs no sentence
@@ -2330,7 +2330,7 @@ ApplicationWindow {
                 // Material spreads the same five palettes differently for each of
                 // its scheme variants, which is what decides how much of the
                 // cover the interface takes on.
-                SungText {text:"Color scheme";visible:settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content");font.pixelSize:Theme.bodyLarge;font.weight:Font.Medium;Layout.topMargin:4}
+                SungText {text:"Color scheme";visible:settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content");font.pixelSize:Theme.bodyLarge;emphasized: true;Layout.topMargin:4}
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
                     objectName:"colorVariantControl"
                     visible:settingsDialog.matches("Color scheme variant neutral tonal spot vibrant expressive content")
@@ -2342,7 +2342,7 @@ ApplicationWindow {
                              {key:"content",label:"Faithful",name:"variantContent"}]
                     value:app.colorVariant; onChosen:value=>app.colorVariant=value
                 }
-                SungText {text:"Contrast";visible:settingsDialog.matches("Contrast standard medium high accessibility");font.pixelSize:Theme.bodyLarge;font.weight:Font.Medium;Layout.topMargin:4}
+                SungText {text:"Contrast";visible:settingsDialog.matches("Contrast standard medium high accessibility");font.pixelSize:Theme.bodyLarge;emphasized: true;Layout.topMargin:4}
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
                     objectName:"contrastControl"
                     visible:settingsDialog.matches("Contrast standard medium high accessibility")
@@ -2352,12 +2352,12 @@ ApplicationWindow {
                              {key:1,label:"High",name:"contrastHigh"}]
                     value:app.colorContrast; onChosen:value=>app.colorContrast=value
                 }
-                SungText {text:"Density";visible:settingsDialog.matches("Density compact comfortable spacing");font.pixelSize:Theme.bodyLarge;font.weight:Font.Medium}
+                SungText {text:"Density";visible:settingsDialog.matches("Density compact comfortable spacing");font.pixelSize:Theme.bodyLarge;emphasized: true}
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;visible:settingsDialog.matches("Density compact comfortable spacing");accessibleName:"Density";options:[{key:false,label:"Comfortable",name:"densityComfortable"},{key:true,label:"Compact",name:"densityCompact"}];value:app.compactDensity;onChosen:value=>app.compactDensity=value}
                 // Material draws its controls tighter when a precision pointer
                 // is driving them, because the 48dp minimum is a rule about
                 // disambiguating touches.
-                SungText {text:"Pointer";visible:settingsDialog.matches("Pointer density precise mouse touch target");font.pixelSize:Theme.bodyLarge;font.weight:Font.Medium;Layout.topMargin:4}
+                SungText {text:"Pointer";visible:settingsDialog.matches("Pointer density precise mouse touch target");font.pixelSize:Theme.bodyLarge;emphasized: true;Layout.topMargin:4}
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
                     objectName:"pointerControl"
                     visible:settingsDialog.matches("Pointer density precise mouse touch target")
@@ -2381,7 +2381,7 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
                     property bool hasMatches: settingsDialog.matches("Autoplay similar songs") || settingsDialog.matches("Track notifications") || settingsDialog.matches("Volume step") || settingsDialog.matches("Playback speed rate") || settingsDialog.matches("Sleep timer") || settingsDialog.matches("Pause headphones audio output disconnects") || settingsDialog.matches("Audio output device speakers headphones") || settingsDialog.matches("Prepare next track") || settingsDialog.matches("Gapless playback join pause between songs") || settingsDialog.matches("Crossfade overlap songs fade") || settingsDialog.matches("Volume normalization loudness level ReplayGain") || settingsDialog.matches("Resume recordings over 20 minutes mixes sets position") || settingsDialog.matches("Find missing lyrics on LRCLIB") || settingsDialog.matches("Sleep timer fade out volume")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===1
-                    SungText {objectName:"settingsPlaybackHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Playback";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
+                    SungText {objectName:"settingsPlaybackHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Playback";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options1;objectName:"settingsRows1";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Autoplay similar songs"); text: "Autoplay similar songs"; checked: app.autoplay; onToggled: app.autoplay=checked }
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Track notifications"); objectName: "trackNotificationsSwitch"; text: "Track notifications"; checked: app.trackNotifications; onToggled: app.trackNotifications=checked }
@@ -2420,7 +2420,7 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
                     property bool hasMatches: settingsDialog.matches("Music folders import manage") || settingsDialog.matches("Update music folders automatically watch") || settingsDialog.matches("Start page Home local music server liked") || settingsDialog.matches("Customize Home sections order") || settingsDialog.matches("Listening sessions saved queues") || settingsDialog.matches("Listening statistics top artists albums time")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===2
-                    SungText {objectName:"settingsLibraryHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Library";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
+                    SungText {objectName:"settingsLibraryHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Library";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options2;objectName:"settingsRows2";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSettingRow {opens:true;text:"Music folders";visible:settingsDialog.matches("Music folders import manage");onClicked:{settingsDialog.close();musicFoldersDialog.open();}}
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; text: "Update music folders automatically"; visible: settingsDialog.matches("Update music folders automatically watch"); checked: app.watchMusicFolders; onToggled: app.watchMusicFolders=checked }
@@ -2436,7 +2436,7 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                     property bool hasMatches:settingsDialog.matches("Keyboard shortcuts keys help") || settingsDialog.matches("Quick actions commands playlists") || settingsDialog.matches("Type to jump in lists keyboard")
                     visible:settingsDialog.searchQuery.trim()?hasMatches:settingsDialog.category===3
-                    SungText {objectName:"settingsKeyboardHeading";heading:true;visible:!!settingsDialog.searchQuery.trim();text:"Keyboard";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
+                    SungText {objectName:"settingsKeyboardHeading";heading:true;visible:!!settingsDialog.searchQuery.trim();text:"Keyboard";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {objectName:"settingsRowsKeyboard";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                         MSettingRow {opens:true;objectName:"shortcutHelpButton";text:"Keyboard shortcuts";visible:settingsDialog.matches("Keyboard shortcuts keys help");onClicked:{settingsDialog.close();shortcutHelp.open()}}
                         MSettingRow {opens:true;text:"Quick actions · Ctrl+Shift+P";visible:settingsDialog.matches("Quick actions commands playlists");onClicked:{settingsDialog.close();commandPalette.open();}}
@@ -2448,10 +2448,10 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
                     property bool hasMatches: settingsDialog.matches("Music server library") || settingsDialog.matches("YouTube cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===4
-                    SungText {objectName:"settingsConnectionsHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Connections";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
+                    SungText {objectName:"settingsConnectionsHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Connections";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options3;objectName:"settingsRows3";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSettingRow {opens:true;objectName:"musicServerButton";text:"Music server";visible:settingsDialog.matches("Music server library");onClicked:{settingsDialog.close();serverConnection.open()}}
-                SungText {objectName:"youtubeGroupHeading"; visible: settingsDialog.matches("YouTube cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate"); text: "YouTube"; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium; color: Theme.muted; Layout.topMargin: 12 }
+                SungText {objectName:"youtubeGroupHeading"; visible: settingsDialog.matches("YouTube cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate"); text: "YouTube"; font.pixelSize: Theme.labelLarge; labelRole: true; color: Theme.muted; Layout.topMargin: 12 }
                 SungText { visible: settingsDialog.matches("YouTube streaming quality standard data saver bitrate"); text: "Streaming quality"; font.pixelSize: Theme.titleMedium; typeRole:"titleMedium" }
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
                     objectName:"streamingQualityControl"
@@ -2471,11 +2471,11 @@ ApplicationWindow {
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
                     property bool hasMatches: settingsDialog.matches("Pause history this session privacy") || settingsDialog.matches("Keep played songs offline storage disk") || settingsDialog.matches("Clear kept songs offline storage") || settingsDialog.matches("Clear artwork cache") || settingsDialog.matches("Clear history") || settingsDialog.matches("Export library backup") || settingsDialog.matches("Import library restore") || settingsDialog.matches("Sung version")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===5
-                    SungText {objectName:"settingsPrivacyHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Privacy & data";font.pixelSize:Theme.titleLarge;font.weight:Font.Medium;Layout.bottomMargin:8}
+                    SungText {objectName:"settingsPrivacyHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Privacy & data";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options4;objectName:"settingsRows4";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSwitch { Layout.fillWidth:true;Layout.minimumWidth:0; visible: settingsDialog.matches("Pause history this session privacy"); objectName: "historyPauseSwitch"; text: "Pause history this session"; checked: app.historyPaused; onToggled: app.historyPaused=checked }
                 // These settings keep played tracks on disk for offline listening.
-                MExposedDropdown { Layout.fillWidth:true;Layout.minimumWidth:0; objectName:"keepPlayedPicker"; fieldName:"keepPlayedButton"; implicitHeight:48; label:"Keep played songs offline"; visible:settingsDialog.matches("Keep played songs offline storage disk"); options:[{key:0,label:"Off",name:"keepPlayedOff"},{key:512,label:"512 MB",name:"keepPlayed512"},{key:1024,label:"1 GB",name:"keepPlayed1024"},{key:4096,label:"4 GB",name:"keepPlayed4096"},{key:16384,label:"16 GB",name:"keepPlayed16384"}]; value:app.keepPlayedMb; onChosen:key=>app.keepPlayedMb=key }
+                MExposedDropdown { Layout.fillWidth:true;Layout.minimumWidth:0; labelSurface:Theme.high; objectName:"keepPlayedPicker"; fieldName:"keepPlayedButton"; implicitHeight:48; label:"Keep played songs offline"; visible:settingsDialog.matches("Keep played songs offline storage disk"); options:[{key:0,label:"Off",name:"keepPlayedOff"},{key:512,label:"512 MB",name:"keepPlayed512"},{key:1024,label:"1 GB",name:"keepPlayed1024"},{key:4096,label:"4 GB",name:"keepPlayed4096"},{key:16384,label:"16 GB",name:"keepPlayed16384"}]; value:app.keepPlayedMb; onChosen:key=>app.keepPlayedMb=key }
                 MSettingRow {objectName:"clearKeptSongsButton";text:"Clear kept songs · "+app.keptSongsSize;visible:app.keptSongsSize.length>0 && settingsDialog.matches("Clear kept songs offline storage");onClicked:app.clearKeptSongs()}
                 MSettingRow {objectName:"clearCacheButton";text:"Clear artwork cache";visible:settingsDialog.matches("Clear artwork cache");onClicked:app.clearCache()}
                 MSettingRow {objectName:"clearHistoryButton";text:"Clear history";visible:settingsDialog.matches("Clear history");onClicked:app.clearHistory()}
