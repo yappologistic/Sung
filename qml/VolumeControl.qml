@@ -35,11 +35,11 @@ RowLayout {
                 function apply(){if(percent.acceptableInput){app.volume=Number(percent.text)/100;popup.close();}}
                 anchors.fill:parent;spacing:8
                 RowLayout {Layout.fillWidth:true
-                    SungText {heading:true;text:"Volume";Layout.fillWidth:true;font.pixelSize:Theme.titleMedium}
+                    SungText {heading:true;text:"Volume";Layout.fillWidth:true;font.pixelSize:Theme.titleMedium;typeRole:"titleMedium"}
                     MTextField {id:percent;objectName:"volumePercent";Layout.preferredWidth:72;implicitHeight:40;topPadding:10;bottomPadding:10;maximumLength:3;validator:IntValidator {bottom:0;top:100} inputMethodHints:Qt.ImhDigitsOnly;Accessible.name:"Volume percent";onAccepted:popup.apply()}
                     SungText {text:"%";color:Theme.muted}
                 }
-                SeekBar {objectName:control.sliderName;volumeMode:true;inactiveColor:Theme.outlineVariant;Layout.fillWidth:true;onMoved:percent.text=String(Math.round(value*100))}
+                SeekBar {objectName:control.sliderName;volumeMode:true;Layout.fillWidth:true;onMoved:percent.text=String(Math.round(value*100))}
                 RowLayout {Layout.fillWidth:true
                     MButton {objectName:"volumeMute";text:app.volume>0?"Mute":"Unmute";onClicked:{if(app.volume>0){control.previousVolume=app.volume;app.volume=0;}else app.volume=control.previousVolume;percent.text=String(Math.round(app.volume*100));}}
                     Item {Layout.fillWidth:true}

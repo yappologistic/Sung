@@ -2576,8 +2576,8 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
   }
 
   // --- Typography: emphasis on the font's own axes ---
-  c.check(c.evaluate("Theme.emphasizedWidth").toInt() > c.evaluate("Theme.regularWidth").toInt(),
-          "emphasis widens the variable font rather than only thickening it");
+  // md.sys.typescale.emphasized.*.wdth is 100 for every role: emphasis is
+  // weight and tracking, not width.
   b->home();
   c.check(c.until([&] { return !b->busy(); }), "Home opens for its headline");
   auto title = shownItem(w->contentItem(), "collectionHeaderTitle");
@@ -2586,8 +2586,8 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
   if (title) {
     const auto axes = title->property("font").value<QFont>().variableAxisValue(
         QFont::Tag("wdth"));
-    c.check(qAbs(axes - c.evaluate("Theme.emphasizedWidth").toDouble()) < 0.01,
-            QString("and the width axis is really set (%1)").arg(axes));
+    c.check(qAbs(axes - 100) < 0.01,
+            QString("and its width axis stays at Material's 100 (%1)").arg(axes));
     // Material's emphasis is one weight step up from the role's own, which for
     // a headline is medium rather than the bold a label would take.
     c.check(title->property("font").value<QFont>().weight() == QFont::Medium,

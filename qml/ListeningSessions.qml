@@ -48,7 +48,7 @@ MDialog {
                             required property var modelData;width:list.width;height:88;radius:Theme.shapeLarge;color:Theme.high
                             RowLayout {anchors.fill:parent;anchors.margins:12;spacing:8
                                 ColumnLayout {Layout.fillWidth:true;spacing: 4
-                                    SungText {text:modelData.title;Layout.fillWidth:true;font.weight:Font.Medium}
+                                    SungText {text:modelData.title;Layout.fillWidth:true;emphasized: true}
                                     SungText {text:modelData.song || "";Layout.fillWidth:true;color:Theme.muted;font.pixelSize:Theme.bodySmall}
                                     SungText {text:modelData.count+(modelData.count===1?" track · ":" tracks · ")+Math.floor(modelData.position/60000)+":"+String(Math.floor(modelData.position/1000)%60).padStart(2,"0");color:Theme.muted;font.pixelSize:Theme.bodySmall}
                                 }

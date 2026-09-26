@@ -57,13 +57,13 @@ MDialog {
                 objectName: "onboardingAppearance"
                 visible: root.step===0
                 Layout.fillWidth: true; Layout.minimumWidth: 0; spacing: 12
-                SungText { text: "Theme"; font.weight: Font.Medium }
+                SungText { text: "Theme"; emphasized: true }
                 MSegmentedControl {
                     accessibleName: "Theme"
                     options: [{key:"system",label:desktopTheme.available?"Noctalia":"System",name:"onboardTheme_system"},{key:"light",label:"Light",name:"onboardTheme_light"},{key:"dark",label:"Dark",name:"onboardTheme_dark"}]
                     value: app.theme; onChosen: value=>app.theme=value
                 }
-                SungText { text: "Accent color"; font.weight: Font.Medium; Layout.topMargin: 4 }
+                SungText { text: "Accent color"; emphasized: true; Layout.topMargin: 4 }
                 AccentPicker { Layout.fillWidth: true; Layout.minimumWidth: 0 }
             }
             ColumnLayout {

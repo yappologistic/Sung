@@ -88,7 +88,7 @@ MDialog {
                         SungText {
                             objectName: "playlistVersionWhen_"+version.index
                             text: dialog.spell(version.modelData.at)
-                            font.weight: Font.Medium
+                            emphasized: true
                             Layout.fillWidth: true
                             elide: Text.ElideRight
                         }

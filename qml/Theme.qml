@@ -357,10 +357,14 @@ QtObject {
 
     // --- Typography ----------------------------------------------------------
     readonly property string fontFamily: "Google Sans Flex"
-    // Material's emphasized styles lean on a variable font's weight and width
-    // to carry hierarchy, rather than only its size. Google Sans Flex is
-    // variable, so the emphasis is real rather than a synthesised bold.
-    readonly property int emphasizedWidth: 110
+    // Material's emphasized styles lean on a variable font's weight to carry
+    // hierarchy, rather than only its size. Google Sans Flex is variable, so
+    // the emphasis is real rather than a synthesised bold. Emphasis moves
+    // weight and tracking only. material-web's typescale
+    // tokens set wdth 100 for every role, emphasized or not
+    // (md.sys.typescale.emphasized.*.wdth), and Compose's emphasized styles
+    // change neither width nor size (TypeScaleTokens.kt). One width also
+    // keeps every style on one FreeType face instead of two.
     readonly property int regularWidth: 100
     // The weight belongs to the role, not to whether the style is a label:
     // title medium and title small sit at medium and go bold with the labels,
