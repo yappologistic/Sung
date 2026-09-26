@@ -79,7 +79,11 @@ Item {
     }
     function dismiss() { if (open) { open = false; closed() } }
 
-    readonly property real restingY: sheet.open ? Math.max(0, parent.height-height) : parent.height
+    // Where the sheet rests follows `shown`, which trails `open` by the one
+    // statement that picks the spring, so the move always runs on the spring
+    // chosen for its direction.
+    property bool shown: false
+    readonly property real restingY: sheet.shown ? Math.max(0, parent.height-height) : parent.height
     property real drag: 0
 
     // The scrim covers the window, not the sheet, so it is a sibling.
@@ -114,8 +118,18 @@ Item {
     y: restingY + drag
     visible: y < (parent ? parent.height : 0)
     onVisibleChanged: if (visible && focusPending) Qt.callLater(() => focusFirst())
-    Behavior on y { enabled: app.motion && !grab.active; NumberAnimation { duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
+    // ModalBottomSheet.kt:134-135 shows the sheet and settles a drag on
+    // DefaultSpatial, and hides it on FastEffects: going away, it does not
+    // bounce.
+    Behavior on y { enabled: app.motion && !grab.active; NumberAnimation { id: sheetMotion; objectName: "bottomSheetMotion"; easing.type: Easing.BezierSpline } }
+    function chooseSpring(showing) {
+        sheetMotion.duration = showing ? Theme.springSpatialMs : Theme.springFastEffectsMs
+        sheetMotion.easing.bezierCurve = showing ? Theme.springSpatial : Theme.springFastEffects
+    }
+    Component.onCompleted: { chooseSpring(open); shown = open }
     onOpenChanged: {
+        chooseSpring(open)
+        shown = open
         drag = 0
         if (open && modal) {
             returnFocusItem = sheet.Window.window.activeFocusItem

@@ -122,7 +122,8 @@ ItemDelegate {
             width: 40; height: 40
             radius: parent.committing ? Theme.listActive : Theme.shapeFull(height)
             color: parent.committing ? Theme.primary : Theme.secondaryContainer
-            Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
+            // A shape change, so FastSpatial, as the row's own corners.
+            Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
             Behavior on color { ColorAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             Icon {
                 anchors.centerIn: parent

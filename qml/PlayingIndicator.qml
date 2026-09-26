@@ -16,7 +16,10 @@ Item {
                 transform: Scale {
                     origin.y: 18
                     yScale: indicator.animating ? 0.16+0.84*(app.audioLevels[index] || 0) : 0.16
-                    Behavior on yScale { enabled: indicator.animating; NumberAnimation { duration: 65; easing.type: Easing.OutCubic } }
+                    // Each bar chases its band on FastEffects (1.0/3800,
+                    // about 108ms): quick enough to keep up with the music,
+                    // critically damped so a bar never reads past its level.
+                    Behavior on yScale { enabled: indicator.animating; NumberAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
                 }
             }
         }

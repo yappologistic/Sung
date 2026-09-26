@@ -48,9 +48,25 @@ AbstractButton {
             // Material's navigation colours are the secondary pair. The
             // indicator is the secondary container, its content the ink that
             // belongs on it, and the label the secondary role itself.
-            color: control.selected ? Theme.secondaryContainer : "transparent"
-            Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
+            //
+            // The rectangle itself is the item's hover and press area; the
+            // indicator is the fill inside it. NavigationItem.kt:1226-1230 and
+            // 692 grow its width out from the centre by a progress that runs
+            // on DefaultSpatial, and 1251 fades it by the same progress, so it
+            // arrives as a shape rather than a colour.
+            color: "transparent"
             Behavior on radius { enabled: app.motion; NumberAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
+            property real progress: control.selected ? 1 : 0
+            Behavior on progress { enabled: app.motion; NumberAnimation { objectName: "navigationIndicatorGrowth"; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial } }
+            Rectangle {
+                objectName: "navigationIndicatorFill"
+                width: parent.width*Math.max(0, parent.progress); height: parent.height
+                x: (parent.width-width)/2
+                radius: parent.radius
+                color: Theme.secondaryContainer
+                opacity: Math.min(1, Math.max(0, parent.progress))
+                visible: parent.progress > 0
+            }
             Rectangle {
                 anchors.fill: parent; radius: parent.radius
                 color: Theme.secondaryContainerText
@@ -72,7 +88,7 @@ AbstractButton {
             anchors.fill: parent
             visible: opacity>0; opacity: control.expanded ? 0 : 1
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-            Icon { id: stackGlyph; anchors.horizontalCenter: parent.horizontalCenter; y: 8; name: control.symbol; fill: control.selected ? 1 : 0; ink: control.selected ? Theme.secondaryContainerText : Theme.muted; Accessible.ignored: true }
+            Icon { id: stackGlyph; anchors.horizontalCenter: parent.horizontalCenter; y: 8; name: control.symbol; fill: control.selected ? 1 : 0; ink: control.selected ? Theme.secondaryContainerText : Theme.muted; Accessible.ignored: true; Behavior on ink { ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } } }
             MBadge {
                 objectName: "navigationBadge"
                 present: control.badged || control.badgeCount >= 0
@@ -90,6 +106,8 @@ AbstractButton {
                 // for both states; the indicator and ink show selection.
                 labelRole: true; typeRole: "labelMedium"
                 color: control.selected ? Theme.secondary : Theme.muted
+                // NavigationItem.kt:1212 crosses the label on DefaultEffects.
+                Behavior on color { ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
                 Accessible.ignored: true
             }
         }
@@ -103,7 +121,7 @@ AbstractButton {
             Behavior on opacity { NumberAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
             Item {
                 width: 24; height: 24; anchors.verticalCenter: parent.verticalCenter
-                Icon { anchors.centerIn: parent; visible: !control.artUrl; name: control.symbol; fill: control.selected ? 1 : 0; ink: control.selected ? Theme.secondaryContainerText : Theme.muted; Accessible.ignored: true }
+                Icon { anchors.centerIn: parent; visible: !control.artUrl; name: control.symbol; fill: control.selected ? 1 : 0; ink: control.selected ? Theme.secondaryContainerText : Theme.muted; Accessible.ignored: true; Behavior on ink { ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } } }
                 Artwork { anchors.centerIn: parent; visible: !!control.artUrl; width: 24; height: 24; radius: Theme.shapeSmall; pixels: 96; url: control.artUrl }
                 MBadge {
                     objectName: "navigationWideBadge"
@@ -125,6 +143,8 @@ AbstractButton {
                 // Stacked, the label is below the indicator and on the surface,
                 // so it takes the secondary role instead.
                 color: control.selected ? Theme.secondaryContainerText : Theme.muted
+                // NavigationItem.kt:1212 crosses the label on DefaultEffects.
+                Behavior on color { ColorAnimation { duration: Theme.springEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springEffects } }
                 Accessible.ignored: true
             }
         }

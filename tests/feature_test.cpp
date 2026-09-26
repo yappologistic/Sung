@@ -2396,12 +2396,16 @@ void runMaterialFoundationTests(Backend *b, QQuickWindow *w) {
   auto sheetExit = motionObject(immersiveQueue, "exit");
   auto sheetExitAnimation = motionAt(sheetExit, {0});
   const QVariant sheetExitDuration = sheetExitAnimation ? sheetExitAnimation->property("duration") : QVariant();
+  // NavigationDrawer.kt:355 closes a modal sheet on FastEffects, so it
+  // cannot overshoot on its way out.
   c.check(sheetExitDuration.isValid() && sheetExitDuration.toInt() ==
-                                               c.evaluate("Theme.springFastSpatialMs").toInt(),
-          QString("the queue sheet exits with the FastSpatial position spring "
+                                               c.evaluate("Theme.springFastEffectsMs").toInt() &&
+              QQmlProperty(sheetExitAnimation, "easing.bezierCurve").read().toList() ==
+                  curve("springFastEffects"),
+          QString("the queue sheet exits with the FastEffects spring "
                   "(actual %1, expected %2)")
               .arg(sheetExitDuration.isValid() ? QString::number(sheetExitDuration.toInt()) : "not found")
-              .arg(c.evaluate("Theme.springFastSpatialMs").toInt()));
+              .arg(c.evaluate("Theme.springFastEffectsMs").toInt()));
   if (auto tracks = shownItem(w->contentItem(), "tracksView")) {
     for (const auto &entry : {QPair<const char *, const char *>{"trackDisplaceMotion", "displaced"},
                               {"trackMoveMotion", "move"},

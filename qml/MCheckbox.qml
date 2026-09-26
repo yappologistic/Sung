@@ -25,6 +25,16 @@ AbstractButton {
     readonly property color mark: dimmed ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContentOpacity)
                                 : checked ? Theme.primary : Theme.muted
 
+    // Driven from the change itself, so drawing in and snapping away cannot
+    // race the binding that says which way the box is going.
+    function syncMark(animate) {
+        markDraw.stop()
+        if (checked && animate && app.motion) markDraw.start()
+        else markReveal.width = checked ? Theme.checkboxSize : 0
+    }
+    onCheckedChanged: syncMark(true)
+    Component.onCompleted: syncMark(false)
+
     background: Item {
         // Material's state layer is wider than the box and narrower than the
         // target, so the pointer lights up the control rather than the row.
@@ -57,13 +67,27 @@ AbstractButton {
             color: control.checked ? control.mark : "transparent"
             border.width: control.checked ? 0 : 2
             border.color: control.mark
-            Behavior on color { ColorAnimation { duration: Theme.fast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.fastEffectsCurve } }
-            Icon {
-                objectName: "checkboxMark"
-                anchors.centerIn: parent
-                name: "check"; size: Theme.checkboxSize
-                ink: Theme.primaryText
-                visible: control.checked
+            // Checkbox.kt:1038-1047: the box fills in on DefaultEffects and
+            // empties on FastEffects.
+            Behavior on color { enabled: app.motion; ColorAnimation { duration: control.checked ? Theme.springEffectsMs : Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: control.checked ? Theme.springEffects : Theme.springFastEffects } }
+            // Checkbox.kt:594-611 draws the tick in from its start on
+            // DefaultSpatial and snaps it away when the box is cleared. The
+            // tick runs left to right, so uncovering it from the left draws it.
+            Item {
+                id: markReveal
+                objectName: "checkboxMarkReveal"
+                anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter
+                height: parent.height; clip: true
+                width: 0
+                NumberAnimation { id: markDraw; objectName: "checkboxMarkDraw"; target: markReveal; property: "width"; from: 0; to: Theme.checkboxSize; duration: Theme.springSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springSpatial }
+                Icon {
+                    objectName: "checkboxMark"
+                    name: "check"; size: Theme.checkboxSize
+                    // CheckboxTokens.SelectedDisabledIconColor is Surface:
+                    // the tick stays cut out of the dimmed box.
+                    ink: control.dimmed ? Theme.surface : Theme.primaryText
+                    visible: control.checked
+                }
             }
         }
     }
