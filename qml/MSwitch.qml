@@ -46,8 +46,16 @@ Switch {
             // control, and they read as one piece because of it. Disabled, the
             // on handle turns to the plain surface and the off one to
             // onSurface at 38% (SwitchTokens.Disabled*HandleColor).
+            // Hovered, focused or pressed, the handle steps to
+            // primaryContainer when on and onSurfaceVariant when off
+            // (SwitchTokens.Selected/Unselected Hover, Focus and Pressed
+            // HandleColor; material-web's switch applies them, Compose's
+            // defaults do not read them).
+            readonly property bool engaged: control.down || control.visualFocus || control.hovered
             color: control.dimmed ? (control.checked ? Theme.surface : Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContentOpacity))
-                 : control.checked ? Theme.primaryText : Theme.outline
+                 : control.checked ? (engaged ? Theme.primaryContainer : Theme.primaryText)
+                 : engaged ? Theme.muted : Theme.outline
+            Behavior on color { enabled: app.motion; ColorAnimation { duration: Theme.springFastEffectsMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastEffects } }
             // The thumb travelling across the track is movement, and
             // Material gives the switch the fast spatial spring for it, so it
             // carries a little of the overshoot a spatial spring has.

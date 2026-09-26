@@ -196,7 +196,10 @@ AbstractButton {
              : control.tonal ? (control.toggle && control.selected ? Theme.secondary : Theme.secondaryContainer)
              : control.selected && !control.toggle ? Theme.high : "transparent"
         border.color: control.outlined && !control.dimmed ? Theme.outlineVariant
-                    : control.outlined ? Qt.rgba(Theme.text.r,Theme.text.g,Theme.text.b,Theme.disabledContainerOpacity)
+                    // Button.kt:1528-1538 keeps the disabled edge in the
+                    // outline's own role and dims it to the disabled
+                    // container opacity, rather than switching to onSurface.
+                    : control.outlined ? Qt.rgba(Theme.outlineVariant.r,Theme.outlineVariant.g,Theme.outlineVariant.b,Theme.disabledContainerOpacity)
                     : "transparent"
         border.width: control.outlined ? control.sizedOutline : 2
         // An elevated button is the one variant Material lifts off the page,
