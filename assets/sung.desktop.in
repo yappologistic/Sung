@@ -2,7 +2,7 @@
 Type=Application
 Name=Sung
 Comment=YouTube Music, native on Linux
-Exec=sung %u
+Exec="@CMAKE_INSTALL_FULL_BINDIR@/sung" %u
 Icon=sung
 Terminal=false
 Categories=AudioVideo;Audio;Player;
