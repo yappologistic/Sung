@@ -344,8 +344,337 @@ def audio_format(quality, fallback=False):
     return '/'.join(choices)
 
 
+def parse_credentials(raw):
+    raw = str(raw or '').strip()
+    cookie_map = {}
+    auth_user = '0'
+    visitor_data = None
+    data_sync_id = None
+    if '***INNERTUBE COOKIE***' in raw:
+        for line in raw.splitlines():
+            line = line.strip()
+            if line.startswith('***INNERTUBE COOKIE*** ='):
+                c_str = line.split('=', 1)[1].strip()
+                for part in c_str.split(';'):
+                    if '=' in part:
+                        k, v = part.strip().split('=', 1)
+                        cookie_map[k.strip()] = v.strip()
+            elif line.startswith('***VISITOR DATA*** ='):
+                visitor_data = line.split('=', 1)[1].strip() or None
+            elif line.startswith('***DATASYNC ID*** ='):
+                data_sync_id = line.split('=', 1)[1].strip() or None
+            elif line.startswith('***AUTH USER*** ='):
+                auth_user = line.split('=', 1)[1].strip() or '0'
+    elif '# Netscape' in raw or '# HTTP Cookie File' in raw or '\t' in raw:
+        for line in raw.splitlines():
+            line = line.strip()
+            if not line or line.startswith('#'): continue
+            parts = line.split('\t')
+            if len(parts) >= 7:
+                cookie_map[parts[5].strip()] = parts[6].strip()
+    elif 'cookie:' in raw.lower():
+        for line in raw.splitlines():
+            if ':' in line:
+                hk, hv = line.split(':', 1)
+                hk = hk.strip().lower()
+                hv = hv.strip()
+                if hk == 'cookie':
+                    for part in hv.split(';'):
+                        if '=' in part:
+                            k, v = part.strip().split('=', 1)
+                            cookie_map[k.strip()] = v.strip()
+                elif hk == 'x-goog-authuser':
+                    auth_user = hv
+    elif raw.startswith('{') and raw.endswith('}'):
+        try:
+            parsed = json.loads(raw)
+            if isinstance(parsed, dict):
+                c = parsed.get('cookie') or parsed.get('Cookie') or ''
+                if isinstance(c, dict): cookie_map.update(c)
+                elif isinstance(c, str):
+                    for part in c.split(';'):
+                        if '=' in part:
+                            k, v = part.strip().split('=', 1)
+                            cookie_map[k.strip()] = v.strip()
+                auth_user = str(parsed.get('authUser') or parsed.get('X-Goog-AuthUser') or parsed.get('x-goog-authuser') or '0')
+        except Exception:
+            pass
+    else:
+        for part in raw.split(';'):
+            if '=' in part:
+                k, v = part.strip().split('=', 1)
+                cookie_map[k.strip()] = v.strip()
+
+    sapisid = cookie_map.get('SAPISID') or cookie_map.get('__Secure-3PAPISID') or cookie_map.get('__Secure-1PAPISID')
+    return cookie_map, sapisid, auth_user, visitor_data, data_sync_id
+
+
+def build_auth_headers(auth_input):
+    from pathlib import Path
+    import hashlib, time
+    raw = ''
+    if isinstance(auth_input, str):
+        p = Path(auth_input)
+        if p.is_file():
+            try:
+                raw = p.read_text(encoding='utf-8', errors='ignore')
+            except OSError:
+                return None
+        else:
+            raw = auth_input
+    elif isinstance(auth_input, dict):
+        raw = json.dumps(auth_input)
+    if not raw:
+        return None
+
+    cookie_map, sapisid, auth_user, visitor_data, data_sync_id = parse_credentials(raw)
+    if not sapisid:
+        return None
+
+    cookie_map['SAPISID'] = sapisid
+    cookie_map['__Secure-3PAPISID'] = sapisid
+    cookie_str = '; '.join(f'{k}={v}' for k, v in cookie_map.items())
+
+    timestamp = int(time.time())
+    sapisid_hash = hashlib.sha1(f'{timestamp} {sapisid} https://music.youtube.com'.encode()).hexdigest()
+    auth_header = f'SAPISIDHASH {timestamp}_{sapisid_hash}'
+
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Content-Type': 'application/json',
+        'X-Goog-AuthUser': auth_user or '0',
+        'x-origin': 'https://music.youtube.com',
+        'Origin': 'https://music.youtube.com',
+        'Referer': 'https://music.youtube.com/',
+        'Cookie': cookie_str,
+        'Authorization': auth_header,
+    }
+    return headers
+
+
+def get_ytmusic(req, timeout=20, require_auth=False):
+    from ytmusicapi import YTMusic
+    auth_input = req.get('auth') or req.get('cookies')
+    auth_headers = None
+    if auth_input:
+        auth_headers = build_auth_headers(auth_input)
+    if not auth_headers and req.get('dataPath'):
+        from pathlib import Path
+        auth_file = Path(req['dataPath']) / 'auth.json'
+        if auth_file.is_file():
+            auth_headers = build_auth_headers(str(auth_file))
+    if require_auth and not auth_headers:
+        raise ValueError('Sign in to YouTube Music to sync your library.')
+    if auth_headers:
+        try:
+            api = YTMusic(auth=auth_headers, requests_session=True)
+        except Exception as exc:
+            raise ValueError('YouTube Music session is invalid or expired. Please sign in again.') from exc
+    else:
+        api = YTMusic(requests_session=True)
+    api._session.request = _timeout_request(api._session.request, timeout)
+    return api
+
+
+def extract_browser_cookies(browser_name=None):
+    try:
+        import yt_dlp.cookies
+    except ImportError:
+        return {'ok': False, 'error': 'yt-dlp is not available for browser cookie extraction.'}
+    browsers = [browser_name] if browser_name else ['firefox', 'chrome', 'chromium', 'brave', 'edge', 'opera', 'vivaldi']
+    AUTH_COOKIE_NAMES = {
+        'SAPISID', '__Secure-3PAPISID', '__Secure-1PAPISID',
+        'SSID', 'HSID', 'SID', '__Secure-3PSID', '__Secure-1PSID',
+        '__Secure-1PSIDTS', '__Secure-3PSIDTS',
+        'LOGIN_INFO', 'PREF', 'VISITOR_INFO1_LIVE', 'VISITOR_PRIVACY_METADATA',
+        'YSC', 'APISID', 'SIDCC', '__Secure-3PSIDCC', '__Secure-1PSIDCC'
+    }
+    for b in browsers:
+        try:
+            jar = yt_dlp.cookies.extract_cookies_from_browser(b)
+            cookie_map = {}
+            for c in jar:
+                if 'youtube.com' in c.domain and c.name in AUTH_COOKIE_NAMES:
+                    if getattr(c, 'is_expired', None) and c.is_expired():
+                        continue
+                    cookie_map[c.name] = c.value
+            if cookie_map.get('SAPISID') or cookie_map.get('__Secure-3PAPISID') or cookie_map.get('__Secure-1PAPISID'):
+                cookie_str = '; '.join(f'{k}={v}' for k, v in cookie_map.items())
+                return {'ok': True, 'browser': b, 'cookies': cookie_str}
+        except Exception:
+            continue
+    return {'ok': False, 'error': 'No active YouTube login session found in installed browsers.'}
+
+
+def system_browser_login(open_browser=True):
+    import webbrowser, time
+    # 1. Check if user already has an active session in any installed browser
+    existing = extract_browser_cookies()
+    if existing.get('ok'):
+        return existing
+
+    if not open_browser:
+        return {'ok': False, 'error': 'No active YouTube login session found in installed browsers.'}
+
+    # 2. Open the user's default browser to Google / YouTube Music sign-in
+    login_url = "https://accounts.google.com/ServiceLogin?continue=https%3A%2F%2Fmusic.youtube.com%2F"
+    try:
+        webbrowser.open(login_url)
+    except Exception:
+        pass
+
+    # 3. Wait for the user to complete sign-in in their browser (up to 120 seconds)
+    for _ in range(40):
+        time.sleep(3)
+        check = extract_browser_cookies()
+        if check.get('ok'):
+            return check
+
+    return {'ok': False, 'error': 'Timed out waiting for sign-in in browser. Please sign in to YouTube Music in your browser and try again.'}
+
+
 def run(req):
     op = req.get('op', '')
+    if op == 'yt-browser-login':
+        mode = req.get('mode', 'auto')
+        if mode == 'browser':
+            login_res = extract_browser_cookies()
+        else:
+            login_res = system_browser_login(open_browser=True)
+
+        if not login_res.get('ok'):
+            return login_res
+
+        account_req = dict(req)
+        account_req['op'] = 'yt-account'
+        account_req['credentials'] = login_res['cookies']
+        res = run(account_req)
+        if login_res.get('browser'):
+            res['browser'] = login_res['browser']
+        return res
+    if op == 'yt-account':
+        from pathlib import Path
+        credentials = req.get('credentials') or req.get('cookies') or ''
+        data_path = req.get('dataPath') or ''
+        headers = build_auth_headers(credentials)
+        if not headers:
+            raise ValueError('No active YouTube login session (SAPISID) found in the provided cookies or token.')
+        cookie_map, sapisid, auth_user, visitor_data, data_sync_id = parse_credentials(credentials if isinstance(credentials, str) else '')
+        from ytmusicapi import YTMusic
+        api = YTMusic(auth=headers, requests_session=True)
+        api._session.request = _timeout_request(api._session.request, 20)
+        account_name = 'YouTube Music User'
+        channel_handle = ''
+        photo_url = ''
+        try:
+            info = api.get_account_info()
+            account_name = info.get('accountName') or account_name
+            channel_handle = info.get('channelHandle') or ''
+            photo_url = info.get('accountPhotoUrl') or ''
+        except Exception:
+            # If account menu parsing fails, probe library to check if session is authenticated
+            try:
+                api.get_library_playlists(limit=1)
+            except Exception:
+                raise ValueError('YouTube Music session is invalid or expired. Please sign in again.')
+        cookie_file_path = ''
+        auth_file_path = ''
+        if data_path:
+            import os
+            dp = Path(data_path)
+            dp.mkdir(parents=True, exist_ok=True)
+            try:
+                os.chmod(dp, 0o700)
+            except OSError:
+                pass
+            auth_file = dp / 'auth.json'
+            auth_bytes = json.dumps(headers, indent=2).encode('utf-8')
+            fd = os.open(str(auth_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with open(fd, 'wb') as f:
+                f.write(auth_bytes)
+            try:
+                os.chmod(auth_file, 0o600)
+            except OSError:
+                pass
+            auth_file_path = str(auth_file)
+            netscape_lines = ["# Netscape HTTP Cookie File\n"]
+            for k, v in cookie_map.items():
+                netscape_lines.append(f".youtube.com\tTRUE\t/\tTRUE\t2147483647\t{k}\t{v}\n")
+            cookie_file = dp / 'cookies.txt'
+            cookie_bytes = "".join(netscape_lines).encode('utf-8')
+            fd = os.open(str(cookie_file), os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            with open(fd, 'wb') as f:
+                f.write(cookie_bytes)
+            try:
+                os.chmod(cookie_file, 0o600)
+            except OSError:
+                pass
+            cookie_file_path = str(cookie_file)
+        return {
+            'ok': True,
+            'name': account_name,
+            'handle': channel_handle,
+            'photo': photo_url,
+            'cookieFile': cookie_file_path,
+            'authFile': auth_file_path,
+        }
+    if op == 'yt-sync':
+        api = get_ytmusic(req, timeout=40, require_auth=True)
+        liked_data = api.get_liked_songs(limit=min(int(req.get('limit', 2000)), 5000))
+        liked_tracks = clean(liked_data.get('tracks', []), 'song', liked_data)
+        remote_playlists = api.get_library_playlists(limit=100)
+        playlists = []
+        for p in remote_playlists:
+            pid = p.get('playlistId') or p.get('id')
+            if not pid or pid in ('LM', 'SE'):
+                continue
+            try:
+                p_data = api.get_playlist(pid, limit=min(int(req.get('playlistLimit', 1000)), 5000))
+                raw_tracks = p_data.get('tracks') or []
+                raw_count = len(raw_tracks)
+                remote_count = p_data.get('trackCount')
+                if remote_count is None and 'count' in p_data:
+                    remote_count = p_data.get('count')
+                if remote_count is None and 'count' in p:
+                    remote_count = p.get('count')
+                if remote_count is not None:
+                    try:
+                        if isinstance(remote_count, str):
+                            digits = re.search(r'\d+', remote_count)
+                            remote_count = int(digits.group(0)) if digits else None
+                        else:
+                            remote_count = int(remote_count)
+                    except (ValueError, TypeError):
+                        remote_count = None
+                limit = min(int(req.get('playlistLimit', 1000)), 5000)
+                if remote_count is not None:
+                    is_complete = raw_count >= remote_count
+                else:
+                    is_complete = raw_count < limit
+                p_tracks = clean(raw_tracks, 'song', p_data)
+                playlists.append({
+                    'id': pid,
+                    'browseId': pid,
+                    'title': p_data.get('title') or p.get('title') or 'Untitled Playlist',
+                    'art': artwork(p_data) or artwork(p),
+                    'tracks': p_tracks,
+                    'count': len(p_tracks),
+                    'complete': is_complete,
+                    'isYouTube': True,
+                })
+            except Exception:
+                continue
+        return {'ok': True, 'liked': liked_tracks, 'playlists': playlists}
+    if op == 'yt-like':
+        api = get_ytmusic(req, timeout=15, require_auth=True)
+        vid = req.get('id')
+        if not vid or not re.fullmatch(r'[A-Za-z0-9_-]{11}', vid):
+            raise ValueError('Invalid video ID')
+        liked = req.get('liked', True)
+        api.rate_song(vid, 'LIKE' if liked else 'INDIFFERENT')
+        return {'ok': True}
     if op == 'choose-artwork':
         from pathlib import Path
         cover = Path(req.get('path',''))
@@ -399,10 +728,7 @@ def run(req):
         if not info or not info.get('url'):
             raise RuntimeError('No playable audio stream returned')
         return {'url': info['url'], 'headers': info.get('http_headers', {}), 'seconds': info.get('duration', 0)}
-    from ytmusicapi import YTMusic
-    api = YTMusic(requests_session=True)
-    # Bound network calls; outer C++ watchdog also terminates stalled operations.
-    api._session.request = _timeout_request(api._session.request, 8 if op == 'lyrics' else 20)
+    api = get_ytmusic(req, 8 if op == 'lyrics' else 20)
     if op == 'home':
         return {'sections': [{'title': s.get('title', ''), 'items': clean(s.get('contents', []))}
                              for s in api.get_home(limit=5) if s.get('contents')]}

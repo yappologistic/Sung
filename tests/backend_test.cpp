@@ -917,6 +917,184 @@ private slots:
     b.setCookieFile(QUrl::fromLocalFile(files.filePath("missing")));
     QVERIFY(!b.error().isEmpty());
   }
+  void youtubeAccountLoginSyncAndLogout() {
+    qputenv("SUNG_HELPER", qgetenv("SUNG_FIXTURE_HELPER"));
+    qputenv("SUNG_PYTHON", "python3");
+    Backend b;
+    b.clearQueue();
+    QVERIFY(!b.ytLoggedIn());
+    QVERIFY(b.ytLastSyncTime().isEmpty());
+
+    // Empty credentials error
+    b.loginYouTube("");
+    QVERIFY(!b.error().isEmpty());
+    b.dismissError();
+
+    // Invalid credentials error
+    b.loginYouTube("invalid");
+    QTRY_VERIFY_WITH_TIMEOUT(!b.error().isEmpty(), 5000);
+    QVERIFY(!b.ytLoggedIn());
+    b.dismissError();
+
+    // Valid login
+    QSignalSpy accountSpy(&b, &Backend::ytAccountChanged);
+    QSignalSpy syncSpy(&b, &Backend::ytSyncChanged);
+    b.loginYouTube("valid_sapisid_token");
+    QTRY_VERIFY_WITH_TIMEOUT(b.ytLoggedIn(), 5000);
+    QCOMPARE(b.ytAccountName(), QString("Fixture User"));
+    QCOMPARE(b.ytAccountHandle(), QString("@fixture"));
+    QCOMPARE(b.ytAccountPhoto(), QString("https://example.com/avatar.jpg"));
+    QVERIFY(accountSpy.count() > 0);
+
+    // Auto-sync finishes
+    QTRY_VERIFY_WITH_TIMEOUT(!b.ytSyncing(), 5000);
+    QVERIFY(!b.ytLastSyncTime().isEmpty());
+    QVERIFY(syncSpy.count() > 0);
+
+    // Verify synced liked songs
+    QVERIFY(b.isLiked("00000000010"));
+    QVERIFY(b.isLiked("00000000011"));
+
+    // Verify synced playlist
+    bool foundPlaylist = false;
+    for (const auto &p : b.playlists()) {
+      if (p.toMap().value("id").toString() == "PLfixture") {
+        foundPlaylist = true;
+        QCOMPARE(p.toMap().value("title").toString(), QString("Fixture Playlist"));
+      }
+    }
+    QVERIFY(foundPlaylist);
+
+    // Toggle like
+    b.toggleLike(track("00000000012"));
+    QVERIFY(b.isLiked("00000000012"));
+    b.toggleLike(track("00000000012"));
+    QVERIFY(!b.isLiked("00000000012"));
+
+    // Startup sync setting
+    QVERIFY(b.ytSyncOnStartup());
+    b.setYtSyncOnStartup(false);
+    QVERIFY(!b.ytSyncOnStartup());
+    b.setYtSyncOnStartup(true);
+
+    // Logout keeping data
+    b.logoutYouTube(false);
+    QVERIFY(!b.ytLoggedIn());
+    QVERIFY(b.ytAccountName().isEmpty());
+    QVERIFY(b.isLiked("00000000010"));
+
+    // Login and logout clearing data
+    QVariantMap localTrack;
+    localTrack["id"] = "local_song_test";
+    localTrack["localPath"] = "/tmp/local_song.mp3";
+    localTrack["title"] = "Local Song";
+    b.loginYouTube("valid_sapisid_token");
+    QTRY_VERIFY_WITH_TIMEOUT(b.ytLoggedIn(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(!b.ytSyncing(), 5000);
+    b.toggleLike(localTrack);
+    QVERIFY(b.isLiked("local_song_test"));
+    b.logoutYouTube(true);
+    QVERIFY(!b.ytLoggedIn());
+    QVERIFY(!b.isLiked("00000000010"));
+    QVERIFY(b.isLiked("local_song_test"));
+    bool stillHasPlaylist = false;
+    for (const auto &p : b.playlists()) {
+      if (p.toMap().value("id").toString() == "PLfixture")
+        stillHasPlaylist = true;
+    }
+    QVERIFY(!stillHasPlaylist);
+
+    // Test browser and web login
+    b.loginYouTubeBrowser();
+    QTRY_VERIFY_WITH_TIMEOUT(b.ytLoggedIn(), 5000);
+    QCOMPARE(b.ytAccountName(), QString("Fixture User"));
+    b.logoutYouTube(true);
+    QVERIFY(!b.ytLoggedIn());
+
+    b.loginYouTubeWeb();
+    QTRY_VERIFY_WITH_TIMEOUT(b.ytLoggedIn(), 5000);
+    QCOMPARE(b.ytAccountName(), QString("Fixture User"));
+    b.logoutYouTube(true);
+    QVERIFY(!b.ytLoggedIn());
+
+    // Test setCookieFile staging with account cookies
+    const QString appData = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    QTemporaryDir cookieDir;
+    const auto invalidAccountCookie = cookieDir.filePath("invalid_cookies.txt");
+    {
+      QFile f(invalidAccountCookie);
+      QVERIFY(f.open(QIODevice::WriteOnly));
+      f.write("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tinvalid\n");
+    }
+    b.setCookieFile(QUrl::fromLocalFile(invalidAccountCookie));
+    QTRY_VERIFY_WITH_TIMEOUT(!b.error().isEmpty(), 5000);
+    QVERIFY(!b.ytLoggedIn());
+    QVERIFY(b.cookies().isEmpty());
+    QVERIFY(!QFile::exists(appData + "/cookies.staged.txt"));
+    b.dismissError();
+
+    const auto validAccountCookie = cookieDir.filePath("valid_cookies.txt");
+    {
+      QFile f(validAccountCookie);
+      QVERIFY(f.open(QIODevice::WriteOnly));
+      f.write("# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t0\tSAPISID\tvalid_sapisid_token\n");
+    }
+    b.setCookieFile(QUrl::fromLocalFile(validAccountCookie));
+    QTRY_VERIFY_WITH_TIMEOUT(b.ytLoggedIn(), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(!b.ytSyncing(), 5000);
+    QCOMPARE(b.cookies(), appData + "/cookies.txt");
+    QVERIFY(QFile::exists(b.cookies()));
+    QVERIFY(!(QFile::permissions(b.cookies()) & (QFile::ReadOther | QFileDevice::ReadGroup)));
+    QVERIFY(!QFile::exists(appData + "/cookies.staged.txt"));
+
+    // Test playlist completeness preservation
+    b.addToPlaylist("PLfixture", track("00000000099"));
+    int plIdx = -1;
+    for (int i = 0; i < b.playlists().size(); ++i) {
+      if (b.playlists()[i].toMap().value("id").toString() == "PLfixture") {
+        plIdx = i;
+        break;
+      }
+    }
+    QVERIFY(plIdx >= 0);
+    QCOMPARE(b.playlists()[plIdx].toMap().value("count").toInt(), 2);
+    b.openPlaylist("PLfixture");
+    QCOMPARE(b.results()->count(), 2);
+
+    // Sync with complete=false and updated title
+    qputenv("SUNG_FIXTURE_PLAYLIST_COMPLETE", "0");
+    qputenv("SUNG_FIXTURE_PLAYLIST_TITLE", "Updated Partial Title");
+    b.syncYouTubeLibrary();
+    QTRY_VERIFY_WITH_TIMEOUT(!b.ytSyncing(), 5000);
+
+    // Metadata updated, but tracks preserved
+    auto plAfterPartial = b.playlists()[plIdx].toMap();
+    QCOMPARE(plAfterPartial.value("title").toString(), QString("Updated Partial Title"));
+    QCOMPARE(plAfterPartial.value("count").toInt(), 2);
+    b.openPlaylist("PLfixture");
+    QCOMPARE(b.results()->count(), 2);
+    QCOMPARE(b.results()->get(1).value("id").toString(), QString("00000000099"));
+
+    // Sync with complete=true replaces tracks
+    qputenv("SUNG_FIXTURE_PLAYLIST_COMPLETE", "1");
+    b.syncYouTubeLibrary();
+    QTRY_VERIFY_WITH_TIMEOUT(!b.ytSyncing(), 5000);
+
+    auto plAfterFull = b.playlists()[plIdx].toMap();
+    QCOMPARE(plAfterFull.value("count").toInt(), 1);
+    b.openPlaylist("PLfixture");
+    QCOMPARE(b.results()->count(), 1);
+    QCOMPARE(b.results()->get(0).value("id").toString(), QString("00000000010"));
+
+    qunsetenv("SUNG_FIXTURE_PLAYLIST_COMPLETE");
+    qunsetenv("SUNG_FIXTURE_PLAYLIST_TITLE");
+
+    b.logoutYouTube(true);
+    QVERIFY(!b.ytLoggedIn());
+
+    qunsetenv("SUNG_HELPER");
+    qunsetenv("SUNG_PYTHON");
+  }
   void noctaliaUpdatesAtomically() {
     QTemporaryDir files;
     const auto path=files.filePath("noctalia.colors");

@@ -1,6 +1,7 @@
 import importlib.util
 import pathlib
 import unittest
+from unittest.mock import patch, MagicMock
 
 spec=importlib.util.spec_from_file_location('catalog',pathlib.Path(__file__).parents[1]/'helper/catalog.py')
 catalog=importlib.util.module_from_spec(spec)
@@ -156,5 +157,250 @@ class CatalogTests(unittest.TestCase):
 
     def test_image_size(self):
         self.assertEqual(catalog.artwork({'thumbnails':[{'url':'https://yt3.googleusercontent.com/a=w60-h60-l90-rj'}]}),'https://yt3.googleusercontent.com/a=w544-h544-l90-rj')
+
+    def test_parse_credentials_formats(self):
+        # 1. Innertube token format
+        token = '***INNERTUBE COOKIE*** = SAPISID=sec123; SID=sid123\n***AUTH USER*** = 2'
+        cmap, sapisid, user, _, _ = catalog.parse_credentials(token)
+        self.assertEqual(sapisid, 'sec123')
+        self.assertEqual(user, '2')
+        self.assertEqual(cmap.get('SID'), 'sid123')
+
+        # 2. Netscape cookies format
+        netscape = '# Netscape HTTP Cookie File\n.youtube.com\tTRUE\t/\tTRUE\t2147483647\tSAPISID\tnet123\n'
+        cmap, sapisid, user, _, _ = catalog.parse_credentials(netscape)
+        self.assertEqual(sapisid, 'net123')
+
+        # 3. HTTP headers format
+        headers = 'Cookie: SAPISID=hdr123; HSID=h123\r\nX-Goog-AuthUser: 1'
+        cmap, sapisid, user, _, _ = catalog.parse_credentials(headers)
+        self.assertEqual(sapisid, 'hdr123')
+        self.assertEqual(user, '1')
+
+        # 4. Raw cookie string
+        raw = 'SAPISID=raw123; OTHER=oth'
+        cmap, sapisid, user, _, _ = catalog.parse_credentials(raw)
+        self.assertEqual(sapisid, 'raw123')
+
+        # 5. Missing SAPISID
+        cmap, sapisid, user, _, _ = catalog.parse_credentials('RANDOM=val')
+        self.assertIsNone(sapisid)
+
+    def test_yt_account_and_sync_ops(self):
+        from unittest.mock import patch, MagicMock
+        import tempfile
+        api = MagicMock()
+        api.get_account_info.return_value = {
+            'accountName': 'Test Singer',
+            'channelHandle': '@testsinger',
+            'accountPhotoUrl': 'https://example.com/photo.jpg',
+        }
+        api.get_liked_songs.return_value = {
+            'tracks': [{
+                'videoId': 'vid12345678',
+                'title': 'Liked Song',
+                'artists': [{'name': 'Liked Artist', 'id': 'art1'}],
+                'album': {'name': 'Liked Album', 'id': 'alb1'},
+                'duration': '2:30',
+                'duration_seconds': 150,
+            }]
+        }
+        api.get_library_playlists.return_value = [
+            {'playlistId': 'LM', 'title': 'Liked Music'},
+            {'playlistId': 'PLremote123', 'title': 'My Remote Playlist'}
+        ]
+        api.get_playlist.return_value = {
+            'title': 'My Remote Playlist',
+            'tracks': [{
+                'videoId': 'vid87654321',
+                'title': 'Playlist Track',
+                'artists': [{'name': 'Artist 2'}],
+            }]
+        }
+
+        with patch.dict('sys.modules', {'ytmusicapi': MagicMock(YTMusic=MagicMock(return_value=api))}):
+            with tempfile.TemporaryDirectory() as td:
+                res = catalog.run({
+                    'op': 'yt-account',
+                    'credentials': 'SAPISID=valid_sapisid; SID=valid_sid',
+                    'dataPath': td
+                })
+                self.assertTrue(res['ok'])
+                self.assertEqual(res['name'], 'Test Singer')
+                self.assertEqual(res['handle'], '@testsinger')
+                self.assertEqual(res['photo'], 'https://example.com/photo.jpg')
+                self.assertTrue(pathlib.Path(res['cookieFile']).is_file())
+                self.assertTrue(pathlib.Path(res['authFile']).is_file())
+
+                # Test sync
+                sync_res = catalog.run({
+                    'op': 'yt-sync',
+                    'cookies': res['cookieFile'],
+                    'dataPath': td
+                })
+                self.assertTrue(sync_res['ok'])
+                self.assertEqual(len(sync_res['liked']), 1)
+                self.assertEqual(sync_res['liked'][0]['id'], 'vid12345678')
+                self.assertEqual(len(sync_res['playlists']), 1)
+                self.assertEqual(sync_res['playlists'][0]['id'], 'PLremote123')
+                self.assertEqual(len(sync_res['playlists'][0]['tracks']), 1)
+
+                # Test like
+                like_res = catalog.run({
+                    'op': 'yt-like',
+                    'id': 'vid12345678',
+                    'liked': True,
+                    'cookies': res['cookieFile'],
+                })
+                self.assertTrue(like_res['ok'])
+                api.rate_song.assert_called_with('vid12345678', 'LIKE')
+
+    def test_browser_login_flow(self):
+        import tempfile
+        with patch.object(catalog, 'extract_browser_cookies', return_value={'ok': True, 'cookies': 'SAPISID=sec1; SID=s1', 'browser': 'testbrowser'}):
+            api = MagicMock()
+            api.get_account_info.return_value = {'accountName': 'Browser User', 'channelHandle': '@browser', 'accountPhotoUrl': ''}
+            with patch.dict('sys.modules', {'ytmusicapi': MagicMock(YTMusic=MagicMock(return_value=api))}):
+                with tempfile.TemporaryDirectory() as td:
+                    res = catalog.run({'op': 'yt-browser-login', 'mode': 'browser', 'dataPath': td})
+                    self.assertTrue(res['ok'])
+                    self.assertEqual(res['name'], 'Browser User')
+                    self.assertEqual(res['browser'], 'testbrowser')
+
+    def test_rebuild_auth_headers_fresh_timestamp(self):
+        import tempfile, stat, json
+        with tempfile.TemporaryDirectory() as td:
+            auth_file = pathlib.Path(td) / 'auth.json'
+            # Write auth.json with an old timestamp and custom authuser
+            stale_headers = {
+                'Cookie': 'SAPISID=sec123; SID=sid123',
+                'Authorization': 'SAPISIDHASH 1000000000_stalehash',
+                'X-Goog-AuthUser': '3',
+            }
+            auth_file.write_text(json.dumps(stale_headers))
+
+            headers = catalog.build_auth_headers(str(auth_file))
+            self.assertIsNotNone(headers)
+            self.assertEqual(headers.get('X-Goog-AuthUser'), '3')
+            self.assertTrue(headers.get('Authorization', '').startswith('SAPISIDHASH '))
+            # Verify the timestamp is freshly generated and not the stale 1000000000
+            ts_str = headers['Authorization'].split()[1].split('_')[0]
+            self.assertGreater(int(ts_str), 1700000000)
+
+    def test_credential_file_permissions(self):
+        import tempfile, stat
+        api = MagicMock()
+        api.get_account_info.return_value = {'accountName': 'Perm User'}
+        with patch.dict('sys.modules', {'ytmusicapi': MagicMock(YTMusic=MagicMock(return_value=api))}):
+            with tempfile.TemporaryDirectory() as td:
+                res = catalog.run({
+                    'op': 'yt-account',
+                    'credentials': 'SAPISID=sec123; SID=sid123',
+                    'dataPath': td
+                })
+                self.assertTrue(res['ok'])
+                auth_mode = stat.S_IMODE(pathlib.Path(res['authFile']).stat().st_mode)
+                cookie_mode = stat.S_IMODE(pathlib.Path(res['cookieFile']).stat().st_mode)
+                dp_mode = stat.S_IMODE(pathlib.Path(td).stat().st_mode)
+                self.assertEqual(auth_mode, 0o600)
+                self.assertEqual(cookie_mode, 0o600)
+                self.assertEqual(dp_mode, 0o700)
+
+    def test_get_ytmusic_require_auth_errors(self):
+        # 1. No auth when required raises ValueError
+        with self.assertRaises(ValueError) as ctx:
+            catalog.get_ytmusic({}, require_auth=True)
+        self.assertIn('Sign in to YouTube Music', str(ctx.exception))
+
+        # 2. Invalid auth raises clear session error instead of silent fallback
+        failing_ytmusic = MagicMock(side_effect=Exception('Invalid credentials'))
+        with patch.dict('sys.modules', {'ytmusicapi': MagicMock(YTMusic=failing_ytmusic)}):
+            with self.assertRaises(ValueError) as ctx:
+                catalog.get_ytmusic({'auth': 'SAPISID=sec123; SID=sid123'}, require_auth=True)
+    def test_yt_account_validation_failure_preserves_existing_credentials(self):
+        import tempfile
+        api = MagicMock()
+        api.get_account_info.side_effect = Exception('Session expired')
+        api.get_library_playlists.side_effect = Exception('Session expired')
+        with patch.dict('sys.modules', {'ytmusicapi': MagicMock(YTMusic=MagicMock(return_value=api))}):
+            with tempfile.TemporaryDirectory() as td:
+                dp = pathlib.Path(td)
+                auth_file = dp / 'auth.json'
+                cookie_file = dp / 'cookies.txt'
+                auth_file.write_text('{"original": "auth"}')
+                cookie_file.write_text('original_cookies')
+
+                with self.assertRaises(ValueError) as ctx:
+                    catalog.run({
+                        'op': 'yt-account',
+                        'credentials': 'SAPISID=sec123; SID=sid123',
+                        'dataPath': td
+                    })
+                self.assertIn('invalid or expired', str(ctx.exception))
+                # Verify existing files were NOT overwritten
+                self.assertEqual(auth_file.read_text(), '{"original": "auth"}')
+                self.assertEqual(cookie_file.read_text(), 'original_cookies')
+
+    def test_yt_sync_completeness_flag(self):
+        import tempfile
+        api = MagicMock()
+        api.get_liked_songs.return_value = {'tracks': []}
+        api.get_library_playlists.return_value = [
+            {'playlistId': 'PLpartial', 'title': 'Partial Playlist'},
+            {'playlistId': 'PLfull', 'title': 'Full Playlist'},
+            {'playlistId': 'PLempty', 'title': 'Empty Playlist'},
+            {'playlistId': 'PLunknown_full', 'title': 'Unknown Full Playlist'},
+            {'playlistId': 'PLunknown_hit_limit', 'title': 'Unknown Hit Limit Playlist'},
+        ]
+        def mock_get_playlist(pid, **kwargs):
+            if pid == 'PLpartial':
+                return {
+                    'title': 'Partial Playlist',
+                    'trackCount': 10,
+                    'tracks': [{'videoId': 'vid1', 'title': 'Song 1'}]
+                }
+            elif pid == 'PLfull':
+                return {
+                    'title': 'Full Playlist',
+                    'trackCount': 2,
+                    'tracks': [{'videoId': 'vid1', 'title': 'Song 1'}, {'videoId': 'vid2', 'title': 'Song 2'}]
+                }
+            elif pid == 'PLempty':
+                return {
+                    'title': 'Empty Playlist',
+                    'trackCount': 0,
+                    'tracks': []
+                }
+            elif pid == 'PLunknown_full':
+                return {
+                    'title': 'Unknown Full Playlist',
+                    'tracks': [{'videoId': 'vid1', 'title': 'Song 1'}, {'videoId': 'vid2', 'title': 'Song 2'}]
+                }
+            elif pid == 'PLunknown_hit_limit':
+                return {
+                    'title': 'Unknown Hit Limit Playlist',
+                    'tracks': [{'videoId': f'vid{i}', 'title': f'Song {i}'} for i in range(5)]
+                }
+            return {'title': 'Unknown', 'tracks': []}
+
+        api.get_playlist.side_effect = mock_get_playlist
+
+        with patch.dict('sys.modules', {'ytmusicapi': MagicMock(YTMusic=MagicMock(return_value=api))}):
+            with tempfile.TemporaryDirectory() as td:
+                auth_file = pathlib.Path(td) / 'auth.json'
+                auth_file.write_text('{"Cookie": "SAPISID=sapisid"}')
+                res = catalog.run({
+                    'op': 'yt-sync',
+                    'auth': str(auth_file),
+                    'dataPath': td,
+                    'playlistLimit': 5,
+                })
+                self.assertTrue(res['ok'])
+                pls = {p['id']: p for p in res['playlists']}
+                self.assertFalse(pls['PLpartial']['complete'])
+                self.assertTrue(pls['PLfull']['complete'])
+                self.assertTrue(pls['PLempty']['complete'])
+                self.assertTrue(pls['PLunknown_full']['complete'])
+                self.assertFalse(pls['PLunknown_hit_limit']['complete'])
 
 if __name__=='__main__':unittest.main()

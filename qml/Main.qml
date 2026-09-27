@@ -138,7 +138,7 @@ ApplicationWindow {
     // ModalBottomSheet.kt keeps the page behind its scrim out of traversal.
     // Playback keys are gated with the other page shortcuts while it is open.
     readonly property bool modalOpen: immersiveQueue.visible || panelSheet.open || otherModalOpen
-    readonly property bool otherModalOpen: trimDialog.visible || onboarding.visible || artworkViewer.visible || (immersiveLoader.item && immersiveLoader.item.popupVisible) || viewLayoutDialog.visible || volumeControl.popupVisible || homeEditor.visible || outputPicker.visible || sessionsDialog.visible || statsDialog.visible || playlistVersionsDialog.visible || playlistCoverDialog.visible || commandPalette.visible || artworkControls.visible || smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || navigationDrawer.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSort.menuOpen
+    readonly property bool otherModalOpen: ytAccountDialog.visible || trimDialog.visible || onboarding.visible || artworkViewer.visible || (immersiveLoader.item && immersiveLoader.item.popupVisible) || viewLayoutDialog.visible || volumeControl.popupVisible || homeEditor.visible || outputPicker.visible || sessionsDialog.visible || statsDialog.visible || playlistVersionsDialog.visible || playlistCoverDialog.visible || commandPalette.visible || artworkControls.visible || smartDialog.visible || trackDetails.visible || shortcutHelp.visible || duplicateDialog.visible || serverToolbar.dialogOpen || serverConnection.visible || serverAddDialog.visible || serverRenameDialog.visible || serverDeleteDialog.visible || serverRatingDialog.visible || musicFoldersDialog.visible || musicFolderEntry.visible || cleanupDialog.visible || navigationDrawer.visible || bulkActions.visible || volumeStepMenu.visible || rateDialog.visible || lyricTimingDialog.visible || settingsDialog.visible || playlistDialog.visible || addPlaylistDialog.visible || deletePlaylistDialog.visible || actions.visible || playlistActions.visible || sleepMenu.visible || (fileDialogs!==null && fileDialogs.visible) || audioDeviceDialog.visible || collectionSort.menuOpen
     property bool sliderFocused: window.activeFocusItem && window.activeFocusItem.handlesArrowKeys === true
     function selectedView() {var item=window.activeFocusItem;while(item){if(item.sourceRows!==undefined)return item;item=item.parent;}return tracks;}
     function addBatch(view) {batchItems=view.selection.items();addPlaylistDialog.open();}
@@ -386,6 +386,7 @@ ApplicationWindow {
         return {kind:kind,title:kind==="artist"?item.artist:item.album,browseId:item[kind+"Id"],remoteId:item[kind+"Id"],source:item.source || "",server:item.server || ""}
     }
     function openServerConnection() {serverConnection.open()}
+    function openYouTubeAccount() {ytAccountDialog.open()}
     // The field is part of the Search page rather than the window, so reaching
     // it means arriving there first; an item that is not on screen yet cannot
     // take the focus.
@@ -2279,6 +2280,7 @@ ApplicationWindow {
         }
     }
     ServerConnection { id: serverConnection }
+    YouTubeAccountDialog { id: ytAccountDialog }
     MDialog {
         id: settingsDialog; objectName: "settingsDialog"; width: fitPanes(880); height: fitHeight(740); modal: true; title: "Settings"
         padding: 24
@@ -2500,12 +2502,13 @@ ApplicationWindow {
                 ColumnLayout {
                     id: settingsGroup3; objectName:"settingsGroup3"
                     Layout.fillWidth:true;Layout.minimumWidth:0; spacing:12
-                    property bool hasMatches: settingsDialog.matches("Music server library Subsonic Jellyfin Cider Apple Music") || settingsDialog.matches("YouTube cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate")
+                    property bool hasMatches: settingsDialog.matches("Music server library Subsonic Jellyfin Cider Apple Music") || settingsDialog.matches("YouTube Music account login sync library cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate")
                     visible: settingsDialog.searchQuery.trim() ? hasMatches : settingsDialog.category===4
                     SungText {objectName:"settingsConnectionsHeading";heading: true;visible:!!settingsDialog.searchQuery.trim();text:"Connections";font.pixelSize:Theme.titleLarge;emphasized: true;Layout.bottomMargin:8}
                     ColumnLayout {id:options3;objectName:"settingsRows3";Layout.fillWidth:true;Layout.minimumWidth:0;spacing:12
                 MSettingRow {opens:true;objectName:"musicServerButton";text:"Music server";visible:settingsDialog.matches("Music server library Subsonic Jellyfin Cider Apple Music");onClicked:{settingsDialog.close();serverConnection.open()}}
-                SungText {objectName:"youtubeGroupHeading"; visible: settingsDialog.matches("YouTube cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate"); text: "YouTube"; font.pixelSize: Theme.labelLarge; labelRole: true; color: Theme.muted; Layout.topMargin: 12 }
+                SungText {objectName:"youtubeGroupHeading"; visible: settingsDialog.matches("YouTube Music account login sync library cookies import replace remove sign in") || settingsDialog.matches("YouTube streaming quality standard data saver bitrate"); text: "YouTube"; font.pixelSize: Theme.labelLarge; labelRole: true; color: Theme.muted; Layout.topMargin: 12 }
+                MSettingRow {opens:true;objectName:"youtubeAccountButton";text:app.ytLoggedIn ? (app.ytAccountName ? ("YouTube Music · " + app.ytAccountName) : "YouTube Music (Connected)") : "YouTube Music account";visible:settingsDialog.matches("YouTube Music account login sync library cookies sign in");onClicked:{settingsDialog.close();ytAccountDialog.open()}}
                 SungText { visible: settingsDialog.matches("YouTube streaming quality standard data saver bitrate"); text: "Streaming quality"; font.pixelSize: Theme.titleMedium; typeRole:"titleMedium" }
                 MSegmentedControl {Layout.fillWidth:true;Layout.minimumWidth:0;
                     objectName:"streamingQualityControl"

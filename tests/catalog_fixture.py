@@ -55,6 +55,18 @@ elif op=='online-artwork':
             else:path.write_bytes(b'fixture')
             data.update(status='ready',motionArt=path.as_uri())
 elif op=='local-lyrics':data.update(lyrics='',lines=[])
+elif op=='yt-account':
+    if 'invalid' in str(r.get('credentials', '')): data={'ok':False,'error':'Invalid credentials'}
+    else: data={'ok':True,'name':'Fixture User','handle':'@fixture','photo':'https://example.com/avatar.jpg'}
+elif op=='yt-browser-login':
+    if r.get('mode')=='fail': data={'ok':False,'error':'Browser login cancelled'}
+    else: data={'ok':True,'name':'Fixture User','handle':'@fixture','photo':'https://example.com/avatar.jpg','browser':'firefox'}
+elif op=='yt-sync':
+    is_comp = os.environ.get('SUNG_FIXTURE_PLAYLIST_COMPLETE', '1') != '0'
+    pl_title = os.environ.get('SUNG_FIXTURE_PLAYLIST_TITLE', 'Fixture Playlist')
+    data={'ok':True,'liked':[song(10),song(11)],'playlists':[{'id':'PLfixture','browseId':'PLfixture','title':pl_title,'tracks':[song(10)],'complete':is_comp}]}
+elif op=='yt-like':
+    data={'ok':True}
 elif op=='radio': data['items']=[song(i) for i in range(1,5)]
 elif op in ('resolve','buffer'):
     import os, wave
