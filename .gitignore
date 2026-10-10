@@ -13,6 +13,8 @@
 !/tests/
 !/assets/
 !/licenses/
+!/flake.nix
+!/flake.lock
 
 /src/*
 !/src/*.cpp
