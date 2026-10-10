@@ -47,6 +47,30 @@ Install the build and runtime dependencies:
 ```bash
 sudo pacman -S --needed git base-devel cmake ninja python nodejs ffmpeg qt6-base qt6-declarative qt6-multimedia qt6-svg qt6-wayland qt6-imageformats
 ```
+### Ubuntu 
+
+Install the build and runtime dependencies:
+
+```
+sudo apt update
+
+sudo apt install --yes \
+    git \
+    build-essential \
+    cmake \
+    ninja-build \
+    python3 \
+    python3-pip \
+    python3-venv \
+    nodejs \
+    ffmpeg \
+    qt6-base-dev \
+    qt6-declarative-dev \
+    qt6-multimedia-dev \
+    qt6-svg-dev \
+    qt6-wayland-dev \
+    qt6-image-formats-plugins
+```
 
 Download and install Sung:
 
