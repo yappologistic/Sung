@@ -238,6 +238,14 @@ class Backend : public QObject {
   Q_PROPERTY(QVariantMap collectionItem READ collectionItem NOTIFY catalogChanged)
   Q_PROPERTY(bool liked READ liked NOTIFY libraryChanged)
   Q_PROPERTY(QString cookies READ cookies NOTIFY settingsChanged)
+  Q_PROPERTY(bool ytLoggedIn READ ytLoggedIn NOTIFY ytAccountChanged)
+  Q_PROPERTY(QString ytAccountName READ ytAccountName NOTIFY ytAccountChanged)
+  Q_PROPERTY(QString ytAccountHandle READ ytAccountHandle NOTIFY ytAccountChanged)
+  Q_PROPERTY(QString ytAccountPhoto READ ytAccountPhoto NOTIFY ytAccountChanged)
+  Q_PROPERTY(bool ytSyncing READ ytSyncing NOTIFY ytSyncChanged)
+  Q_PROPERTY(QString ytSyncStatus READ ytSyncStatus NOTIFY ytSyncChanged)
+  Q_PROPERTY(QString ytLastSyncTime READ ytLastSyncTime NOTIFY ytSyncChanged)
+  Q_PROPERTY(bool ytSyncOnStartup READ ytSyncOnStartup WRITE setYtSyncOnStartup NOTIFY settingsChanged)
   Q_PROPERTY(QString streamingQuality READ streamingQuality WRITE setStreamingQuality NOTIFY settingsChanged)
   // How much disk the songs already fetched may keep between them, and what
   // they are using. Zero turns keeping off and empties the store.
@@ -247,6 +255,20 @@ class Backend : public QObject {
   Q_PROPERTY(bool cleanupBusy READ cleanupBusy NOTIFY cleanupChanged)
   Q_PROPERTY(QVariantList cleanupItems READ cleanupItems NOTIFY cleanupChanged)
 public:
+  bool ytLoggedIn() const { return m_ytLoggedIn; }
+  QString ytAccountName() const { return m_ytAccountName; }
+  QString ytAccountHandle() const { return m_ytAccountHandle; }
+  QString ytAccountPhoto() const { return m_ytAccountPhoto; }
+  bool ytSyncing() const { return m_ytSyncing; }
+  QString ytSyncStatus() const { return m_ytSyncStatus; }
+  QString ytLastSyncTime() const;
+  bool ytSyncOnStartup() const { return m_settings.value("ytSyncOnStartup", true).toBool(); }
+  void setYtSyncOnStartup(bool enabled);
+  Q_INVOKABLE void loginYouTube(const QString &credentials);
+  Q_INVOKABLE void loginYouTubeWeb();
+  Q_INVOKABLE void loginYouTubeBrowser();
+  Q_INVOKABLE void logoutYouTube(bool clearData = false);
+  Q_INVOKABLE void syncYouTubeLibrary();
   Q_INVOKABLE QVariantMap smartPlaylist(const QString &id) const;
   Q_INVOKABLE QString saveSmartPlaylist(const QString &id,const QString &name,const QVariantMap &rules);
   Q_INVOKABLE QString previewLyric(qint64 position) const;
@@ -651,6 +673,8 @@ public:
   QString trackToken() const { return QString::number(m_trackToken); }
   QMediaPlayer *media() { return &m_media(); }
 signals:
+  void ytAccountChanged();
+  void ytSyncChanged();
   void onlineArtworkChanged();
   void motionArtQualityChanged();
   void videoCoversChanged();
@@ -818,6 +842,14 @@ private:
   int m_undoIndex = -1;
   bool m_undoShuffle = false;
   bool m_stopped = true, m_storageHealthy = true;
+  bool m_ytLoggedIn = false;
+  QString m_ytAccountName;
+  QString m_ytAccountHandle;
+  QString m_ytAccountPhoto;
+  bool m_ytSyncing = false;
+  QString m_ytSyncStatus;
+  qint64 m_ytLastSyncEpoch = 0;
+  QString m_stagedCookiePath;
   quint64 m_trackToken = 0;
   int m_recoveryAttempts = 0;
   bool m_recovering = false;
