@@ -3,13 +3,13 @@ import QtQuick.Controls
 import QtQuick.Layouts
 
 MDialog {
-    id: dialog; objectName: "playlistCoverDialog"; title: "Playlist cover"; modal: true
+    id: dialog; objectName: "playlistCoverDialog"; title: qsTranslate("Main", "Playlist cover"); modal: true
     width: Math.min(440,parent.width-48); height: Math.min(650,parent.height-32)
     property string playlistId: ""
     property string preview: ""
     property string failure: ""
     signal chooseFile()
-    onPreviewChanged: {if(body.item)body.item.resetCrop();failure=preview?"":"Choose a PNG, JPEG or WebP image";}
+    onPreviewChanged: {if(body.item)body.item.resetCrop();failure=preview?"":qsTranslate("Main", "Choose a PNG, JPEG or WebP image");}
     onClosed: preview=""
     standardButtons: Dialog.NoButton
     Loader {
@@ -30,27 +30,27 @@ MDialog {
                         width:square.width*Math.max(1,ratio)*zoom.value; height:width/ratio
                         x:-(width-square.width)*horizontal.value; y:-(height-square.height)*vertical.value
                     }
-                    SungText {anchors.centerIn:parent;visible:!dialog.preview;text:"Choose a cover";color:Theme.muted}
+                    SungText {anchors.centerIn:parent;visible:!dialog.preview;text:qsTranslate("Main", "Choose a cover");color:Theme.muted}
                 }
             }
             RowLayout {Layout.fillWidth:true; visible:!!dialog.preview
-                SungText {text:"Horizontal"; Layout.preferredWidth:82}
-                SettingSlider {id:horizontal; objectName:"coverCropX"; Layout.fillWidth:true; from:0;to:1;value:0.5;Accessible.name:"Horizontal crop position"}
+                SungText {text:qsTranslate("Main", "Horizontal"); Layout.preferredWidth:110}
+                SettingSlider {id:horizontal; objectName:"coverCropX"; Layout.fillWidth:true; from:0;to:1;value:0.5;Accessible.name:qsTranslate("Main", "Horizontal crop position")}
             }
             RowLayout {Layout.fillWidth:true; visible:!!dialog.preview
-                SungText {text:"Vertical"; Layout.preferredWidth:82}
-                SettingSlider {id:vertical; objectName:"coverCropY"; Layout.fillWidth:true; from:0;to:1;value:0.5;Accessible.name:"Vertical crop position"}
+                SungText {text:qsTranslate("Main", "Vertical"); Layout.preferredWidth:110}
+                SettingSlider {id:vertical; objectName:"coverCropY"; Layout.fillWidth:true; from:0;to:1;value:0.5;Accessible.name:qsTranslate("Main", "Vertical crop position")}
             }
             RowLayout {Layout.fillWidth:true; visible:!!dialog.preview
-                SungText {text:"Zoom"; Layout.preferredWidth:82}
-                SettingSlider {id:zoom; objectName:"coverCropZoom"; Layout.fillWidth:true; from:1;to:3;value:1;Accessible.name:"Cover zoom"}
+                SungText {text:qsTranslate("Main", "Zoom"); Layout.preferredWidth:110}
+                SettingSlider {id:zoom; objectName:"coverCropZoom"; Layout.fillWidth:true; from:1;to:3;value:1;Accessible.name:qsTranslate("Main", "Cover zoom")}
             }
             SungText {text:dialog.failure; visible:!!text; Layout.fillWidth:true; wrapMode:Text.Wrap; font.pixelSize:Theme.bodySmall; color:Theme.muted}
             RowLayout {Layout.fillWidth:true
-                MButton {text:"Choose image…"; onClicked:dialog.chooseFile()}
+                MButton {text:qsTranslate("Main", "Choose image…"); onClicked:dialog.chooseFile()}
                 Item {Layout.fillWidth:true}
-                MButton {text:"Cancel"; onClicked:dialog.close()}
-                MButton {objectName:"savePlaylistCover";text:"Save";filled:true;enabled:!!dialog.preview;onClicked:{if(app.setPlaylistCover(dialog.playlistId,dialog.preview,horizontal.value,vertical.value,zoom.value))dialog.close();else dialog.failure="Couldn’t save this cover";}}
+                MButton {text:qsTranslate("Main", "Cancel"); onClicked:dialog.close()}
+                MButton {objectName:"savePlaylistCover";text:qsTranslate("Main", "Save");filled:true;enabled:!!dialog.preview;onClicked:{if(app.setPlaylistCover(dialog.playlistId,dialog.preview,horizontal.value,vertical.value,zoom.value))dialog.close();else dialog.failure=qsTranslate("Main", "Couldn’t save this cover");}}
             }
         }
     }

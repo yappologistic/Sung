@@ -25,6 +25,7 @@ ColumnLayout {
     // The chosen day, as "yyyy-MM-dd", or "" for none. The dialog owns it;
     // the graph only says which day was picked.
     property string selected: ""
+    readonly property var displayLocale: localization.language === "system" ? Qt.locale() : Qt.locale(localization.language)
     signal chosen(string date)
     // How a length of time is spelled, the dialog's own.
     required property var spell
@@ -55,10 +56,10 @@ ColumnLayout {
     function dateOf(day) { return new Date(day.date+"T12:00:00") }
     function describe(day) {
         if (!day) return ""
-        const when = Qt.formatDate(dateOf(day), "ddd d MMM yyyy")
+        const when = dateOf(day).toLocaleDateString(displayLocale, "ddd d MMM yyyy")
         return day.seconds > 0
-            ? when+" · "+spell(day.seconds)+" · "+day.plays+(day.plays === 1 ? " play" : " plays")
-            : when+" · Nothing played"
+            ? when+" · "+spell(day.seconds)+" · "+qsTranslate("Main", "Plays: %1").arg(day.plays)
+            : when+" · "+qsTranslate("Main", "Nothing played")
     }
 
     // The day the keyboard is on, and the one the pointer is over.
@@ -93,7 +94,7 @@ ColumnLayout {
             spacing: 0
             SungText {
                 objectName: "calendarTitle"
-                text: graph.year > 0 ? String(graph.year) : "Past year"
+                text: graph.year > 0 ? String(graph.year) : qsTranslate("Main", "Past year")
                 font.pixelSize: Theme.titleSmall
                 typeRole: "titleSmall"
             }
@@ -105,13 +106,13 @@ ColumnLayout {
                 text: {
                     if (graph.selected) {
                         const day = graph.days.find(d => d.date === graph.selected)
-                        return day ? graph.describe(day) : Qt.formatDate(new Date(graph.selected+"T12:00:00"), "ddd d MMM yyyy")
+                        return day ? graph.describe(day) : new Date(graph.selected+"T12:00:00").toLocaleDateString(graph.displayLocale, "ddd d MMM yyyy")
                     }
                     const active = graph.calendar.active || 0
-                    if (active === 0) return graph.year > 0 ? "Nothing played in "+graph.year : "Nothing played in the past year"
-                    const parts = [active+(active === 1 ? " day" : " days")+" listened"]
-                    if (graph.year === 0 && graph.calendar.streak > 0) parts.push(graph.calendar.streak+"-day streak")
-                    parts.push("longest "+graph.calendar.longest+(graph.calendar.longest === 1 ? " day" : " days"))
+                    if (active === 0) return graph.year > 0 ? qsTranslate("Main", "Nothing played in %1").arg(graph.year) : qsTranslate("Main", "Nothing played in the past year")
+                    const parts = [qsTranslate("Main", "Days listened: %1").arg(active)]
+                    if (graph.year === 0 && graph.calendar.streak > 0) parts.push(qsTranslate("Main", "Current streak: %1").arg(graph.calendar.streak))
+                    parts.push(qsTranslate("Main", "Longest streak: %1").arg(graph.calendar.longest))
                     return parts.join(" · ")
                 }
                 color: Theme.muted
@@ -123,14 +124,14 @@ ColumnLayout {
         MButton {
             objectName: "calendarEarlier"
             symbol: "chevron_left"
-            tip: "Earlier year"
+            tip: qsTranslate("Main", "Earlier year")
             enabled: graph.yearIndex < graph.years.length-1
             onClicked: graph.year = graph.years[graph.yearIndex+1]
         }
         MButton {
             objectName: "calendarLater"
             symbol: "chevron"
-            tip: "Later year"
+            tip: qsTranslate("Main", "Later year")
             enabled: graph.yearIndex > 0
             onClicked: graph.year = graph.years[graph.yearIndex-1]
         }
@@ -153,13 +154,13 @@ ColumnLayout {
                 SungText {
                     required property int modelData
                     y: modelData*graph.pitch + graph.cell/2 - height/2
-                    text: graph.days[modelData] ? Qt.formatDate(graph.dateOf(graph.days[modelData]), "ddd") : ""
+                    text: graph.days[modelData] ? graph.dateOf(graph.days[modelData]).toLocaleDateString(graph.displayLocale, "ddd") : ""
                     color: Theme.muted
                     font.pixelSize: Theme.labelSmall
                     labelRole: true
                 }
             }
-            TextMetrics { id: dayMetrics; font.pixelSize: Theme.labelSmall; text: "Wed" }
+            TextMetrics { id: dayMetrics; font.pixelSize: Theme.labelSmall; text: new Date(2026,0,7).toLocaleDateString(graph.displayLocale, "ddd") }
         }
 
         Flickable {
@@ -203,7 +204,7 @@ ColumnLayout {
                             if (!day) continue
                             const date = graph.dateOf(day)
                             if (date.getDate() <= 7 && w - lastWeek >= 3) {
-                                marks.push({week: w, name: Qt.formatDate(date, "MMM")})
+                                marks.push({week: w, name: date.toLocaleDateString(graph.displayLocale, "MMM")})
                                 lastWeek = w
                             }
                         }
@@ -218,7 +219,7 @@ ColumnLayout {
                         labelRole: true
                     }
                 }
-                TextMetrics { id: monthMetrics; font.pixelSize: Theme.labelSmall; text: "Mar" }
+                TextMetrics { id: monthMetrics; font.pixelSize: Theme.labelSmall; text: new Date(2026,2,1).toLocaleDateString(graph.displayLocale, "MMM") }
             }
             Item {
                 id: grid
@@ -229,7 +230,7 @@ ColumnLayout {
                 activeFocusOnTab: true
                 onActiveFocusChanged: if (activeFocus) { graph.keyboardDriven = !graph.pointerFocus; graph.pointerFocus = false }
                 Accessible.role: Accessible.Chart
-                Accessible.name: "Listening graph"
+                Accessible.name: qsTranslate("Main", "Listening graph")
                 Accessible.description: graph.describe(graph.days[graph.cursor])
                 Keys.onPressed: event => {
                     const steps = {[Qt.Key_Up]: -1, [Qt.Key_Down]: 1, [Qt.Key_Left]: -7, [Qt.Key_Right]: 7}

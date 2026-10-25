@@ -16,6 +16,8 @@ Item {
     objectName: "splitButton"
 
     property string text: ""
+    // The caption can be localized without moving the adjacent action strip.
+    property string sizingText: text
     property string symbol: ""
     property bool filled: true
     property bool tonal: false
@@ -41,6 +43,7 @@ Item {
     readonly property real innerPressed: Theme.shapeMedium
     // SplitButtonDefaults.LeadingIconSize, the small button's 20dp.
     readonly property real iconSize: 20
+    SungText { id: captionMetrics; visible: false; font: label.font; text: control.sizingText }
     implicitWidth: pair.implicitWidth
     implicitHeight: target
 
@@ -55,7 +58,7 @@ Item {
         id: action
         objectName: "splitButtonAction"
         height: control.unit
-        implicitWidth: label.implicitWidth + (control.symbol.length ? control.iconSize + 8 : 0)
+        implicitWidth: captionMetrics.implicitWidth + (control.symbol.length ? control.iconSize + 8 : 0)
                        + control.leadingSpace + control.trailingSpace
         hoverEnabled: true
         focusPolicy: Qt.StrongFocus

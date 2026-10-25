@@ -129,7 +129,7 @@ T.Dialog {
             id: closeAffordance
             objectName: "dialogClose"
             visible: dialog.fullScreen
-            symbol: "close"; tip: "Close"
+            symbol: "close"; tip: qsTranslate("Main", "Close")
             x: 8; anchors.verticalCenter: parent.verticalCenter
             onClicked: dialog.reject()
         }

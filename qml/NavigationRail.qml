@@ -85,7 +85,7 @@ ColumnLayout {
         // A constant list: a Repeater rebuilds every delegate when its model
         // changes, so pending state is a binding on the delegate rather than a
         // field in here.
-        model: [{key:"home",icon:"home",label:"Home"},{key:"search",icon:"search",label:"Search"},{key:"library",icon:"library",label:"Library"}]
+        model: [{key:"home",icon:"home",label:qsTranslate("Navigation", "Home")},{key:"search",icon:"search",label:qsTranslate("Navigation", "Search")},{key:"library",icon:"library",label:qsTranslate("Navigation", "Library")}]
         MNavigationItem {
             required property var modelData
             objectName: "nav_"+modelData.key

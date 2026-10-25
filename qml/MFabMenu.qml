@@ -18,8 +18,15 @@ Item {
     property var actions: []
     property string symbol: "plus"
     property string label: ""
+    // A translated caption can share the original action's footprint. Keep
+    // this separate from the visible and accessible label, never shrink type.
+    property string sizingLabel: label
+    property string compactLabel: label
+    property real maximumExtendedWidth: Infinity
+    readonly property real extendedWidth: Theme.extendedFabInset*2 + 24 + Theme.extendedFabGap + captionMetrics.implicitWidth
     property bool open: false
     readonly property int count: actions.length
+    SungText { id: captionMetrics; visible: false; font: fabLabel.font; text: root.sizingLabel }
     // FloatingActionButtonMenu.kt:203-215 animates the visible item count
     // with SlowEffects; each whole step reveals the next action.
     property real staggerCount: open ? count : 0
@@ -172,7 +179,7 @@ Item {
         id: fab
         objectName: "fab"
         width: root.open ? root.closeSize
-             : root.extended ? Theme.extendedFabInset*2 + 24 + Theme.extendedFabGap + fabLabel.implicitWidth
+             : root.extended ? Math.min(root.extendedWidth, root.maximumExtendedWidth)
              : root.fabSize
         height: root.open ? root.closeSize : root.extended ? Theme.extendedFabHeight : root.fabSize
         Behavior on width { enabled: app.motion; NumberAnimation { duration: Theme.springFastSpatialMs; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.springFastSpatial } }
@@ -212,7 +219,8 @@ Item {
                 id: fabLabel
                 objectName: "fabLabel"
                 visible: root.extended && !root.open
-                text: root.label
+                text: root.extendedWidth > root.maximumExtendedWidth ? root.compactLabel : root.label
+                width: Math.max(0, fab.width - x - Theme.extendedFabInset)
                 // The small extended FAB's label is title medium
                 // (FloatingActionButton.kt, SmallExtendedFabTextStyle).
                 font.pixelSize: Theme.titleMedium

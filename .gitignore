@@ -13,6 +13,9 @@
 !/tests/
 !/assets/
 !/licenses/
+!/translations/
+/translations/*
+!/translations/*.ts
 
 /src/*
 !/src/*.cpp

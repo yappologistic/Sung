@@ -102,7 +102,7 @@ if ready:
     stage("playback-memory",[str(build/"sung"),"--isolated","--playback-memory-test"],420,e)
     e=profile("footprint-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/"footprint"))
     stage("footprint",[str(build/"sung"),"--isolated","--footprint-test"],120,e)
-    for name,flag in [("dynamic-color","--dynamic-color-test"),("navigation-motion","--navigation-motion-test"),
+    for name,flag in [("language","--language-test"),("dynamic-color","--dynamic-color-test"),("navigation-motion","--navigation-motion-test"),
                       ("artist-hero","--artist-hero-test"),("singalong","--singalong-test"),
                       ("crossfade-ui","--crossfade-ui-test"),("track-details","--track-details-test"),
                       ("queue-history","--queue-history-test"),
@@ -121,6 +121,7 @@ if ready:
                       ("material-anatomy","--material-anatomy-test"),
                       ("material-emphasis","--material-emphasis-test")]:
         e=profile(name+"-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_TEST_OUTPUT=str(out/name))
+        if name == "language": e["SUNG_NOCTALIA_COLORS"] = str(out/name/"noctalia.colors")
         stage(name,[str(build/"sung"),"--isolated",flag],420,e)
     e=profile("cider-profile");e.update(SUNG_HELPER=str(root/"tests/catalog_fixture.py"),SUNG_PYTHON="/usr/bin/python3",SUNG_CIDER_FIXTURE=str(root/"tests/cider_fixture.py"),SUNG_OUTPUT_TAP=str(root/"tests/monitor_fixture.py"),SUNG_TEST_OUTPUT=str(out/"cider"))
     stage("cider",[str(build/"sung"),"--isolated","--cider-test"],300,e)

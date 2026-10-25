@@ -43,12 +43,12 @@ Window {
                 Artwork { url: app.current.art || ""; motionUrl: app.currentMotionArt; crossfade:true; Layout.preferredWidth: 54; Layout.preferredHeight: 54; radius: Theme.shapeMedium; pixels: 128; fit:app.currentArtworkFit }
                 ColumnLayout {
                     Layout.fillWidth: true; spacing: 4
-                    SungText { objectName:"miniTitle"; text: presentation.shown.title || "Nothing playing"; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; emphasized: true }
+                    SungText { objectName:"miniTitle"; text: presentation.shown.title || qsTranslate("Player", "Nothing playing"); opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.titleMedium; typeRole: "titleMedium"; emphasized: true }
                     SungText { text: presentation.shown.artist || ""; opacity: presentation.fade; transform: Translate { x: presentation.offset } Layout.fillWidth: true; font.pixelSize: Theme.bodyMedium; color: Theme.muted }
                 }
                 MButton { objectName: "miniPinButton"; symbol: "pin"; toggle: true; selected: app.miniPinned; visible: app.canPinWindows; tip: app.miniPinned?"Let other windows cover this":"Keep above other windows"; onClicked: app.miniPinned=!app.miniPinned }
-                MButton { objectName: "miniRestoreButton"; symbol: "expand"; tip: "Full player · Ctrl+M"; onClicked: mini.restoreRequested() }
-                MButton { symbol: "close"; tip: "Quit Sung"; onClicked: Qt.quit() }
+                MButton { objectName: "miniRestoreButton"; symbol: "expand"; tip: qsTranslate("Main", "Full player · Ctrl+M"); onClicked: mini.restoreRequested() }
+                MButton { symbol: "close"; tip: qsTranslate("Main", "Quit Sung"); onClicked: Qt.quit() }
             }
             Item {
                 id: lyricLine; objectName:"miniLyricContainer"
@@ -72,10 +72,10 @@ Window {
             }
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter; spacing: 12
-                MButton { symbol: "heart"; tip: app.liked?"Remove from liked songs":"Like"; selected: app.liked; enabled: app.currentIndex>=0; onClicked: app.toggleLike(app.current) }
-                MButton { symbol: "previous"; tip: "Previous"; enabled: app.queue.count>0; onClicked: app.previous() }
-                MButton { objectName: "miniPlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?"Pause":"Play"; filled: true; implicitWidth: 64; enabled: app.queue.count>0; onClicked: app.toggle() }
-                MButton { symbol: "next"; tip: "Next"; enabled: app.queue.count>0; onClicked: app.next() }
+                MButton { symbol: "heart"; tip: app.liked?qsTranslate("Main", "Remove from liked songs"):qsTranslate("Main", "Like song"); selected: app.liked; enabled: app.currentIndex>=0; onClicked: app.toggleLike(app.current) }
+                MButton { symbol: "previous"; tip: qsTranslate("Player", "Previous"); enabled: app.queue.count>0; onClicked: app.previous() }
+                MButton { objectName: "miniPlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; tip: app.playing||app.resolving?qsTranslate("Player", "Pause"):qsTranslate("Player", "Play"); filled: true; implicitWidth: 64; enabled: app.queue.count>0; onClicked: app.toggle() }
+                MButton { symbol: "next"; tip: qsTranslate("Player", "Next"); enabled: app.queue.count>0; onClicked: app.next() }
                 VolumeControl {id:miniVolume;showSlider:false;buttonName:"miniVolumeButton";sliderName:"miniVolumeSlider"}
             }
             RowLayout {
@@ -92,6 +92,6 @@ Window {
         anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 8
         height: 58; radius: Theme.shapeLarge; color: Theme.errorContainer; visible: !!app.error
         SungText { anchors.left: parent.left; anchors.right: retry.left; anchors.verticalCenter: parent.verticalCenter; anchors.margins: 16; text: app.error; color: Theme.errorContainerText; font.pixelSize: Theme.bodySmall }
-        MButton { id: retry; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: app.canRetry?"Retry":"Open"; ink: Theme.errorContainerText; onClicked: app.canRetry?app.retry():mini.restoreRequested() }
+        MButton { id: retry; anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: app.canRetry?qsTranslate("Main", "Retry"):qsTranslate("Main", "Open"); ink: Theme.errorContainerText; onClicked: app.canRetry?app.retry():mini.restoreRequested() }
     }
 }

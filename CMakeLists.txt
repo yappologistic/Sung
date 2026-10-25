@@ -11,10 +11,17 @@ check_ipo_supported(RESULT ipo)
 if(ipo)
  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE ON)
 endif()
-find_package(Qt6 6.8 REQUIRED COMPONENTS Core Concurrent Gui Quick Qml QuickControls2 Multimedia Network DBus Svg)
+find_package(Qt6 6.8 REQUIRED COMPONENTS Core Concurrent Gui Quick Qml QuickControls2 Multimedia Network DBus Svg LinguistTools)
 qt_policy(SET QTP0004 NEW)
 qt_add_executable(sung src/windowresources.h src/artworkurl.h src/scrobbler.cpp src/scrobbler.h src/m3color.cpp src/m3color.h src/m3motion.cpp src/m3motion.h src/m3shape.cpp src/m3shape.h src/desktoptheme.cpp src/desktoptheme.h src/main.cpp src/roundedart.cpp src/roundedart.h src/softimage.h src/scrimcontrast.h src/motionbackdrop.cpp src/motionbackdrop.h src/motionartwork.cpp src/motionartwork.h src/musicserver.cpp src/musicserver.h src/offlinestore.cpp src/offlinestore.h src/jellyfin.cpp src/jellyfin.h src/cider.cpp src/cider.h src/outputtap.cpp src/outputtap.h src/backendserver.cpp src/subsonic.cpp src/subsonic.h src/backend.cpp src/productfeatures.cpp src/presentationfeatures.cpp src/backend.h src/collectionview.h src/rowselection.h src/mpris.cpp src/mpris.h src/playbacknotifier.cpp src/playbacknotifier.h)
 target_link_libraries(sung PRIVATE Qt6::Core Qt6::Gui Qt6::Quick Qt6::Qml Qt6::QuickControls2 Qt6::Multimedia Qt6::Network Qt6::DBus Qt6::Svg Qt6::Concurrent)
+target_sources(sung PRIVATE src/localization.cpp src/localization.h)
+set_property(TARGET sung PROPERTY QT_EXCLUDE_SOURCES_FROM_TRANSLATION "tests/*")
+qt_add_translations(sung
+ SOURCE_TARGETS sung
+ TS_FILES translations/sung_ru.ts
+ PLURALS_TS_FILE translations/sung_en.ts
+ RESOURCE_PREFIX "/i18n")
 target_compile_options(sung PRIVATE -Wall -Wextra -Wpedantic "$<$<CONFIG:Release>:-Oz;-ffunction-sections;-fdata-sections>")
 # Nothing here throws or catches. Qt itself does not throw, it reports errors
 # through return values, and an exception leaving a slot is undefined
@@ -50,6 +57,16 @@ install(FILES LICENSE NOTICE licenses/MaterialSymbols-LICENSE.txt DESTINATION sh
 include(CTest)
 if(BUILD_TESTING)
  find_package(Qt6 REQUIRED COMPONENTS Test)
+ qt_add_executable(sung-localization-tests tests/localization_test.cpp src/localization.cpp src/localization.h)
+ target_include_directories(sung-localization-tests PRIVATE src)
+ target_link_libraries(sung-localization-tests PRIVATE Qt6::Core Qt6::Gui Qt6::Qml Qt6::Test)
+ qt_add_resources(sung-localization-tests localization_catalog
+  PREFIX "/i18n" BASE "${CMAKE_CURRENT_BINARY_DIR}"
+  FILES "${CMAKE_CURRENT_BINARY_DIR}/sung_ru.qm" "${CMAKE_CURRENT_BINARY_DIR}/sung_en.qm")
+ add_test(NAME localization COMMAND sung-localization-tests)
+ set_tests_properties(localization PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANG=en_US.UTF-8;LC_ALL=en_US.UTF-8")
+ add_test(NAME localization-system-ru COMMAND sung-localization-tests)
+ set_tests_properties(localization-system-ru PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;LANG=ru_RU.UTF-8;LC_ALL=ru_RU.UTF-8")
  qt_add_executable(sung-librarydata-tests tests/librarydata_test.cpp)
  target_include_directories(sung-librarydata-tests PRIVATE src)
  target_link_libraries(sung-librarydata-tests PRIVATE Qt6::Core Qt6::Test)
@@ -123,6 +140,7 @@ endif()
 
 option(SUNG_DIAGNOSTICS "Build the live UI verification harness" OFF)
 if(SUNG_DIAGNOSTICS)
+ target_sources(sung PRIVATE tests/language_ui_test.cpp)
  qt_add_executable(sung-artwork-fixture tests/artwork_fixture.cpp)
  target_link_libraries(sung-artwork-fixture PRIVATE Qt6::Core Qt6::Gui Qt6::Network)
  find_package(Qt6 REQUIRED COMPONENTS Test GuiPrivate)
