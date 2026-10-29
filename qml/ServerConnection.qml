@@ -10,7 +10,7 @@ MDialog {
     // the token it issues, with no account name of its own.
     readonly property bool cider: app.server.provider==="cider"
     initialFocus: address.text.length ? (username.text.length || cider ? password : username) : address
-    title: "Music server"; modal: true; standardButtons: Dialog.NoButton
+    title: qsTranslate("Main", "Music server"); modal: true; standardButtons: Dialog.NoButton
     function fill() { address.text=app.server.address || (cider?"http://localhost:10767":"");username.text=app.server.username;password.clear() }
     onAboutToShow: fill()
     onClosed: password.clear()
@@ -23,26 +23,26 @@ MDialog {
             // Three types outgrow a phone-width dialog at their natural width,
             // so the control takes the column's width and shares it evenly,
             // as the other segmented controls in Settings do.
-            objectName: "serverProvider"; accessibleName: "Server type"; Layout.fillWidth: true; Layout.minimumWidth: 0
+            objectName: "serverProvider"; accessibleName: qsTranslate("Main", "Server type"); Layout.fillWidth: true; Layout.minimumWidth: 0
             options: [{key:"subsonic",label:"Subsonic",name:"serverType_subsonic"},{key:"jellyfin",label:"Jellyfin",name:"serverType_jellyfin"},{key:"cider",label:"Cider",name:"serverType_cider"}]
             value: app.server.provider; enabled: !app.server.connecting
             onChosen: value=>{app.server.selectProvider(value);dialog.fill()}
         }
-        MTextField { id: address; objectName: "serverAddress"; Layout.fillWidth: true; Layout.topMargin: 8; label: dialog.cider?"Cider address":"Server address"; inputMethodHints: Qt.ImhUrlCharactersOnly; enabled: !app.server.connecting; onAccepted: (dialog.cider?password:username).forceActiveFocus() }
-        MTextField { id: username; objectName: "serverUsername"; Layout.fillWidth: true; label: "Username"; visible: !dialog.cider; enabled: !app.server.connecting; onAccepted: password.forceActiveFocus() }
+        MTextField { id: address; objectName: "serverAddress"; Layout.fillWidth: true; Layout.topMargin: 8; label: dialog.cider?qsTranslate("Main", "Cider address"):qsTranslate("Main", "Server address"); inputMethodHints: Qt.ImhUrlCharactersOnly; enabled: !app.server.connecting; onAccepted: (dialog.cider?password:username).forceActiveFocus() }
+        MTextField { id: username; objectName: "serverUsername"; Layout.fillWidth: true; label: qsTranslate("Main", "Username"); visible: !dialog.cider; enabled: !app.server.connecting; onAccepted: password.forceActiveFocus() }
         // Material's supporting text says where the value comes from. Cider
         // makes the token itself, in the one place this names.
-        MTextField { id: password; objectName: "serverPassword"; Layout.fillWidth: true; label: dialog.cider?"Cider token":"Password"; supporting: dialog.cider?"In Cider: Settings, Connectivity, Manage External Application Access":""; echoMode: TextInput.Password; enabled: !app.server.connecting; onAccepted: if(connectButton.enabled)connectButton.clicked() }
-        SungText { text: "HTTP sends traffic without encryption."; visible: address.text.startsWith("http://") && !address.text.startsWith("http://localhost:") && !address.text.startsWith("http://127.0.0.1:"); Layout.fillWidth: true; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.bodySmall }
-        MSwitch { id: remember; objectName: "rememberServer"; text: "Remember in desktop keyring"; checked: app.server.keyringAvailable; enabled: app.server.keyringAvailable }
-        SungText { objectName: "serverStatus"; text: app.server.error || (app.server.connecting?"Connecting…":app.server.connected?"Connected":app.server.provider==="jellyfin"?"Jellyfin":dialog.cider?"Apple Music through Cider":"Navidrome / Subsonic"); Layout.fillWidth: true; wrapMode: Text.Wrap; color: app.server.error ? Theme.error : app.server.connected?Theme.primary:Theme.muted }
-        MButton { text: "Disconnect"; visible: app.server.connected; onClicked: {app.server.disconnectServer();password.clear()} }
+        MTextField { id: password; objectName: "serverPassword"; Layout.fillWidth: true; label: dialog.cider?qsTranslate("Main", "Cider token"):qsTranslate("Main", "Password"); supporting: dialog.cider?qsTranslate("Main", "In Cider: Settings, Connectivity, Manage External Application Access"):""; echoMode: TextInput.Password; enabled: !app.server.connecting; onAccepted: if(connectButton.enabled)connectButton.clicked() }
+        SungText { text: qsTranslate("Main", "HTTP sends traffic without encryption."); visible: address.text.startsWith("http://") && !address.text.startsWith("http://localhost:") && !address.text.startsWith("http://127.0.0.1:"); Layout.fillWidth: true; wrapMode: Text.Wrap; color: Theme.muted; font.pixelSize: Theme.bodySmall }
+        MSwitch { id: remember; objectName: "rememberServer"; Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTranslate("Main", "Remember in desktop keyring"); checked: app.server.keyringAvailable; enabled: app.server.keyringAvailable }
+        SungText { objectName: "serverStatus"; text: app.server.error || (app.server.connecting?qsTranslate("Main", "Connecting…"):app.server.connected?qsTranslate("Main", "Connected"):app.server.provider==="jellyfin"?"Jellyfin":dialog.cider?qsTranslate("Main", "Apple Music through Cider"):"Navidrome / Subsonic"); Layout.fillWidth: true; wrapMode: Text.Wrap; color: app.server.error ? Theme.error : app.server.connected?Theme.primary:Theme.muted }
+        MButton { text: qsTranslate("Main", "Disconnect"); visible: app.server.connected; onClicked: {app.server.disconnectServer();password.clear()} }
         MDivider { Layout.fillWidth: true; visible: app.server.connected && !app.server.remotePlayback }
-        MSwitch { text: "Update server listening history"; visible: app.server.connected && !app.server.remotePlayback; checked: app.server.scrobbling; onToggled: app.server.scrobbling=checked }
+        MSwitch { Layout.fillWidth: true; Layout.minimumWidth: 0; text: qsTranslate("Main", "Update server listening history"); visible: app.server.connected && !app.server.remotePlayback; checked: app.server.scrobbling; onToggled: app.server.scrobbling=checked }
         RowLayout {
             visible: app.server.connected && !app.server.remotePlayback; Layout.fillWidth: true
-            SungText { text: "Audio quality"; Layout.fillWidth: true }
-            MButton { text: app.server.bitrate?app.server.bitrate+" kbps":"Original"; onClicked: quality.popup(this,0,height) }
+            SungText { text: qsTranslate("Main", "Audio quality"); Layout.fillWidth: true }
+            MButton { text: app.server.bitrate?qsTranslate("Main", "%1 kbps").arg(app.server.bitrate):qsTranslate("Main", "Original"); onClicked: quality.popup(this,0,height) }
         }
     }
     }
@@ -56,9 +56,9 @@ MDialog {
         }
         Row {
             anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 24; spacing: 8
-            MButton { text: "Close"; ink: Theme.primary; onClicked: dialog.close() }
+            MButton { text: qsTranslate("Main", "Close"); ink: Theme.primary; onClicked: dialog.close() }
             MButton {
-                id: connectButton; objectName: "connectServerButton"; text: "Connect"; filled: true
+                id: connectButton; objectName: "connectServerButton"; text: qsTranslate("Main", "Connect"); filled: true
                 visible: !app.server.connected || password.text.length>0 || app.server.connecting
                 busy: app.server.connecting
                 enabled: !app.server.connecting && address.text.trim().length>0 && (dialog.cider || (username.text.trim().length>0 && (app.server.provider==="jellyfin" || password.text.length>0)))
@@ -68,6 +68,6 @@ MDialog {
     }
     MMenu {
         id: quality
-        Repeater { model: [0,128,192,320]; MMenuItem { required property int modelData; text: modelData?modelData+" kbps MP3":"Original"; checkable: true; checked: app.server.bitrate===modelData; onTriggered: app.server.bitrate=modelData } }
+        Repeater { model: [0,128,192,320]; MMenuItem { required property int modelData; text: modelData?qsTranslate("Main", "%1 kbps").arg(modelData)+" MP3":qsTranslate("Main", "Original"); checkable: true; checked: app.server.bitrate===modelData; onTriggered: app.server.bitrate=modelData } }
     }
 }

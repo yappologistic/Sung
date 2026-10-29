@@ -13,7 +13,7 @@ Item {
     // The list being pulled, and what to do once it has been pulled far enough.
     property Flickable target: null
     property bool busy: false
-    property bool enabled: true
+    // Item already supplies enabled, including propagation from its parent.
     signal triggered()
 
     // PullToRefreshDefaults.PositionalThreshold; the component has no tokens.

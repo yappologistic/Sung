@@ -26,12 +26,12 @@ Flickable {
     // may also carry `badge` for a count.
     property string dotKey: ""
     property var entries: [
-        {label:"Liked songs", key:"favorites", name:"likedTab"},
-        {label:"Playlists", key:"playlists", name:"playlistsTab"},
-        {label:"Local files", key:"files", name:"localFilesTab"},
-        {label:"Mixes", key:"mixes", name:"mixesTab"},
-        {label:"History", key:"history", name:"historyTab"},
-        {label:"Music server", key:"server", name:"serverTab"}
+        {label:qsTr("Liked songs"), key:"favorites", name:"likedTab"},
+        {label:qsTr("Playlists"), key:"playlists", name:"playlistsTab"},
+        {label:qsTr("Local files"), key:"files", name:"localFilesTab"},
+        {label:qsTr("Mixes"), key:"mixes", name:"mixesTab"},
+        {label:qsTr("History"), key:"history", name:"historyTab"},
+        {label:qsTr("Music server"), key:"server", name:"serverTab"}
     ]
     // Both variants are 48dp tall (Primary/SecondaryNavigationTabTokens
     // .ContainerHeight); the secondary one differs in its indicator, not its
@@ -42,7 +42,7 @@ Flickable {
     boundsBehavior: Flickable.StopAtBounds
     clip: true
     Accessible.role: Accessible.PageTabList
-    Accessible.name: "Library"
+    Accessible.name: qsTranslate("Navigation", "Library")
     function reveal(item) {
         let offset = contentX
         if (item.x < offset) offset = item.x

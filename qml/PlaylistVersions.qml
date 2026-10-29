@@ -9,7 +9,7 @@ import QtQuick.Layouts
 MDialog {
     id: dialog
     objectName: "playlistVersionsDialog"
-    title: "Version history"
+    title: qsTranslate("Main", "Version history")
     modal: true
     width: fitWidth(520)
     height: Math.min(560, parent ? parent.height-48 : 560)
@@ -34,8 +34,8 @@ MDialog {
         const sameDay = when.toDateString() === now.toDateString()
         const yesterday = new Date(now.getTime()-86400000).toDateString() === when.toDateString()
         const clock = Qt.formatTime(when, Qt.locale(), Locale.ShortFormat)
-        if (sameDay) return "Today · "+clock
-        if (yesterday) return "Yesterday · "+clock
+        if (sameDay) return qsTranslate("Main", "Today · %1").arg(clock)
+        if (yesterday) return qsTranslate("Main", "Yesterday · %1").arg(clock)
         return Qt.formatDate(when, Qt.locale(), Locale.ShortFormat)+" · "+clock
     }
 
@@ -46,7 +46,7 @@ MDialog {
         SungText {
             objectName: "playlistVersionsSubtitle"
             Layout.fillWidth: true
-            text: dialog.playlistName ? "Earlier versions of "+dialog.playlistName : "Earlier versions"
+            text: dialog.playlistName ? qsTranslate("Main", "Earlier versions of %1").arg(dialog.playlistName) : qsTranslate("Main", "Earlier versions")
             color: Theme.muted
             font.pixelSize: Theme.bodyMedium
             wrapMode: Text.Wrap
@@ -100,7 +100,7 @@ MDialog {
                     }
                     MButton {
                         objectName: "restoreVersion_"+version.index
-                        text: "Restore"
+                        text: qsTranslate("Main", "Restore")
                         tonal: true
                         onClicked: app.restorePlaylistVersion(dialog.playlistId, version.index)
                     }
@@ -113,7 +113,7 @@ MDialog {
                 SungText {
                     objectName: "playlistVersionsEmpty"
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: "No earlier versions yet"
+                    text: qsTranslate("Main", "No earlier versions yet")
                     color: Theme.muted
                 }
                 SungText {
@@ -121,7 +121,7 @@ MDialog {
                     width: Math.min(320, list.width-32)
                     horizontalAlignment: Text.AlignHCenter
                     wrapMode: Text.Wrap
-                    text: "A version is kept each time this playlist changes."
+                    text: qsTranslate("Main", "A version is kept each time this playlist changes.")
                     color: Theme.muted
                     font.pixelSize: Theme.labelMedium
                 }
@@ -131,7 +131,7 @@ MDialog {
         MButton {
             objectName: "clearPlaylistVersions"
             Layout.alignment: Qt.AlignLeft
-            text: "Forget versions"
+            text: qsTranslate("Main", "Forget versions")
             enabled: dialog.versions.length > 0
             onClicked: { app.clearPlaylistVersions(dialog.playlistId); dialog.refresh() }
         }

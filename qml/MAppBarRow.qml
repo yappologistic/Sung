@@ -23,7 +23,7 @@ Item {
 
     FontMetrics { id: metrics; font.family: Theme.fontFamily; font.pixelSize: Theme.labelLarge; font.weight: Font.Medium }
     function slotWidth(action) {
-        return action.text ? metrics.advanceWidth(action.text) + 36 + (action.symbol ? 32 : 0) : itemWidth
+        return action.text ? metrics.advanceWidth(action.sizingText || action.text) + 36 + (action.symbol ? 32 : 0) : itemWidth
     }
 
     readonly property var live: actions.filter(a => a.visible !== false)

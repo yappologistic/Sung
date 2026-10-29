@@ -1,4 +1,5 @@
 #include "backend.h"
+#include "localization.h"
 #include "rowselection.h"
 #include "desktoptheme.h"
 #include "freedmemory.h"
@@ -114,12 +115,15 @@ int main(int argc, char **argv) {
     qputenv("QSG_ATLAS_WIDTH", "1024");
   if (!qEnvironmentVariableIsSet("QSG_ATLAS_HEIGHT"))
     qputenv("QSG_ATLAS_HEIGHT", "1024");
+  // Platform services can register with the portal during construction. Give
+  // them the same desktop ID from the start, not after a queued registration.
+  QGuiApplication::setDesktopFileName("sung");
   QGuiApplication app(argc, argv);
   app.setApplicationName("sung");
   app.setApplicationDisplayName("Sung");
   app.setOrganizationName("Sung");
   app.setApplicationVersion("0.12.0");
-  app.setDesktopFileName("sung");
+  Localization localization;
 #ifdef SUNG_DIAGNOSTICS
   if(app.arguments().contains("--immersive-polish-test"))app.setDesktopFileName("sung-immersive-test");
 #endif
@@ -159,6 +163,11 @@ int main(int argc, char **argv) {
   DesktopTheme desktopTheme;
   WindowResources windowResources;
   QQmlApplicationEngine engine;
+  // Qt's documented runtime-language path reevaluates qsTr/qsTranslate
+  // bindings without recreating the window or the audio backend.
+  QObject::connect(&localization, &Localization::languageChanged,
+                   &engine, &QQmlApplicationEngine::retranslate);
+  engine.rootContext()->setContextProperty("localization", &localization);
   // The interface's types load on the QML engine's own thread while the
   // backend opens the audio outputs and reads the library, rather than after
   // it; load() below picks up whatever is still in flight instead of starting
@@ -250,6 +259,16 @@ int main(int argc, char **argv) {
       app.quit();
     },Qt::QueuedConnection);
     QTimer::singleShot(10000,&app,[&]{app.exit(2);});
+    return app.exec();
+  }
+  if (args.contains("--language-startup-test")) {
+    if (!args.contains("--isolated")) return 2;
+    QTimer::singleShot(500, &app, [&] { runLanguageStartupTest(window, &localization); });
+    return app.exec();
+  }
+  if (args.contains("--language-test")) {
+    if (!args.contains("--isolated")) return 2;
+    QTimer::singleShot(0, &app, [&] { runLanguageTests(&backend, window, &localization); });
     return app.exec();
   }
   // What the interface actually builds, once the first frame is up. The value

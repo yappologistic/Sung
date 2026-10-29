@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 MDialog {
-    id:dialog;objectName:"viewLayoutDialog";title:"View layout";modal:true;standardButtons:Dialog.Close
+    id:dialog;objectName:"viewLayoutDialog";title:qsTranslate("Main", "View layout");modal:true;standardButtons:Dialog.Close
     width:Math.min(500,parent.width-32);height:Math.min(parent.height-32,implicitHeight)
     // The body is built the first time the dialog opens. MDialog sets
     // `built` on aboutToShow, which runs before the enter transition, so
@@ -14,16 +14,16 @@ MDialog {
         active: dialog.built
         sourceComponent: Component {
             ColumnLayout {spacing:12
-                SungText {text:"Density";font.pixelSize:Theme.titleMedium;typeRole:"titleMedium"}
+                SungText {text:qsTranslate("Main", "Density");font.pixelSize:Theme.titleMedium;typeRole:"titleMedium"}
                 MSegmentedControl {
-                    accessibleName:"View density"
-                    options:[{key:-1,label:"Default",name:"viewDensityDefault"},{key:0,label:"Comfortable",name:"viewDensityComfortable"},{key:1,label:"Compact",name:"viewDensityCompact"}]
+                    accessibleName:qsTranslate("Main", "View density")
+                    options:[{key:-1,label:qsTranslate("Main", "Default"),name:"viewDensityDefault"},{key:0,label:qsTranslate("Main", "Comfortable"),name:"viewDensityComfortable"},{key:1,label:qsTranslate("Main", "Compact"),name:"viewDensityCompact"}]
                     value:app.viewDensity;onChosen:value=>app.viewDensity=value
                 }
-                SungText {visible:app.viewSupportsGrid;text:"Layout";font.pixelSize:Theme.titleMedium;typeRole:"titleMedium"}
+                SungText {visible:app.viewSupportsGrid;text:qsTranslate("Main", "Layout");font.pixelSize:Theme.titleMedium;typeRole:"titleMedium"}
                 MSegmentedControl {
-                    visible:app.viewSupportsGrid;accessibleName:"Layout"
-                    options:[{key:"grid",label:"Grid",name:"viewModeGrid"},{key:"list",label:"List",name:"viewModeList"}]
+                    visible:app.viewSupportsGrid;accessibleName:qsTranslate("Main", "Layout")
+                    options:[{key:"grid",label:qsTranslate("Main", "Grid"),name:"viewModeGrid"},{key:"list",label:qsTranslate("Main", "List"),name:"viewModeList"}]
                     value:app.viewMode;onChosen:value=>app.viewMode=value
                 }
             }

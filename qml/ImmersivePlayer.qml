@@ -350,7 +350,7 @@ Item {
                 SungText {
                     id: title
                     objectName: "immersiveTitle"
-                    text: presentation.shown.title || "Nothing playing"
+                    text: presentation.shown.title || qsTranslate("Player", "Nothing playing")
                     opacity: presentation.fade*player.detailsOpacity
                     transform: Translate { x: presentation.offset }
                     Layout.fillWidth: true
@@ -499,9 +499,9 @@ Item {
                 id: transportGroup
                 objectName: "immersiveTransportGroup"
                 size: transport.buttonSize
-                MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: "Previous"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.previous() }
-                MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; square: true; toggle: true; selected: app.playing||app.resolving; size: transport.buttonSize; iconWidth: "wide"; tip: app.playing||app.resolving?"Pause":"Play"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.toggle() }
-                MButton { objectName: "immersiveNextButton"; symbol: "next"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: "Next"; enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.next() }
+                MButton { objectName: "immersivePreviousButton"; symbol: "previous"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: qsTranslate("Player", "Previous"); enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.previous() }
+                MButton { objectName: "immersivePlayButton"; busy: app.buffering; morphPlayback:true; symbol: app.playing||app.resolving?"pause":"play"; filled: true; square: true; toggle: true; selected: app.playing||app.resolving; size: transport.buttonSize; iconWidth: "wide"; tip: app.playing||app.resolving?qsTranslate("Player", "Pause"):qsTranslate("Player", "Play"); enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.toggle() }
+                MButton { objectName: "immersiveNextButton"; symbol: "next"; tonal: true; size: transport.buttonSize; iconWidth: "narrow"; tip: qsTranslate("Player", "Next"); enabled: app.queue.count>0; Accessible.ignored: transport.opacity===0; onClicked: app.next() }
             }
             MButton { objectName: "immersiveRepeatButton"; symbol: app.repeat===2?"repeat_one":"repeat"; toggle: true; selected: app.repeat>0; tip: app.repeat===0?"Repeat off":app.repeat===1?"Repeat queue":"Repeat song"; Accessible.ignored: transport.opacity===0; onClicked: app.repeat=(app.repeat+1)%3 }
         }

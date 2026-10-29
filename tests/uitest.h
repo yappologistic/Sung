@@ -1,6 +1,9 @@
 #pragma once
 class Backend;
 class QQuickWindow;
+class Localization;
+void runLanguageTests(Backend *, QQuickWindow *, Localization *);
+void runLanguageStartupTest(QQuickWindow *, Localization *);
 void runUiTests(Backend *, QQuickWindow *);
 void runUiAudit(Backend*,QQuickWindow*);
 

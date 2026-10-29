@@ -236,6 +236,38 @@ To update Sung, quit the player, then run `git pull` and `./scripts/install.sh` 
 
 ## Development
 
+### Interface languages
+
+Settings → Appearance → Language selects System, English or Русский. The
+choice is saved and applies without restarting playback. Russian covers the
+main navigation, local-library labels, search, queue, playlist actions,
+primary settings, lyric controls, first-run setup, server connection and
+playlist controls, listening statistics and calendar, saved sessions, smart
+playlist rules, artwork controls and keyboard help. Some secondary controls
+and backend diagnostics still fall back to English. Track metadata and
+user-defined playlist names are not translated. System follows the desktop
+locale, using English when no translation is available. English and Russian
+plural catalogs handle track counts.
+
+Translations use Qt Linguist catalogs in `translations/`. After marking new
+UI text with `qsTr`, `qsTranslate` or `tr`, run
+`cmake --build build --target update_translations`, edit the `.ts` catalog,
+and rebuild. Translate display text only, never metadata, protocol values
+or saved identifiers. The compiled catalog is embedded in the executable.
+
+Run the focused checks with `ctest --test-dir build -R localization
+--output-on-failure`. A diagnostic build also provides `--language-test`;
+run it with `--isolated` and separate XDG directories. It clicks the language
+selector during silent local playback and captures the resulting interface.
+`python3 tests/run_language_test.py --binary build-diag/sung --output /tmp/opencode/sung-language-test`
+runs that stage and checks the saved choice in a second process. Use a new
+output directory for each run.
+
+Localization is included in the normal application build and uses Sung's
+standard profile. No preview launcher or special environment is required.
+The language UI stage tests live palette replacement on its own fixture
+while silent audio continues playing.
+
 Build and run from the checkout:
 
 ```bash

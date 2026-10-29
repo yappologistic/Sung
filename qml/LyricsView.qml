@@ -19,11 +19,11 @@ Item {
     RowLayout {
         id: searchControls; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
         height: visible?48:0; visible: lyricPane.searchOpen; spacing: 6
-        MButton { objectName: "closeLyricSearch"; symbol: "back"; tip: "Back to lyrics"; onClicked: lyricPane.closeSearch() }
+        MButton { objectName: "closeLyricSearch"; symbol: "back"; tip: qsTranslate("Main", "Back to lyrics"); onClicked: lyricPane.closeSearch() }
         MSearchField {
             id: lyricSearch; objectName: "lyricSearchField"; Layout.fillWidth: true; Layout.minimumWidth: 0; implicitHeight: 48
-            placeholderText: "Find in lyrics"; selectByMouse: true; font.family: Theme.fontFamily; font.pixelSize: Theme.bodyMedium; color: Theme.text; placeholderTextColor: Theme.muted
-            Accessible.name: "Find in lyrics"
+            placeholderText: qsTranslate("Main", "Find in lyrics"); selectByMouse: true; font.family: Theme.fontFamily; font.pixelSize: Theme.bodyMedium; color: Theme.text; placeholderTextColor: Theme.muted
+            Accessible.name: qsTranslate("Main", "Find in lyrics")
             onTextChanged: searchDelay.restart()
             Keys.onDownPressed: {lyricResults.currentIndex=Math.min(lyricPane.matches.length-1,lyricResults.currentIndex+1);}
             Keys.onUpPressed: {lyricResults.currentIndex=lyricPane.matches.length?Math.max(0,lyricResults.currentIndex-1):-1;}
@@ -59,10 +59,10 @@ Item {
             SungText { font.features: {"tnum": 1}; anchors.right: parent.right; anchors.rightMargin: 12; anchors.verticalCenter: parent.verticalCenter; visible: modelData.start>=0; text: app.formatTime(Math.max(0,modelData.start-app.lyricOffset)); color: Theme.muted; font.pixelSize: Theme.labelMedium; labelRole: true }
             contentItem: MatchText { id: matchText; sourceText: modelData.text; query: lyricSearch.text; leftPadding: 12; rightPadding: modelData.start>=0?64:12; topPadding: 12; bottomPadding: 12; wrapMode: Text.Wrap; font.pixelSize: Theme.bodyLarge; color: Theme.text }
         }
-        SungText { anchors.centerIn: parent; visible: lyricPane.matches.length===0; text: "No matches"; color: Theme.muted }
+        SungText { anchors.centerIn: parent; visible: lyricPane.matches.length===0; text: qsTranslate("Main", "No matches"); color: Theme.muted }
     }
     readonly property int gapSeconds: {app.position;app.lyricLines;app.lyricOffset;return visible && following && !searchOpen && !app.lyricsBusy ? app.lyricGapSeconds : 0;}
-    SungText {id:gapCue;objectName:"lyricGapCue";anchors.horizontalCenter:parent.horizontalCenter;anchors.bottom:parent.bottom;height:visible?36:0;visible:lyricPane.gapSeconds>0;text:"Lyrics in "+lyricPane.gapSeconds+" s";color:Theme.muted;font.pixelSize:Theme.labelLarge;labelRole:true;verticalAlignment:Text.AlignVCenter;Accessible.name:text}
+    SungText {id:gapCue;objectName:"lyricGapCue";anchors.horizontalCenter:parent.horizontalCenter;anchors.bottom:parent.bottom;height:visible?36:0;visible:lyricPane.gapSeconds>0;text:qsTranslate("Main", "Lyrics in %1 s").arg(lyricPane.gapSeconds);color:Theme.muted;font.pixelSize:Theme.labelLarge;labelRole:true;verticalAlignment:Text.AlignVCenter;Accessible.name:text}
     property bool expanded: false
     // Poster lyrics measure their words here, with one Text that lives as
     // long as the view. A Text made with the poster had not finished loading
@@ -96,7 +96,7 @@ Item {
     onExpandedChanged: liveLyrics.centerCurrent()
     property int textSize: app.lyricTextSize
     onTextSizeChanged: liveLyrics.centerCurrent()
-    MLoadingIndicator { objectName: "lyricsSpinner"; anchors.centerIn: parent; running: app.lyricsBusy; label: "Loading lyrics" }
+    MLoadingIndicator { objectName: "lyricsSpinner"; anchors.centerIn: parent; running: app.lyricsBusy; label: qsTranslate("Main", "Loading lyrics") }
     ListView {
         id: liveLyrics; objectName: "liveLyrics"
         anchors.fill: parent; anchors.topMargin: searchControls.height; anchors.bottomMargin:gapCue.visible?44:0; clip: true; spacing: 12
@@ -289,7 +289,7 @@ Item {
         }
     }
     Timer { id: resumeFollow; interval: 8000; onTriggered: lyricPane.following=true }
-    MButton { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; text: "Follow lyrics"; filled: true; visible: liveLyrics.visible && !lyricPane.following; onClicked: {lyricPane.following=true;resumeFollow.stop();} }
-    ScrollView { id: lyricsScroll; anchors.fill: parent; anchors.topMargin: searchControls.height; visible: !app.lyricsBusy && app.lyricLines.length===0 && !(lyricPane.searchOpen && lyricSearch.text.length>0); contentWidth: availableWidth; clip: true; SungText { width: lyricsScroll.availableWidth; text: app.lyrics || "Lyrics unavailable"; scaled: true; wrapMode: Text.Wrap; elide: Text.ElideNone; font.pixelSize: lyricPane.expanded ? app.lyricTextSize*1.12 : app.lyricTextSize*0.84; lineSpacing: 1.55; color: app.lyrics?Theme.text:Theme.muted } }
-    MButton { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; text: "Try again"; tonal: true; visible: !app.lyrics && !app.lyricsBusy && !lyricPane.searchOpen && app.currentIndex>=0; onClicked: app.reloadLyrics() }
+    MButton { anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter; text: qsTranslate("Main", "Follow lyrics"); filled: true; visible: liveLyrics.visible && !lyricPane.following; onClicked: {lyricPane.following=true;resumeFollow.stop();} }
+    ScrollView { id: lyricsScroll; anchors.fill: parent; anchors.topMargin: searchControls.height; visible: !app.lyricsBusy && app.lyricLines.length===0 && !(lyricPane.searchOpen && lyricSearch.text.length>0); contentWidth: availableWidth; clip: true; SungText { width: lyricsScroll.availableWidth; text: app.lyrics || qsTranslate("Main", "Lyrics unavailable"); scaled: true; wrapMode: Text.Wrap; elide: Text.ElideNone; font.pixelSize: lyricPane.expanded ? app.lyricTextSize*1.12 : app.lyricTextSize*0.84; lineSpacing: 1.55; color: app.lyrics?Theme.text:Theme.muted } }
+    MButton { anchors.horizontalCenter: parent.horizontalCenter; anchors.bottom: parent.bottom; text: qsTranslate("Main", "Retry"); tonal: true; visible: !app.lyrics && !app.lyricsBusy && !lyricPane.searchOpen && app.currentIndex>=0; onClicked: app.reloadLyrics() }
 }

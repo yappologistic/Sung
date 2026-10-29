@@ -11,7 +11,7 @@ import QtQuick.Layouts
 MDialog {
     id: dialog
     objectName: "listeningStatsDialog"
-    title: "Listening"
+    title: qsTranslate("Main", "Listening")
     modal: true
     width: fitWidth(560)
     // Tall enough for the figures, the listening graph and a ranking you can
@@ -24,7 +24,7 @@ MDialog {
     // then show in place of the period.
     property string day: ""
     property var stats: ({})
-    readonly property var periods: [{key:7,label:"Week"},{key:30,label:"Month"},{key:365,label:"Year"},{key:0,label:"All time"}]
+    readonly property var periods: [{key:7,label:qsTranslate("Main", "Week")},{key:30,label:qsTranslate("Main", "Month")},{key:365,label:qsTranslate("Main", "Year")},{key:0,label:qsTranslate("Main", "All time")}]
     property string ranking: "artists"
 
     function refresh() {
@@ -36,10 +36,10 @@ MDialog {
 
     // Hours and minutes, because a listening total in seconds means nothing.
     function spell(seconds) {
-        if (!seconds) return "0 min"
+        if (!seconds) return qsTranslate("Main", "%1 min").arg(0)
         const hours = Math.floor(seconds/3600), minutes = Math.round(seconds%3600/60)
-        if (hours >= 100) return hours+" hr"
-        return hours > 0 ? hours+" hr "+minutes+" min" : Math.max(1,minutes)+" min"
+        if (hours >= 100) return qsTranslate("Main", "%1 hr").arg(hours)
+        return hours > 0 ? qsTranslate("Main", "%1 hr %2 min").arg(hours).arg(minutes) : qsTranslate("Main", "%1 min").arg(Math.max(1,minutes))
     }
 
     // Laid out as a child filling the dialog, the way the other dialogs are, so
@@ -66,7 +66,7 @@ MDialog {
         MSegmentedControl {
             objectName: "statsPeriod"
             Layout.fillWidth: true
-            accessibleName: "Period"
+            accessibleName: qsTranslate("Main", "Period")
             options: dialog.periods.map(p => ({key:p.key, label:p.label, name:"statsPeriod_"+p.key}))
             // No period is chosen while a single day is.
             value: dialog.day ? undefined : dialog.days
@@ -82,10 +82,10 @@ MDialog {
             columnSpacing: 12
             rowSpacing: 12
             Repeater {
-                model: [{name:"statsTime", label:"Listened", value:dialog.spell(dialog.stats.seconds || 0)},
-                        {name:"statsPlays", label:"Plays", value:String(dialog.stats.plays || 0)},
-                        {name:"statsSongs", label:"Songs", value:String(dialog.stats.songs || 0)},
-                        {name:"statsArtists", label:"Artists", value:String(dialog.stats.artists || 0)}]
+                model: [{name:"statsTime", label:qsTranslate("Main", "Listened"), value:dialog.spell(dialog.stats.seconds || 0)},
+                        {name:"statsPlays", label:qsTranslate("Main", "Plays"), value:String(dialog.stats.plays || 0)},
+                        {name:"statsSongs", label:qsTranslate("Main", "Songs"), value:String(dialog.stats.songs || 0)},
+                        {name:"statsArtists", label:qsTranslate("Main", "Artists"), value:String(dialog.stats.artists || 0)}]
                 MCard {
                     id: figure
                     required property var modelData
@@ -129,10 +129,10 @@ MDialog {
         MSegmentedControl {
             objectName: "statsRanking"
             Layout.fillWidth: true
-            accessibleName: "Ranking"
-            options: [{key:"artists",label:"Artists",name:"statsRanking_artists"},
-                      {key:"albums",label:"Albums",name:"statsRanking_albums"},
-                      {key:"songs",label:"Songs",name:"statsRanking_songs"}]
+            accessibleName: qsTranslate("Main", "Ranking")
+            options: [{key:"artists",label:qsTranslate("Main", "Artists"),name:"statsRanking_artists"},
+                      {key:"albums",label:qsTranslate("Main", "Albums"),name:"statsRanking_albums"},
+                      {key:"songs",label:qsTranslate("Main", "Songs"),name:"statsRanking_songs"}]
             value: dialog.ranking
             onChosen: key => dialog.ranking = key
         }
@@ -197,9 +197,9 @@ MDialog {
                 objectName: "statsEmpty"
                 anchors.centerIn: parent
                 visible: rankings.count === 0
-                text: dialog.stats.totalOnly ? "Only the total is kept for this day"
-                    : dialog.day ? "Nothing played on this day"
-                    : dialog.days > 0 ? "Nothing played in this period" : "Nothing played yet"
+                text: dialog.stats.totalOnly ? qsTranslate("Main", "Only the total is kept for this day")
+                    : dialog.day ? qsTranslate("Main", "Nothing played on this day")
+                    : dialog.days > 0 ? qsTranslate("Main", "Nothing played in this period") : qsTranslate("Main", "Nothing played yet")
                 color: Theme.muted
             }
         }
